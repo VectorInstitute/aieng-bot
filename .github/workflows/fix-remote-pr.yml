@@ -172,19 +172,18 @@ jobs:
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           FAILED_NAMES="${{ steps.analyze.outputs.failed-names }}"
 
-          MESSAGE=$(cat <<EOF
-🔧 **Attempting to fix failing checks**
+          cat > /tmp/pr-comment.txt <<EOF
+          🔧 **Attempting to fix failing checks**
 
-I've detected failures in: $FAILED_NAMES
+          I've detected failures in: $FAILED_NAMES
 
-Analyzing the issues and will attempt to fix them automatically.
+          Analyzing the issues and will attempt to fix them automatically.
 
----
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-EOF
-)
+          ---
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
 
-          gh pr comment $PR_NUMBER --repo "$REPO" --body "$MESSAGE"
+          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-comment.txt
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
@@ -259,31 +258,29 @@ Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
 
           if [ "${{ steps.push-fixes.outputs.changes-pushed }}" = "true" ]; then
-            MESSAGE=$(cat <<EOF
-✅ **Fixes applied!**
+            cat > /tmp/pr-result.txt <<EOF
+          ✅ **Fixes applied!**
 
-I've pushed fixes for the failing checks. The CI will re-run automatically.
+          I've pushed fixes for the failing checks. The CI will re-run automatically.
 
-Please review the changes to verify they're correct.
+          Please review the changes to verify they're correct.
 
----
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-EOF
-)
+          ---
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
           else
-            MESSAGE=$(cat <<EOF
-🔍 **Analysis complete**
+            cat > /tmp/pr-result.txt <<EOF
+          🔍 **Analysis complete**
 
-Gemini CLI has analyzed the failures and provided suggestions in the comments above.
+          Gemini CLI has analyzed the failures and provided suggestions in the comments above.
 
-If the fixes weren't applied automatically, you may need to review and apply them manually.
+          If the fixes weren't applied automatically, you may need to review and apply them manually.
 
----
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-EOF
-)
+          ---
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
           fi
 
-          gh pr comment $PR_NUMBER --repo "$REPO" --body "$MESSAGE"
+          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-result.txt
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}

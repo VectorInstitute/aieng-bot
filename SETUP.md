@@ -126,7 +126,7 @@ Or via GitHub UI:
 
 After setup, the bot should:
 
-✅ Run automatically every 10 minutes
+✅ Run automatically every 6 hours
 ✅ Scan all VectorInstitute repositories
 ✅ Find open Dependabot PRs
 ✅ Auto-merge PRs with passing checks
@@ -144,11 +144,11 @@ Edit `.github/workflows/monitor-org-dependabot.yml`:
 ```yaml
 on:
   schedule:
-    - cron: '*/10 * * * *'  # Every 10 minutes
+    - cron: '0 */6 * * *'   # Every 6 hours (current default)
     # Change to:
-    # - cron: '*/30 * * * *'  # Every 30 minutes
-    # - cron: '0 * * * *'     # Every hour
-    # - cron: '0 */6 * * *'   # Every 6 hours
+    # - cron: '0 */3 * * *'   # Every 3 hours
+    # - cron: '0 */12 * * *'  # Every 12 hours
+    # - cron: '0 0 * * *'     # Once daily at midnight
 ```
 
 ### Customize Fix Prompts

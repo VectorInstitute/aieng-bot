@@ -4,7 +4,7 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 
 ## Features
 
-- **Organization-wide monitoring** - Scans all VectorInstitute repos every 10 minutes
+- **Organization-wide monitoring** - Scans all VectorInstitute repos every 6 hours
 - **Auto-merge** - Merges Dependabot PRs when all checks pass
 - **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
 - **Centralized operation** - No installation needed in individual repositories
@@ -18,7 +18,7 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 │  aieng-bot-maintain Repository  │
 │  (This Repo - Central Bot)      │
 │                                  │
-│  Runs every 10 minutes:         │
+│  Runs every 6 hours:            │
 │  1. Scans VectorInstitute org   │
 │  2. Finds Dependabot PRs        │
 │  3. Checks status               │
@@ -58,7 +58,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 
 ## How It Works
 
-**1. Monitor** (every 10 minutes)
+**1. Monitor** (every 6 hours)
 - Scans all VectorInstitute repositories for open Dependabot PRs
 - Checks status of each PR
 - Routes to merge or fix workflow
@@ -82,7 +82,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
 **Workflows**
-- `monitor-org-dependabot.yml` - Scans org for Dependabot PRs every 10 minutes
+- `monitor-org-dependabot.yml` - Scans org for Dependabot PRs every 6 hours
 - `fix-remote-pr.yml` - Fixes failing PRs using AI
 
 **AI Prompt Templates** (customize for your needs)

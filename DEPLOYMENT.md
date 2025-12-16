@@ -36,7 +36,7 @@ Deploying the AI Engineering Maintenance Bot is simple - it runs from ONE centra
 
 ### Phase 3: Limited Monitoring (Week 1-2)
 
-- [ ] **3.1**: Enable scheduled runs (automatic every 10 min)
+- [ ] **3.1**: Enable scheduled runs (automatic every 6 hours)
 - [ ] **3.2**: Monitor for 2-3 days
 - [ ] **3.3**: Check PRs the bot processes
 - [ ] **3.4**: Verify auto-merge works correctly
@@ -68,26 +68,23 @@ For experienced admins who just want to get it running:
 gh workflow run monitor-org-dependabot.yml --repo VectorInstitute/aieng-bot-maintain
 
 # 4. Monitor
-# Check Actions tab for runs every 10 minutes
+# Check Actions tab for runs every 6 hours
 ```
 
 ## What Happens After Deployment
 
-### Immediate (First 10 minutes)
+### First 6 Hours
 - Monitor workflow runs automatically
 - Scans all VectorInstitute repos
 - Finds any open Dependabot PRs
 - Processes passing PRs (auto-merge)
 - Triggers fixes for failing PRs
-
-### First Hour
-- Multiple scan cycles complete
 - Bot comments appear on processed PRs
 - Auto-merges happen for passing PRs
 - Fix attempts made on failing PRs
 
 ### First Day
-- 144 scan cycles (every 10 minutes)
+- 4 scan cycles (every 6 hours)
 - All active Dependabot PRs processed
 - Pattern of bot behavior visible
 - Any issues surface quickly
@@ -143,13 +140,15 @@ Target metrics after 2 weeks:
 
 ### Adjust Scan Frequency
 
-If processing too many PRs or hitting rate limits:
+If you want more or less frequent scanning:
 
 ```yaml
 # .github/workflows/monitor-org-dependabot.yml
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Change to every 30 min
+    - cron: '0 */12 * * *'  # Every 12 hours (less frequent)
+    # or
+    - cron: '0 */3 * * *'   # Every 3 hours (more frequent)
 ```
 
 ### Exclude Specific Repositories
