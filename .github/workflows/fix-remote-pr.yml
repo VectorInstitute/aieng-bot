@@ -263,14 +263,22 @@ jobs:
         id: push-fixes
         working-directory: target-repo
         run: |
-          # Configure git
-          git config user.name "aieng-bot-maintain[bot]"
-          git config user.email "aieng-bot@vectorinstitute.ai"
+          # Check if Agent SDK created a commit (check if HEAD differs from remote)
+          git fetch origin ${{ steps.pr-details.outputs.head-ref }}
 
-          # Check if there are changes
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Changes detected, committing..."
+          if ! git diff --quiet HEAD FETCH_HEAD; then
+            echo "✅ Agent SDK made changes, pushing commit..."
 
+            # Push the commit created by Agent SDK
+            git push origin HEAD:${{ steps.pr-details.outputs.head-ref }}
+
+            echo "changes-pushed=true" >> $GITHUB_OUTPUT
+            echo "✅ Fixes pushed to PR"
+          elif [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted changes detected, committing..."
+
+            git config user.name "aieng-bot-maintain[bot]"
+            git config user.email "aieng-bot@vectorinstitute.ai"
             git add -A
 
             cat > /tmp/commit-message.txt <<EOF
@@ -284,16 +292,16 @@ jobs:
           EOF
 
             git commit -F /tmp/commit-message.txt
-
-            # Push to the PR branch
             git push origin HEAD:${{ steps.pr-details.outputs.head-ref }}
 
             echo "changes-pushed=true" >> $GITHUB_OUTPUT
             echo "✅ Fixes pushed to PR"
           else
             echo "changes-pushed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️  No local changes to push (Gemini may have commented with suggestions)"
+            echo "ℹ️  No changes to push"
           fi
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
 
       - name: Comment on PR - Result
