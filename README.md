@@ -4,12 +4,12 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 
 ## Features
 
-**Organization-wide monitoring** - Scans all VectorInstitute repos every 10 minutes
-**Auto-merge** - Merges Dependabot PRs when all checks pass
-**Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
-**Centralized operation** - No installation needed in individual repositories
-**Smart detection** - Categorizes failures and applies appropriate fix strategies
-**Transparent** - Comments on PRs with status updates
+- **Organization-wide monitoring** - Scans all VectorInstitute repos every 10 minutes
+- **Auto-merge** - Merges Dependabot PRs when all checks pass
+- **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
+- **Centralized operation** - No installation needed in individual repositories
+- **Smart detection** - Categorizes failures and applies appropriate fix strategies
+- **Transparent** - Comments on PRs with status updates
 
 ## Architecture
 
