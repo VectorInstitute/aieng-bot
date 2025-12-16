@@ -17,7 +17,7 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 ┌─────────────────────────────────┐
 │  aieng-bot-maintain Repository  │
 │  (This Repo - Central Bot)      │
-│                                  │
+│                                 │
 │  Runs every 6 hours:            │
 │  1. Scans VectorInstitute org   │
 │  2. Finds Dependabot PRs        │
@@ -29,7 +29,7 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
                ▼
 ┌───────────────────────────────────┐
 │   VectorInstitute Organization    │
-│                                    │
+│                                   │
 │  ├─ repo-1  (Dependabot PR #1)    │
 │  ├─ repo-2  (Dependabot PR #2)    │
 │  ├─ repo-3  (Dependabot PR #3)    │
