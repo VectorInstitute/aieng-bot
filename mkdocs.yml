@@ -47,7 +47,7 @@ plugins:
             show_symbol_type_toc: true
 repo_url: https://github.com/VectorInstitute/aieng-bot-maintain
 repo_name: VectorInstitute/aieng-bot-maintain
-site_name: AI Engineering Maintainance Bot
+site_name: AI Engineering Maintenance Bot
 theme:
   custom_dir: docs/overrides
   favicon: assets/favicon-48x48.svg
