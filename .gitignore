@@ -45,3 +45,6 @@ __pycache__/
 .Python
 venv/
 env/
+
+# Project-specific
+CLAUDE.md
