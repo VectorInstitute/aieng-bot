@@ -6,7 +6,7 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 
 - **Organization-wide monitoring** - Scans all VectorInstitute repos every 6 hours
 - **Auto-merge** - Merges Dependabot PRs when all checks pass
-- **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
+- **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Claude AI Agent SDK
 - **Centralized operation** - No installation needed in individual repositories
 - **Smart detection** - Categorizes failures and applies appropriate fix strategies
 - **Transparent** - Comments on PRs with status updates
@@ -41,9 +41,9 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 
 ### Setup (in this repository)
 
-**1. Create Gemini API Key**
-- Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
-- Add as repository secret: `GEMINI_API_KEY`
+**1. Create Anthropic API Key**
+- Get from [Anthropic Console](https://console.anthropic.com/settings/keys)
+- Add as repository secret: `ANTHROPIC_API_KEY`
 
 **2. Create GitHub Personal Access Token**
 - Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens
@@ -72,13 +72,13 @@ The bot now monitors all VectorInstitute repositories automatically.
 - Clones target repository and PR branch
 - Analyzes failure type: test, lint, security, or build
 - Loads appropriate AI prompt template
-- Invokes Gemini 3 Pro to generate fixes
-- Pushes fixes and comments on PR
+- Uses Claude Agent SDK to automatically apply fixes
+- Commits and pushes fixes to PR
 
 ## Configuration
 
 **Required Secrets**
-- `GEMINI_API_KEY` - Gemini API access
+- `ANTHROPIC_API_KEY` - Anthropic API access for Claude
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
 **Workflows**
@@ -138,10 +138,9 @@ gh run view RUN_ID --log
 
 ## Documentation
 
-- [Setup Guide](SETUP.md) - Detailed configuration and permissions
-- [Deployment Guide](DEPLOYMENT.md) - Rollout strategy and monitoring
-- [Testing Guide](TESTING.md) - Test cases and validation
-- [Bot Identity](/.github/bot-assets/BOT_IDENTITY.md) - Avatar and branding
+- [Setup Guide](docs/setup.md) - Detailed configuration and permissions
+- [Deployment Guide](docs/deployment.md) - Rollout strategy and monitoring
+- [Testing Guide](docs/testing.md) - Test cases and validation
 
 ## Troubleshooting
 
@@ -151,10 +150,10 @@ gh run view RUN_ID --log
 | Can't find PRs | Verify `ORG_ACCESS_TOKEN` has correct permissions |
 | Can't merge PRs | Ensure token has `contents: write` permission |
 | Can't push fixes | Check token has write access to target repos |
-| Gemini errors | Verify `GEMINI_API_KEY` is valid and has quota |
+| Claude API errors | Verify `ANTHROPIC_API_KEY` is valid |
 | Rate limits | Reduce monitoring frequency in workflow cron schedule |
 
-See [SETUP.md](SETUP.md) for detailed troubleshooting.
+See [Setup Guide](docs/setup.md) for detailed troubleshooting.
 
 ---
 

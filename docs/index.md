@@ -1,160 +1,121 @@
-# aieng-bot-maintain
+# aieng-bot-maintain Documentation
 
-Centralized maintenance bot that automatically manages Dependabot PRs across all Vector Institute repositories from a single location.
+Comprehensive documentation for the AI Engineering Maintenance Bot - an automated system that manages Dependabot PRs across all Vector Institute repositories.
 
-## Features
+## Getting Started
 
-- **Organization-wide monitoring** - Scans all VectorInstitute repos every 6 hours
-- **Auto-merge** - Merges Dependabot PRs when all checks pass
-- **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
-- **Centralized operation** - No installation needed in individual repositories
-- **Smart detection** - Categorizes failures and applies appropriate fix strategies
-- **Transparent** - Comments on PRs with status updates
+- **[Setup Guide](setup.md)** - Complete setup instructions including API keys, tokens, and configuration
+- **[Deployment Guide](deployment.md)** - Step-by-step deployment process and monitoring strategies
+- **[Testing Guide](testing.md)** - Test cases, validation procedures, and debugging
+
+## Quick Links
+
+- [Main Repository](../) - Return to repository root
+- [Workflow Files](../.github/workflows/) - GitHub Actions workflows
+- [Prompt Templates](../.github/prompts/) - AI prompt templates for different failure types
+
+## Overview
+
+The bot operates from a single centralized repository and requires no installation in individual repositories. It:
+
+- Monitors all VectorInstitute repositories every 6 hours
+- Auto-merges Dependabot PRs when all checks pass
+- Automatically fixes common issues using Claude Agent SDK
+- Posts transparent status updates on PRs
+
+## Key Features
+
+### Organization-Wide Monitoring
+Scans all repositories in the VectorInstitute organization for open Dependabot PRs and processes them automatically.
+
+### Intelligent Auto-Merge
+Analyzes PR status checks and automatically approves and merges PRs when all tests pass.
+
+### AI-Powered Auto-Fix
+Uses Claude Agent SDK to analyze failures and directly modify code to fix:
+- Test failures from dependency updates
+- Linting and formatting issues
+- Security audit failures
+- Build configuration problems
+
+### Centralized Operation
+All logic runs from this single repository - target repositories need only:
+- Dependabot enabled
+- Auto-merge enabled (optional but recommended)
 
 ## Architecture
 
 ```
-┌─────────────────────────────────┐
-│  aieng-bot-maintain Repository  │
-│  (This Repo - Central Bot)      │
-│                                 │
-│  Runs every 6 hours:            │
-│  1. Scans VectorInstitute org   │
-│  2. Finds Dependabot PRs        │
-│  3. Checks status               │
-│  4. Merges or fixes PRs         │
-└──────────────┬──────────────────┘
-               │
-               │ Operates on
-               ▼
-┌───────────────────────────────────┐
-│   VectorInstitute Organization    │
-│                                   │
-│  ├─ repo-1  (Dependabot PR #1)    │
-│  ├─ repo-2  (Dependabot PR #2)    │
-│  ├─ repo-3  (Dependabot PR #3)    │
-│  └─ repo-N  ...                   │
-└───────────────────────────────────┘
+┌───────────────────────────┐
+│  aieng-bot-maintain       │
+│  (This Repository)        │
+│                           │
+│  Workflows:               │
+│  • monitor (every 6hrs)   │
+│  • fix (on-demand)        │
+└────────────┬──────────────┘
+             │
+             │ Manages
+             ▼
+┌────────────────────────────┐
+│  VectorInstitute Org Repos │
+│                            │
+│  Finds & processes         │
+│  Dependabot PRs            │
+└────────────────────────────┘
 ```
-
-## Quick Start
-
-### Setup (in this repository)
-
-**1. Create Gemini API Key**
-- Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
-- Add as repository secret: `GEMINI_API_KEY`
-
-**2. Create GitHub Personal Access Token**
-- Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens
-- Configure: Resource owner: `VectorInstitute`, Repository access: `All repositories`
-- Permissions: `contents: write`, `pull_requests: write`, `issues: write`
-- Add as repository secret: `ORG_ACCESS_TOKEN`
-
-**3. Enable GitHub Actions**
-- Go to Actions tab → Enable workflows
-
-The bot now monitors all VectorInstitute repositories automatically.
-
-## How It Works
-
-**1. Monitor** (every 6 hours)
-- Scans all VectorInstitute repositories for open Dependabot PRs
-- Checks status of each PR
-- Routes to merge or fix workflow
-
-**2. Auto-Merge** (when all checks pass)
-- Approves PR and enables auto-merge
-- Comments with status
-- PR merges automatically
-
-**3. Auto-Fix** (when checks fail)
-- Clones target repository and PR branch
-- Analyzes failure type: test, lint, security, or build
-- Loads appropriate AI prompt template
-- Invokes Gemini 3 Pro to generate fixes
-- Pushes fixes and comments on PR
 
 ## Configuration
 
-**Required Secrets**
-- `GEMINI_API_KEY` - Gemini API access
-- `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
+### Required Secrets
+- `ANTHROPIC_API_KEY` - API access for Claude (get from [Anthropic Console](https://console.anthropic.com/settings/keys))
+- `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide write permissions
 
-**Workflows**
-- `monitor-org-dependabot.yml` - Scans org for Dependabot PRs every 6 hours
-- `fix-remote-pr.yml` - Fixes failing PRs using AI
+### Workflows
+- `monitor-org-dependabot.yml` - Scheduled workflow that scans organization
+- `fix-remote-pr.yml` - On-demand workflow triggered for failing PRs
 
-**AI Prompt Templates** (customize for your needs)
-- `fix-test-failures.md` - Test failure resolution strategies
-- `fix-lint-failures.md` - Linting/formatting fixes
-- `fix-security-audit.md` - Security vulnerability handling
-- `fix-build-failures.md` - Build/compilation error fixes
+### Customization
+- Edit `.github/prompts/*.md` files to customize fix strategies
+- Adjust cron schedule in monitor workflow for different frequencies
+- Modify failure detection logic in workflow files
 
-## Capabilities
+## Common Tasks
 
-**Can fix:**
-- Linting and formatting issues
-- Security vulnerabilities (dependency updates)
-- Simple test failures from API changes
-- Build configuration issues
-
-**Cannot fix:**
-- Complex logic errors
-- Breaking changes requiring refactoring
-- Issues requiring architectural decisions
-
-## Manual Testing
-
-**Trigger via CLI:**
+### Manual Testing
 ```bash
-# Monitor all repositories
+# Test monitoring workflow
 gh workflow run monitor-org-dependabot.yml
 
-# Fix a specific PR (test with aieng-template-mvp#17)
+# Test fix on specific PR
 gh workflow run fix-remote-pr.yml \
   --field target_repo="VectorInstitute/aieng-template-mvp" \
   --field pr_number="17"
 ```
 
-**Trigger via GitHub UI:**
-Actions → Select workflow → Run workflow → Enter parameters
-
-## Monitoring
-
-**View bot activity:**
-- Actions tab - All workflow runs and success/failure rates
-- PR comments - Detailed status updates on each PR
-- Run summary - PR count and actions taken per run
-
-**Debug commands:**
+### Monitoring Bot Activity
 ```bash
-# View recent workflow runs
+# View recent runs
 gh run list --workflow=monitor-org-dependabot.yml --limit 5
 
-# View logs for specific run
+# View specific run logs
 gh run view RUN_ID --log
 ```
 
-## Documentation
+### Debugging Issues
+Check:
+- Actions tab for workflow execution logs
+- PR comments for bot status updates
+- Repository secrets are properly set
+- Token permissions are correct
 
-- [Setup Guide](SETUP.md) - Detailed configuration and permissions
-- [Deployment Guide](DEPLOYMENT.md) - Rollout strategy and monitoring
-- [Testing Guide](TESTING.md) - Test cases and validation
-- [Bot Identity](/.github/bot-assets/BOT_IDENTITY.md) - Avatar and branding
+## Support
 
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Workflow doesn't run | Check Actions enabled and secrets are set |
-| Can't find PRs | Verify `ORG_ACCESS_TOKEN` has correct permissions |
-| Can't merge PRs | Ensure token has `contents: write` permission |
-| Can't push fixes | Check token has write access to target repos |
-| Gemini errors | Verify `GEMINI_API_KEY` is valid and has quota |
-| Rate limits | Reduce monitoring frequency in workflow cron schedule |
-
-See [SETUP.md](SETUP.md) for detailed troubleshooting.
+For issues, questions, or contributions:
+- Open an issue in this repository
+- Check workflow logs for error details
+- Review PR comments for bot activity
+- Contact AI Engineering team for urgent issues
 
 ---
 
