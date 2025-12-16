@@ -144,10 +144,12 @@ jobs:
 
           if [ "$REVIEW_DECISION" != "APPROVED" ]; then
             # Approve the PR
-            gh pr review $PR_NUMBER --repo "$REPO" --approve --body "✅ All checks passed. Auto-approving Dependabot PR.
+            cat > /tmp/approve-msg.txt <<'EOF'
+          ✅ All checks passed. Auto-approving Dependabot PR.
 
----
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
+            gh pr review $PR_NUMBER --repo "$REPO" --approve --body-file /tmp/approve-msg.txt
           fi
 
           # Enable auto-merge
@@ -156,10 +158,12 @@ jobs:
           }
 
           # Comment on success
-          gh pr comment $PR_NUMBER --repo "$REPO" --body "🎉 All checks passed! This PR will be automatically merged.
+          cat > /tmp/success-msg.txt <<'EOF'
+          🎉 All checks passed! This PR will be automatically merged.
 
----
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
+          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
 
           echo "✅ Auto-merge configured for $REPO#$PR_NUMBER"
         env:
@@ -182,7 +186,7 @@ jobs:
 
           echo "🔧 Fix workflow triggered for $REPO#$PR_NUMBER"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
 
   report-summary:

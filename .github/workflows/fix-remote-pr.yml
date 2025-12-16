@@ -187,38 +187,94 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
-      - name: Setup Gemini CLI
-        uses: google-github-actions/run-gemini-cli@v1
+      - name: Setup Python for AI processing
+        uses: actions/setup-python@v5
         with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          gemini_model: 'gemini-3-pro-preview'
-          github_token: ${{ secrets.ORG_ACCESS_TOKEN }}
+          python-version: '3.11'
 
-      - name: Invoke Gemini CLI to fix issues
+      - name: Install dependencies
+        run: |
+          pip install google-generativeai
+
+      - name: Call Gemini API to analyze and fix issues
         id: gemini-fix
         working-directory: target-repo
         run: |
-          REPO="${{ github.event.inputs.target_repo }}"
-          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          cat > /tmp/fix_issues.py << 'PYTHON_SCRIPT_EOF'
+          import google.generativeai as genai
+          import os
+          import sys
+          import json
 
-          # Post comment to trigger gemini-cli
-          # Note: gemini-cli works via PR comments in the target repo
-          echo "@gemini-cli" > /tmp/gemini-comment.txt
-          echo "" >> /tmp/gemini-comment.txt
-          cat /tmp/gemini-prompt.txt >> /tmp/gemini-comment.txt
+          # Configure Gemini API
+          api_key = os.environ.get('GEMINI_API_KEY')
+          if not api_key:
+              print("ERROR: GEMINI_API_KEY not set")
+              sys.exit(1)
 
-          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/gemini-comment.txt
+          genai.configure(api_key=api_key)
 
-          echo "✅ Gemini CLI invoked via PR comment"
+          # Read the prompt
+          with open('/tmp/gemini-prompt.txt', 'r') as f:
+              prompt = f.read()
+
+          # Add instruction for generating executable fix commands
+          full_prompt = f"""{prompt}
+
+          ## IMPORTANT: Output Format
+          Provide your response in the following format:
+
+          1. First, explain what you found wrong
+          2. Then, provide shell commands or code changes to fix the issues
+          3. Use executable bash commands that can fix the files
+
+          For file modifications, provide complete corrected file content or use sed/awk commands to make changes.
+
+          Make sure all commands are safe and will not delete unrelated files.
+          """
+
+          try:
+              # Use Gemini 2.0 Flash model (latest available)
+              model = genai.GenerativeModel('gemini-2.0-flash-exp')
+              response = model.generate_content(full_prompt)
+
+              # Save response
+              with open('/tmp/gemini-response.txt', 'w') as f:
+                  f.write(response.text)
+
+              print("✅ Gemini API call successful")
+              print("\n--- Gemini Response ---")
+              print(response.text)
+
+          except Exception as e:
+              print(f"ERROR calling Gemini API: {e}")
+              sys.exit(1)
+          PYTHON_SCRIPT_EOF
+
+          python /tmp/fix_issues.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        continue-on-error: true
+
+      - name: Apply AI-suggested fixes
+        working-directory: target-repo
+        run: |
+          if [ -f /tmp/gemini-response.txt ]; then
+            echo "📝 AI Analysis and Suggestions:"
+            cat /tmp/gemini-response.txt
+
+            # Comment the AI response on the PR for transparency
+            gh pr comment ${{ github.event.inputs.pr_number }} \
+              --repo "${{ github.event.inputs.target_repo }}" \
+              --body "$(echo '🤖 **AI Analysis**'; echo ''; cat /tmp/gemini-response.txt; echo ''; echo '---'; echo '*AI Engineering Maintenance Bot*')"
+
+            echo ""
+            echo "⚠️  Note: Automatic application of AI-suggested fixes is not yet implemented."
+            echo "The AI analysis has been posted as a comment on the PR for manual review."
+          fi
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
-
-      - name: Wait for Gemini to process
-        run: |
-          echo "Waiting for Gemini CLI to analyze and respond..."
-          sleep 30
-          # In production, you might poll for changes or wait for webhook
 
       - name: Check for changes and push
         id: push-fixes
