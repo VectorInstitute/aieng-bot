@@ -1,0 +1,80 @@
+# Example Configuration for AI Engineering Maintenance Bot
+#
+# This file shows configuration options for customizing the bot behavior.
+# Copy sections to your workflow files as needed.
+
+# Auto-Merge Configuration
+auto_merge:
+  # Merge strategy (squash, merge, rebase)
+  strategy: squash
+
+  # Only auto-merge specific update types
+  allowed_update_types:
+    - patch  # x.y.Z updates
+    - minor  # x.Y.0 updates
+    # - major  # X.0.0 updates (typically excluded)
+
+  # Skip auto-merge for specific dependencies
+  excluded_dependencies:
+    - react  # Example: manual review required
+    - typescript
+
+  # Require specific checks to pass (if not using branch protection)
+  required_checks:
+    - pre-commit
+    - tests
+    - security-scan
+
+# Auto-Fix Configuration
+auto_fix:
+  # Gemini model selection
+  model: gemini-3-pro-preview
+  # Alternatives:
+  #   - gemini-2.0-flash-exp (faster, good for most fixes)
+  #   - gemini-1.5-pro (older, more tested)
+
+  # Maximum fix attempts before giving up
+  max_attempts: 2
+
+  # Failure types to attempt fixing
+  enabled_fixes:
+    - test
+    - lint
+    - security
+    - build
+
+  # Custom prompt templates (override defaults)
+  custom_prompts:
+    test: .github/prompts/custom-test-fix.md
+    # lint: .github/prompts/custom-lint-fix.md
+    # security: .github/prompts/custom-security-fix.md
+    # build: .github/prompts/custom-build-fix.md
+
+# Notification Configuration
+notifications:
+  # Comment on PR for different events
+  on_merge: true
+  on_fix_attempt: true
+  on_fix_success: true
+  on_fix_failure: true
+
+  # Include detailed logs in comments
+  verbose: false
+
+# Security Configuration
+security:
+  # Always require manual review for these severities
+  manual_review_severities:
+    - critical
+    # - high
+
+  # Skip auto-fix for CVEs (require manual review)
+  skip_auto_fix_cve: false
+
+# Rate Limiting (to manage API costs)
+rate_limits:
+  # Maximum Gemini API calls per day
+  max_gemini_calls_per_day: 100
+
+  # Maximum auto-merges per day
+  max_auto_merges_per_day: 50

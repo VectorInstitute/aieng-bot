@@ -1,0 +1,278 @@
+name: Fix Remote Repository PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repository (e.g., VectorInstitute/repo-name)'
+        required: true
+      pr_number:
+        description: 'PR number to fix'
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  fix-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout bot repository
+        uses: actions/checkout@v4
+        with:
+          path: bot-repo
+
+      - name: Get PR details
+        id: pr-details
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+
+          # Get PR information
+          PR_INFO=$(gh pr view $PR_NUMBER --repo "$REPO" --json \
+            title,author,headRefName,headRepository,headRepositoryOwner,statusCheckRollup,baseRefName)
+
+          echo "PR Info:"
+          echo "$PR_INFO" | jq '.'
+
+          # Extract details
+          HEAD_REF=$(echo "$PR_INFO" | jq -r '.headRefName')
+          BASE_REF=$(echo "$PR_INFO" | jq -r '.baseRefName')
+          PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
+          PR_AUTHOR=$(echo "$PR_INFO" | jq -r '.author.login')
+
+          echo "head-ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "base-ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "pr-title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr-author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+
+          # Get failed checks
+          FAILED_CHECKS=$(echo "$PR_INFO" | jq -c '[.statusCheckRollup[] | select(.conclusion == "FAILURE")]')
+          echo "failed-checks=$FAILED_CHECKS" >> $GITHUB_OUTPUT
+
+          FAILED_COUNT=$(echo "$FAILED_CHECKS" | jq 'length')
+          echo "Found $FAILED_COUNT failed checks"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Checkout target repository PR branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.target_repo }}
+          ref: refs/pull/${{ github.event.inputs.pr_number }}/head
+          token: ${{ secrets.ORG_ACCESS_TOKEN }}
+          path: target-repo
+          fetch-depth: 0
+
+      - name: Analyze failure type
+        id: analyze
+        working-directory: target-repo
+        run: |
+          FAILED_CHECKS='${{ steps.pr-details.outputs.failed-checks }}'
+
+          echo "Analyzing failures..."
+          echo "$FAILED_CHECKS" | jq -r '.[] | "\(.name): \(.conclusion)"'
+
+          # Categorize failures
+          TEST_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("test|spec|jest|pytest|unittest"; "i"))]')
+          LINT_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("lint|format|pre-commit|eslint|prettier|black|flake8|ruff"; "i"))]')
+          SECURITY_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("audit|security|snyk|dependabot|pip-audit"; "i"))]')
+          BUILD_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("build|compile|webpack|vite|tsc"; "i"))]')
+
+          # Determine primary failure type
+          if [ "$(echo "$TEST_FAILURES" | jq 'length')" -gt 0 ]; then
+            echo "primary-type=test" >> $GITHUB_OUTPUT
+          elif [ "$(echo "$LINT_FAILURES" | jq 'length')" -gt 0 ]; then
+            echo "primary-type=lint" >> $GITHUB_OUTPUT
+          elif [ "$(echo "$SECURITY_FAILURES" | jq 'length')" -gt 0 ]; then
+            echo "primary-type=security" >> $GITHUB_OUTPUT
+          elif [ "$(echo "$BUILD_FAILURES" | jq 'length')" -gt 0 ]; then
+            echo "primary-type=build" >> $GITHUB_OUTPUT
+          else
+            echo "primary-type=unknown" >> $GITHUB_OUTPUT
+          fi
+
+          FAILED_NAMES=$(echo "$FAILED_CHECKS" | jq -r '.[].name' | paste -sd "," -)
+          echo "failed-names=$FAILED_NAMES" >> $GITHUB_OUTPUT
+
+      - name: Get failure logs
+        id: get-logs
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+
+          # Get the most recent workflow run for the PR
+          HEAD_REF="${{ steps.pr-details.outputs.head-ref }}"
+          RUN_ID=$(gh run list --repo "$REPO" --branch "$HEAD_REF" --limit 5 \
+            --json databaseId,status,conclusion \
+            --jq '.[] | select(.conclusion == "failure") | .databaseId' | head -1)
+
+          if [ -n "$RUN_ID" ]; then
+            echo "Fetching logs for run $RUN_ID in $REPO"
+            gh run view $RUN_ID --repo "$REPO" --log > /tmp/failure-logs.txt 2>&1 || echo "Could not fetch logs"
+
+            # Truncate if too large
+            if [ -f /tmp/failure-logs.txt ]; then
+              tail -5000 /tmp/failure-logs.txt > /tmp/failure-logs-truncated.txt
+              mv /tmp/failure-logs-truncated.txt /tmp/failure-logs.txt
+            fi
+          else
+            echo "No failed run found" > /tmp/failure-logs.txt
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Load and customize prompt
+        id: prepare-prompt
+        run: |
+          FAILURE_TYPE="${{ steps.analyze.outputs.primary-type }}"
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          PR_TITLE="${{ steps.pr-details.outputs.pr-title }}"
+          PR_AUTHOR="${{ steps.pr-details.outputs.pr-author }}"
+          FAILED_NAMES="${{ steps.analyze.outputs.failed-names }}"
+
+          # Select appropriate prompt template
+          case "$FAILURE_TYPE" in
+            test) PROMPT_FILE="bot-repo/.github/prompts/fix-test-failures.md" ;;
+            lint) PROMPT_FILE="bot-repo/.github/prompts/fix-lint-failures.md" ;;
+            security) PROMPT_FILE="bot-repo/.github/prompts/fix-security-audit.md" ;;
+            build) PROMPT_FILE="bot-repo/.github/prompts/fix-build-failures.md" ;;
+            *) PROMPT_FILE="bot-repo/.github/prompts/fix-test-failures.md" ;;
+          esac
+
+          if [ -f "$PROMPT_FILE" ]; then
+            PROMPT_CONTENT=$(cat "$PROMPT_FILE")
+          else
+            PROMPT_CONTENT="Fix the failing checks in this PR."
+          fi
+
+          # Replace placeholders
+          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{REPO_NAME\}\}/$REPO}"
+          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_NUMBER\}\}/$PR_NUMBER}"
+          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_TITLE\}\}/$PR_TITLE}"
+          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_AUTHOR\}\}/$PR_AUTHOR}"
+          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILED_CHECK_NAME\}\}/$FAILED_NAMES}"
+
+          # Add failure logs
+          if [ -f /tmp/failure-logs.txt ]; then
+            LOGS_CONTENT=$(cat /tmp/failure-logs.txt)
+            PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/$LOGS_CONTENT}"
+          fi
+
+          # Save final prompt
+          echo "$PROMPT_CONTENT" > /tmp/gemini-prompt.txt
+          echo "Prompt prepared for $FAILURE_TYPE failures"
+
+      - name: Comment on PR - Starting fix
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          FAILED_NAMES="${{ steps.analyze.outputs.failed-names }}"
+
+          gh pr comment $PR_NUMBER --repo "$REPO" --body "🔧 **Attempting to fix failing checks**
+
+I've detected failures in: $FAILED_NAMES
+
+Analyzing the issues and will attempt to fix them automatically.
+
+---
+🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Setup Gemini CLI
+        uses: google-github-actions/run-gemini-cli@v1
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: 'gemini-3-pro-preview'
+          github_token: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Invoke Gemini CLI to fix issues
+        id: gemini-fix
+        working-directory: target-repo
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          PROMPT=$(cat /tmp/gemini-prompt.txt)
+
+          # Post comment to trigger gemini-cli
+          # Note: gemini-cli works via PR comments in the target repo
+          gh pr comment $PR_NUMBER --repo "$REPO" --body "@gemini-cli
+
+$PROMPT"
+
+          echo "✅ Gemini CLI invoked via PR comment"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+        continue-on-error: true
+
+      - name: Wait for Gemini to process
+        run: |
+          echo "Waiting for Gemini CLI to analyze and respond..."
+          sleep 30
+          # In production, you might poll for changes or wait for webhook
+
+      - name: Check for changes and push
+        id: push-fixes
+        working-directory: target-repo
+        run: |
+          # Configure git
+          git config user.name "aieng-bot-maintain[bot]"
+          git config user.email "aieng-bot@vectorinstitute.ai"
+
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Changes detected, committing..."
+
+            git add -A
+            git commit -m "Fix ${{ steps.analyze.outputs.primary-type }} failures after dependency updates
+
+Automated fixes applied by AI Engineering Maintenance Bot
+
+Fixes: ${{ steps.analyze.outputs.failed-names }}
+
+Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>"
+
+            # Push to the PR branch
+            git push origin HEAD:${{ steps.pr-details.outputs.head-ref }}
+
+            echo "changes-pushed=true" >> $GITHUB_OUTPUT
+            echo "✅ Fixes pushed to PR"
+          else
+            echo "changes-pushed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No local changes to push (Gemini may have commented with suggestions)"
+          fi
+        continue-on-error: true
+
+      - name: Comment on PR - Result
+        if: always()
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+
+          if [ "${{ steps.push-fixes.outputs.changes-pushed }}" = "true" ]; then
+            MESSAGE="✅ **Fixes applied!**
+
+I've pushed fixes for the failing checks. The CI will re-run automatically.
+
+Please review the changes to verify they're correct.
+
+---
+🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+          else
+            MESSAGE="🔍 **Analysis complete**
+
+Gemini CLI has analyzed the failures and provided suggestions in the comments above.
+
+If the fixes weren't applied automatically, you may need to review and apply them manually.
+
+---
+🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+          fi
+
+          gh pr comment $PR_NUMBER --repo "$REPO" --body "$MESSAGE"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
