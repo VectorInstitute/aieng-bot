@@ -172,7 +172,7 @@ jobs:
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           FAILED_NAMES="${{ steps.analyze.outputs.failed-names }}"
 
-          gh pr comment $PR_NUMBER --repo "$REPO" --body "🔧 **Attempting to fix failing checks**
+          MESSAGE="🔧 **Attempting to fix failing checks**
 
 I've detected failures in: $FAILED_NAMES
 
@@ -180,6 +180,8 @@ Analyzing the issues and will attempt to fix them automatically.
 
 ---
 🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+
+          gh pr comment $PR_NUMBER --repo "$REPO" --body "$MESSAGE"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 

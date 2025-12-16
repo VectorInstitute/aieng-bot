@@ -1,15 +1,15 @@
 # aieng-bot-maintain
 
-Centralized maintenance bot for ALL Vector Institute repositories. Automatically manages Dependabot PRs across the entire organization from a single location.
+Centralized maintenance bot that automatically manages Dependabot PRs across all Vector Institute repositories from a single location.
 
 ## Features
 
-- **Organization-wide monitoring**: Scans all VectorInstitute repos every 10 minutes
-- **Auto-merge**: Merges Dependabot PRs when all checks pass
-- **Auto-fix**: Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
-- **Centralized operation**: No need to install workflows in each repository
-- **Smart detection**: Categorizes failures and applies appropriate fix strategies
-- **Transparent**: Comments on PRs with status updates
+**Organization-wide monitoring** - Scans all VectorInstitute repos every 10 minutes
+**Auto-merge** - Merges Dependabot PRs when all checks pass
+**Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Gemini 3 AI
+**Centralized operation** - No installation needed in individual repositories
+**Smart detection** - Categorizes failures and applies appropriate fix strategies
+**Transparent** - Comments on PRs with status updates
 
 ## Architecture
 
@@ -39,147 +39,122 @@ Centralized maintenance bot for ALL Vector Institute repositories. Automatically
 
 ## Quick Start
 
-### One-Time Setup (in THIS repository)
+### Setup (in this repository)
 
-1. **Add organization secrets** to this repository:
-   - `GEMINI_API_KEY`: Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
-   - `ORG_ACCESS_TOKEN`: GitHub PAT with org-wide access (see below)
+**1. Create Gemini API Key**
+- Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- Add as repository secret: `GEMINI_API_KEY`
 
-2. **Create GitHub Personal Access Token**:
-   - Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens
-   - Create token with:
-     - Resource owner: VectorInstitute
-     - Repository access: All repositories
-     - Permissions: `contents: write`, `pull_requests: write`, `issues: write`
-   - Add as secret: `ORG_ACCESS_TOKEN`
+**2. Create GitHub Personal Access Token**
+- Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens
+- Configure: Resource owner: `VectorInstitute`, Repository access: `All repositories`
+- Permissions: `contents: write`, `pull_requests: write`, `issues: write`
+- Add as repository secret: `ORG_ACCESS_TOKEN`
 
-3. **Enable workflows** in this repository:
-   - Actions → Enable workflows
-   - Workflows will start running automatically
+**3. Enable GitHub Actions**
+- Go to Actions tab → Enable workflows
 
-4. **That's it!** The bot now monitors all VectorInstitute repos
+The bot now monitors all VectorInstitute repositories automatically.
 
 ## How It Works
 
-### 1. Monitoring (Every 10 minutes)
-`monitor-org-dependabot.yml` runs automatically:
-- Scans all VectorInstitute repositories
-- Finds open Dependabot PRs
+**1. Monitor** (every 10 minutes)
+- Scans all VectorInstitute repositories for open Dependabot PRs
 - Checks status of each PR
-- Routes to merge or fix workflows
+- Routes to merge or fix workflow
 
-### 2. Auto-Merge (for passing PRs)
-When all checks pass:
-- Approves the PR
-- Enables auto-merge
+**2. Auto-Merge** (when all checks pass)
+- Approves PR and enables auto-merge
 - Comments with status
-- PR merges automatically when ready
+- PR merges automatically
 
-### 3. Auto-Fix (for failing PRs)
-When checks fail:
-- Triggers `fix-remote-pr.yml` workflow
-- Clones the target repo + PR branch
-- Analyzes failure type (test/lint/security/build)
+**3. Auto-Fix** (when checks fail)
+- Clones target repository and PR branch
+- Analyzes failure type: test, lint, security, or build
 - Loads appropriate AI prompt template
 - Invokes Gemini 3 Pro to generate fixes
-- Pushes fixes to PR branch
-- Comments with results
+- Pushes fixes and comments on PR
 
 ## Configuration
 
-### Required Secrets
-- `GEMINI_API_KEY`: Gemini API access (required)
-- `ORG_ACCESS_TOKEN`: GitHub PAT with org-wide permissions (required)
+**Required Secrets**
+- `GEMINI_API_KEY` - Gemini API access
+- `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
-### Workflows
-- `.github/workflows/monitor-org-dependabot.yml` - Scans org for Dependabot PRs
-- `.github/workflows/fix-remote-pr.yml` - Fixes failing PRs
+**Workflows**
+- `monitor-org-dependabot.yml` - Scans org for Dependabot PRs every 10 minutes
+- `fix-remote-pr.yml` - Fixes failing PRs using AI
 
-### AI Prompt Templates
-Customize these for your organization's needs:
-- `.github/prompts/fix-test-failures.md`
-- `.github/prompts/fix-lint-failures.md`
-- `.github/prompts/fix-security-audit.md`
-- `.github/prompts/fix-build-failures.md`
+**AI Prompt Templates** (customize for your needs)
+- `fix-test-failures.md` - Test failure resolution strategies
+- `fix-lint-failures.md` - Linting/formatting fixes
+- `fix-security-audit.md` - Security vulnerability handling
+- `fix-build-failures.md` - Build/compilation error fixes
 
-## What It Can Fix
+## Capabilities
 
-✅ Linting and formatting issues
-✅ Security vulnerabilities (dependency updates)
-✅ Simple test failures from API changes
-✅ Build configuration issues
+**Can fix:**
+- Linting and formatting issues
+- Security vulnerabilities (dependency updates)
+- Simple test failures from API changes
+- Build configuration issues
 
-❌ Complex logic errors
-❌ Breaking changes requiring refactoring
-❌ Issues requiring architectural decisions
+**Cannot fix:**
+- Complex logic errors
+- Breaking changes requiring refactoring
+- Issues requiring architectural decisions
 
 ## Manual Testing
 
-You can manually trigger workflows for specific PRs:
-
+**Trigger via CLI:**
 ```bash
-# Test the monitor workflow
-gh workflow run monitor-org-dependabot.yml --repo VectorInstitute/aieng-bot-maintain
+# Monitor all repositories
+gh workflow run monitor-org-dependabot.yml
 
-# Fix a specific PR
+# Fix a specific PR (test with aieng-template-mvp#17)
 gh workflow run fix-remote-pr.yml \
-  --repo VectorInstitute/aieng-bot-maintain \
   --field target_repo="VectorInstitute/aieng-template-mvp" \
   --field pr_number="17"
 ```
 
-Or use the GitHub UI:
-- Actions → Select workflow → Run workflow → Enter parameters
-
-## Documentation
-
-- [Setup Guide](SETUP.md): Detailed configuration and permissions
-- [Deployment Guide](DEPLOYMENT.md): Rollout strategy and monitoring
-- [Testing Guide](TESTING.md): Test cases and validation
-- [Bot Identity](/.github/bot-assets/BOT_IDENTITY.md): Avatar and branding specs
-
-## Test Target
-
-Test with [aieng-template-mvp#17](https://github.com/VectorInstitute/aieng-template-mvp/pull/17):
-- Has frontend test failures
-- Real Dependabot dependency updates
-- Perfect candidate for auto-fix testing
+**Trigger via GitHub UI:**
+Actions → Select workflow → Run workflow → Enter parameters
 
 ## Monitoring
 
-View bot activity:
-- **Actions tab**: See all workflow runs
-- **Workflow runs**: Check success/failure rates
-- **PR comments**: Bot leaves detailed status updates
-- **Run summary**: Each workflow run shows PR count and actions taken
+**View bot activity:**
+- Actions tab - All workflow runs and success/failure rates
+- PR comments - Detailed status updates on each PR
+- Run summary - PR count and actions taken per run
+
+**Debug commands:**
+```bash
+# View recent workflow runs
+gh run list --workflow=monitor-org-dependabot.yml --limit 5
+
+# View logs for specific run
+gh run view RUN_ID --log
+```
+
+## Documentation
+
+- [Setup Guide](SETUP.md) - Detailed configuration and permissions
+- [Deployment Guide](DEPLOYMENT.md) - Rollout strategy and monitoring
+- [Testing Guide](TESTING.md) - Test cases and validation
+- [Bot Identity](/.github/bot-assets/BOT_IDENTITY.md) - Avatar and branding
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Workflow doesn't run | Check Actions enabled, verify secrets set |
+| Workflow doesn't run | Check Actions enabled and secrets are set |
 | Can't find PRs | Verify `ORG_ACCESS_TOKEN` has correct permissions |
 | Can't merge PRs | Ensure token has `contents: write` permission |
 | Can't push fixes | Check token has write access to target repos |
-| Gemini errors | Verify `GEMINI_API_KEY` is set and has quota |
-| Rate limits | Reduce monitoring frequency in cron schedule |
+| Gemini errors | Verify `GEMINI_API_KEY` is valid and has quota |
+| Rate limits | Reduce monitoring frequency in workflow cron schedule |
 
-**Debug workflow**:
-```bash
-# View recent runs
-gh run list --workflow=monitor-org-dependabot.yml --limit 5
-
-# View specific run logs
-gh run view RUN_ID --log
-```
-
-## Contributing
-
-Contributions welcome. Please test thoroughly before submitting PRs.
-
-## License
-
-[Add appropriate license]
+See [SETUP.md](SETUP.md) for detailed troubleshooting.
 
 ---
 
