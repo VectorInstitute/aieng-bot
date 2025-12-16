@@ -8,14 +8,14 @@ This centralized bot operates from THIS repository and manages Dependabot PRs ac
 
 - [ ] Admin access to VectorInstitute organization
 - [ ] Ability to create organization secrets
-- [ ] Gemini API key
+- [ ] Anthropic API key
 - [ ] GitHub Personal Access Token with org-wide permissions
 
 ## Setup Steps
 
-### 1. Create Gemini API Key
+### 1. Create Claude API Key
 
-1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+1. Go to [Anthropic Console](https://console.anthropic.com/settings/keys)
 2. Sign in with your Google account
 3. Click "Create API Key"
 4. Copy the key (starts with `AIza...`)
@@ -63,9 +63,9 @@ This centralized bot operates from THIS repository and manages Dependabot PRs ac
 2. Navigate to Settings → Secrets and variables → Actions
 3. Click "New repository secret"
 
-**Add GEMINI_API_KEY**:
-- Name: `GEMINI_API_KEY`
-- Secret: [Paste your Gemini API key]
+**Add ANTHROPIC_API_KEY**:
+- Name: `ANTHROPIC_API_KEY`
+- Secret: [Paste your Anthropic API key]
 - Click "Add secret"
 
 **Add ORG_ACCESS_TOKEN**:
@@ -199,7 +199,7 @@ The `ORG_ACCESS_TOKEN` has broad access. Best practices:
 
 ### API Key Protection
 
-The `GEMINI_API_KEY` provides AI access:
+The `ANTHROPIC_API_KEY` provides AI access:
 - ✅ Monitor API usage and costs
 - ✅ Set usage quotas in Google Cloud
 - ✅ Rotate key periodically
@@ -246,7 +246,7 @@ gh api repos/VectorInstitute/TEST_REPO/collaborators/USERNAME/permission
 
 **Solution**: Ensure token has write access and branch protection allows bot pushes
 
-### Gemini API Errors
+### Claude API Errors
 
 **Common issues**:
 - Invalid API key
@@ -254,7 +254,7 @@ gh api repos/VectorInstitute/TEST_REPO/collaborators/USERNAME/permission
 - Model not available
 - Request too large
 
-**Check quota**: Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+**Check quota**: Visit [Anthropic Console](https://console.anthropic.com/settings/keys)
 
 **Solution**: Verify key, check quota, consider upgrading plan
 

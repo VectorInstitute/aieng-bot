@@ -8,10 +8,10 @@ Deploying the AI Engineering Maintenance Bot is simple - it runs from ONE centra
 
 ### Phase 1: Initial Setup (30 minutes)
 
-- [ ] **1.1**: Create Gemini API key
+- [ ] **1.1**: Create Anthropic API key
 - [ ] **1.2**: Create GitHub PAT with org-wide access
 - [ ] **1.3**: Add secrets to this repository
-  - `GEMINI_API_KEY`
+  - `ANTHROPIC_API_KEY`
   - `ORG_ACCESS_TOKEN`
 - [ ] **1.4**: Enable GitHub Actions
 - [ ] **1.5**: Verify workflows appear in Actions tab
@@ -58,7 +58,7 @@ For experienced admins who just want to get it running:
 ```bash
 # 1. Add secrets via GitHub UI
 # Settings → Secrets → Actions → New secret
-# - GEMINI_API_KEY
+# - ANTHROPIC_API_KEY
 # - ORG_ACCESS_TOKEN
 
 # 2. Enable workflows
@@ -218,13 +218,13 @@ The bot makes no permanent infrastructure changes:
 
 ## Cost Estimation
 
-### Gemini API Costs
+### Claude API Costs
 
 Assuming:
 - 10 Dependabot PRs/day across org
 - 50% need fixes (5/day)
 - ~2000 tokens per fix request
-- Gemini 3 Pro: ~$0.001 per 1K tokens
+- Claude Sonnet: ~$0.001 per 1K tokens
 
 **Estimated cost**: $0.01-0.05 per day = **$0.30-1.50 per month**
 
@@ -288,10 +288,10 @@ Post in:
 ### Current Capacity
 - Handles 100s of repos
 - Processes unlimited PRs
-- Limited by: GitHub API rate limits, Gemini API quota
+- Limited by: GitHub API rate limits, Claude API quota
 
 ### If Scaling Needed
-- Increase Gemini API quota
+- Increase Claude API quota
 - Use GitHub App instead of PAT (higher rate limits)
 - Shard by repository (multiple bot instances)
 - Cache PR status to reduce API calls

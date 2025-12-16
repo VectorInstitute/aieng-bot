@@ -5,7 +5,7 @@
 1. **Fork a repository** or use a test repository
 2. **Enable Dependabot**: Settings → Security → Dependabot
 3. **Install workflows**: Copy `.github/workflows/` to test repo
-4. **Add secrets**: Set `GEMINI_API_KEY`
+4. **Add secrets**: Set `ANTHROPIC_API_KEY`
 5. **Enable auto-merge**: Settings → General → Pull Requests
 
 ## Test Cases
@@ -119,10 +119,10 @@ find .github/prompts -name "*.md" -exec md_lint {} \;
 gh pr view PR_NUMBER --json statusCheckRollup
 ```
 
-**Test Gemini API**:
+**Test Claude API**:
 ```bash
 # Verify API key works
-curl -H "Authorization: Bearer $GEMINI_API_KEY" \
+curl -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
   https://generativelanguage.googleapis.com/v1beta/models
 ```
 
@@ -173,7 +173,7 @@ curl -H "Authorization: Bearer $GEMINI_API_KEY" \
 # Average time to fix
 # Success rate (fixes / attempts)
 # API call count
-# Cost per fix (Gemini API)
+# Cost per fix (Claude API)
 ```
 
 ### Load Testing
