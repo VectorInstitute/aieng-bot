@@ -233,13 +233,18 @@ jobs:
             echo "Changes detected, committing..."
 
             git add -A
-            git commit -m "Fix ${{ steps.analyze.outputs.primary-type }} failures after dependency updates
 
-Automated fixes applied by AI Engineering Maintenance Bot
+            cat > /tmp/commit-message.txt <<EOF
+          Fix ${{ steps.analyze.outputs.primary-type }} failures after dependency updates
 
-Fixes: ${{ steps.analyze.outputs.failed-names }}
+          Automated fixes applied by AI Engineering Maintenance Bot
 
-Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>"
+          Fixes: ${{ steps.analyze.outputs.failed-names }}
+
+          Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
+          EOF
+
+            git commit -F /tmp/commit-message.txt
 
             # Push to the PR branch
             git push origin HEAD:${{ steps.pr-details.outputs.head-ref }}
