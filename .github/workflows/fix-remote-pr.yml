@@ -200,13 +200,14 @@ jobs:
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
-          PROMPT=$(cat /tmp/gemini-prompt.txt)
 
           # Post comment to trigger gemini-cli
           # Note: gemini-cli works via PR comments in the target repo
-          gh pr comment $PR_NUMBER --repo "$REPO" --body "@gemini-cli
+          echo "@gemini-cli" > /tmp/gemini-comment.txt
+          echo "" >> /tmp/gemini-comment.txt
+          cat /tmp/gemini-prompt.txt >> /tmp/gemini-comment.txt
 
-$PROMPT"
+          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/gemini-comment.txt
 
           echo "✅ Gemini CLI invoked via PR comment"
         env:
