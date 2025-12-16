@@ -38,9 +38,14 @@ jobs:
             # Manual trigger - specific repo
             REPOS="${{ github.event.inputs.target_repo }}"
           else
-            # Scheduled - all org repos
-            # Get all repos in the organization (limit to 100 for now, paginate if needed)
-            REPOS=$(gh repo list ${{ env.ORG_NAME }} --limit 100 --json nameWithOwner --jq '.[].nameWithOwner')
+            # Scheduled - read repos from CSV file
+            if [ -f repos-to-monitor.csv ]; then
+              REPOS=$(tail -n +2 repos-to-monitor.csv | grep -v '^$' | tr '\n' ' ')
+              echo "Reading repos from repos-to-monitor.csv"
+            else
+              echo "Error: repos-to-monitor.csv not found"
+              exit 1
+            fi
           fi
 
           # Array to store PR information
