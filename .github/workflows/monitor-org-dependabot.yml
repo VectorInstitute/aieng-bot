@@ -49,19 +49,18 @@ jobs:
           for REPO in $REPOS; do
             echo "Checking $REPO for Dependabot PRs..."
 
-            # Get all open PRs from dependabot
+            # Get all open PRs from dependabot (returns as JSON array)
             REPO_PRS=$(gh pr list --repo "$REPO" \
               --author "app/dependabot" \
               --state open \
-              --json number,title,url,headRefName,statusCheckRollup \
-              --jq '.[]' 2>/dev/null || echo "")
+              --json number,title,url,headRefName,statusCheckRollup 2>/dev/null || echo "[]")
 
-            if [ -n "$REPO_PRS" ]; then
-              # Add repo name to each PR object
-              REPO_PRS=$(echo "$REPO_PRS" | jq -c ". + {repo: \"$REPO\"}")
+            if [ "$REPO_PRS" != "[]" ] && [ -n "$REPO_PRS" ]; then
+              # Add repo name to each PR object in the array
+              REPO_PRS=$(echo "$REPO_PRS" | jq -c "map(. + {repo: \"$REPO\"})")
 
               # Append to our collection
-              PRS_JSON=$(echo "$PRS_JSON" | jq -c ". + [$REPO_PRS]")
+              PRS_JSON=$(echo "$PRS_JSON" | jq -c ". + $REPO_PRS")
             fi
           done
 
