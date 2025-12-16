@@ -172,14 +172,17 @@ jobs:
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           FAILED_NAMES="${{ steps.analyze.outputs.failed-names }}"
 
-          MESSAGE="🔧 **Attempting to fix failing checks**
+          MESSAGE=$(cat <<EOF
+🔧 **Attempting to fix failing checks**
 
 I've detected failures in: $FAILED_NAMES
 
 Analyzing the issues and will attempt to fix them automatically.
 
 ---
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+EOF
+)
 
           gh pr comment $PR_NUMBER --repo "$REPO" --body "$MESSAGE"
         env:
@@ -256,23 +259,29 @@ Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
 
           if [ "${{ steps.push-fixes.outputs.changes-pushed }}" = "true" ]; then
-            MESSAGE="✅ **Fixes applied!**
+            MESSAGE=$(cat <<EOF
+✅ **Fixes applied!**
 
 I've pushed fixes for the failing checks. The CI will re-run automatically.
 
 Please review the changes to verify they're correct.
 
 ---
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+EOF
+)
           else
-            MESSAGE="🔍 **Analysis complete**
+            MESSAGE=$(cat <<EOF
+🔍 **Analysis complete**
 
 Gemini CLI has analyzed the failures and provided suggestions in the comments above.
 
 If the fixes weren't applied automatically, you may need to review and apply them manually.
 
 ---
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*"
+🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+EOF
+)
           fi
 
           gh pr comment $PR_NUMBER --repo "$REPO" --body "$MESSAGE"
