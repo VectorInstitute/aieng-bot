@@ -173,108 +173,91 @@ jobs:
           FAILED_NAMES="${{ steps.analyze.outputs.failed-names }}"
 
           cat > /tmp/pr-comment.txt <<EOF
-          🔧 **Attempting to fix failing checks**
+          🔧 Analyzing and fixing: ${FAILED_NAMES}...
 
-          I've detected failures in: $FAILED_NAMES
-
-          Analyzing the issues and will attempt to fix them automatically.
-
-          ---
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          🤖 *AI Engineering Maintenance Bot*
           EOF
 
           gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-comment.txt
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
-      - name: Setup Python for AI processing
+      - name: Install Claude Code CLI
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python for Agent SDK
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install Claude Agent SDK
         run: |
-          pip install google-generativeai
+          pip install claude-agent-sdk
 
-      - name: Call Gemini API to analyze and fix issues
-        id: gemini-fix
+      - name: Apply AI fixes using Claude Agent SDK
+        id: claude-fix
         working-directory: target-repo
         run: |
-          cat > /tmp/fix_issues.py << 'PYTHON_SCRIPT_EOF'
-          import google.generativeai as genai
+          cat > /tmp/fix_with_agent.py << 'PYTHON_SCRIPT_EOF'
+          import asyncio
           import os
           import sys
-          import json
+          from claude_agent_sdk import query, ClaudeAgentOptions
 
-          # Configure Gemini API
-          api_key = os.environ.get('GEMINI_API_KEY')
-          if not api_key:
-              print("ERROR: GEMINI_API_KEY not set")
-              sys.exit(1)
+          async def main():
+              # Read the prepared prompt
+              with open('/tmp/gemini-prompt.txt', 'r') as f:
+                  prompt_content = f.read()
 
-          genai.configure(api_key=api_key)
+              prompt = f"""{prompt_content}
 
-          # Read the prompt
-          with open('/tmp/gemini-prompt.txt', 'r') as f:
-              prompt = f.read()
+          ## Your Task
+          Analyze the failures and fix the code directly. Make minimal, targeted changes to resolve the issues.
 
-          # Add instruction for generating executable fix commands
-          full_prompt = f"""{prompt}
+          Important:
+          - Read all relevant files first
+          - Apply fixes directly to the code
+          - Don't skip tests or add ignore comments
+          - Follow existing code patterns
+          - Make changes that will make the tests pass"""
 
-          ## IMPORTANT: Output Format
-          Provide your response in the following format:
+              print("🔧 Starting automated code fixes with Claude Agent...")
 
-          1. First, explain what you found wrong
-          2. Then, provide shell commands or code changes to fix the issues
-          3. Use executable bash commands that can fix the files
+              options = ClaudeAgentOptions(
+                  allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep"],
+                  permission_mode="acceptEdits",
+                  cwd=os.getcwd()
+              )
 
-          For file modifications, provide complete corrected file content or use sed/awk commands to make changes.
+              fix_summary = []
 
-          Make sure all commands are safe and will not delete unrelated files.
-          """
+              async for message in query(prompt=prompt, options=options):
+                  # Capture agent's actions for summary
+                  if hasattr(message, 'content') and message.content:
+                      print(f"[Agent] {message.content[:200]}")
+                      if len(fix_summary) < 5:  # Keep concise
+                          fix_summary.append(str(message.content)[:100])
 
-          try:
-              # Use Gemini 2.0 Flash model (latest available)
-              model = genai.GenerativeModel('gemini-2.0-flash-exp')
-              response = model.generate_content(full_prompt)
+              # Save summary for PR comment
+              with open('/tmp/fix-summary.txt', 'w') as f:
+                  if fix_summary:
+                      f.write("Applied the following fixes:\n")
+                      for item in fix_summary[:3]:
+                          f.write(f"- {item}\n")
+                  else:
+                      f.write("Analyzed the issue and applied necessary fixes.")
 
-              # Save response
-              with open('/tmp/gemini-response.txt', 'w') as f:
-                  f.write(response.text)
+              print("✅ Agent completed fixes")
 
-              print("✅ Gemini API call successful")
-              print("\n--- Gemini Response ---")
-              print(response.text)
-
-          except Exception as e:
-              print(f"ERROR calling Gemini API: {e}")
-              sys.exit(1)
+          asyncio.run(main())
           PYTHON_SCRIPT_EOF
 
-          python /tmp/fix_issues.py
+          python /tmp/fix_with_agent.py
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        continue-on-error: true
-
-      - name: Apply AI-suggested fixes
-        working-directory: target-repo
-        run: |
-          if [ -f /tmp/gemini-response.txt ]; then
-            echo "📝 AI Analysis and Suggestions:"
-            cat /tmp/gemini-response.txt
-
-            # Comment the AI response on the PR for transparency
-            gh pr comment ${{ github.event.inputs.pr_number }} \
-              --repo "${{ github.event.inputs.target_repo }}" \
-              --body "$(echo '🤖 **AI Analysis**'; echo ''; cat /tmp/gemini-response.txt; echo ''; echo '---'; echo '*AI Engineering Maintenance Bot*')"
-
-            echo ""
-            echo "⚠️  Note: Automatic application of AI-suggested fixes is not yet implemented."
-            echo "The AI analysis has been posted as a comment on the PR for manual review."
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
-        continue-on-error: true
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        continue-on-error: false
 
       - name: Check for changes and push
         id: push-fixes
@@ -318,28 +301,33 @@ jobs:
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          FAILURE_TYPE="${{ steps.analyze.outputs.primary-type }}"
 
           if [ "${{ steps.push-fixes.outputs.changes-pushed }}" = "true" ]; then
+            # Read the fix summary if available
+            FIX_SUMMARY=""
+            if [ -f /tmp/fix-summary.txt ]; then
+              FIX_SUMMARY=$(cat /tmp/fix-summary.txt)
+            fi
+
             cat > /tmp/pr-result.txt <<EOF
-          ✅ **Fixes applied!**
+          🔧 **Automated fix applied**
 
-          I've pushed fixes for the failing checks. The CI will re-run automatically.
+          Fixed ${FAILURE_TYPE} failures after dependency updates.
 
-          Please review the changes to verify they're correct.
+          ${FIX_SUMMARY}
 
-          ---
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          CI checks will re-run automatically.
+
+          🤖 *AI Engineering Maintenance Bot*
           EOF
           else
             cat > /tmp/pr-result.txt <<EOF
-          🔍 **Analysis complete**
+          ⚠️  **Unable to apply automated fix**
 
-          Gemini CLI has analyzed the failures and provided suggestions in the comments above.
+          Analyzed ${FAILURE_TYPE} failures but could not generate a fix automatically. Manual review may be required.
 
-          If the fixes weren't applied automatically, you may need to review and apply them manually.
-
-          ---
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          🤖 *AI Engineering Maintenance Bot*
           EOF
           fi
 
