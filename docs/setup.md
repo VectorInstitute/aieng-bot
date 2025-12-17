@@ -139,7 +139,7 @@ Check the Actions tab for workflow runs and PR comments for bot activity.
 
 ### Adjust Monitoring Frequency
 
-Edit `.github/workflows/monitor-org-dependabot.yml`:
+Edit `.github/workflows/monitor-org-bot-prs.yml`:
 
 ```yaml
 on:
@@ -163,7 +163,7 @@ Add repository-specific context, commands, or strategies.
 
 ### Filter Repositories
 
-To exclude certain repos from monitoring, edit `monitor-org-dependabot.yml`:
+To exclude certain repos from monitoring, edit `monitor-org-bot-prs.yml`:
 
 ```bash
 # After getting repos list
@@ -268,7 +268,7 @@ gh api repos/VectorInstitute/TEST_REPO/collaborators/USERNAME/permission
 
 ```bash
 # Test workflow manually
-gh workflow run monitor-org-dependabot.yml
+gh workflow run monitor-org-bot-prs.yml
 ```
 
 ## Maintenance

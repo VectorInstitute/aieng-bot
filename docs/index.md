@@ -1,6 +1,6 @@
 # aieng-bot-maintain Documentation
 
-Comprehensive documentation for the AI Engineering Maintenance Bot - an automated system that manages Dependabot PRs across all Vector Institute repositories.
+Comprehensive documentation for the AI Engineering Maintenance Bot - an automated system that manages bot PRs (Dependabot and pre-commit-ci) across all Vector Institute repositories.
 
 ## Getting Started
 
@@ -19,14 +19,14 @@ Comprehensive documentation for the AI Engineering Maintenance Bot - an automate
 The bot operates from a single centralized repository and requires no installation in individual repositories. It:
 
 - Monitors all VectorInstitute repositories every 6 hours
-- Auto-merges Dependabot PRs when all checks pass
+- Auto-merges bot PRs (Dependabot and pre-commit-ci) when all checks pass
 - Automatically fixes common issues using Claude Agent SDK
 - Posts transparent status updates on PRs
 
 ## Key Features
 
 ### Organization-Wide Monitoring
-Scans all repositories in the VectorInstitute organization for open Dependabot PRs and processes them automatically.
+Scans all repositories in the VectorInstitute organization for open bot PRs (Dependabot and pre-commit-ci) and processes them automatically.
 
 ### Intelligent Auto-Merge
 Analyzes PR status checks and automatically approves and merges PRs when all tests pass.
@@ -61,7 +61,7 @@ All logic runs from this single repository - target repositories need only:
 │  VectorInstitute Org Repos │
 │                            │
 │  Finds & processes         │
-│  Dependabot PRs            │
+│  bot PRs                   │
 └────────────────────────────┘
 ```
 
@@ -72,7 +72,7 @@ All logic runs from this single repository - target repositories need only:
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide write permissions
 
 ### Workflows
-- `monitor-org-dependabot.yml` - Scheduled workflow that scans organization
+- `monitor-org-bot-prs.yml` - Scheduled workflow that scans organization
 - `fix-remote-pr.yml` - On-demand workflow triggered for failing PRs
 
 ### Customization
@@ -85,7 +85,7 @@ All logic runs from this single repository - target repositories need only:
 ### Manual Testing
 ```bash
 # Test monitoring workflow
-gh workflow run monitor-org-dependabot.yml
+gh workflow run monitor-org-bot-prs.yml
 
 # Test fix on specific PR
 gh workflow run fix-remote-pr.yml \
@@ -96,7 +96,7 @@ gh workflow run fix-remote-pr.yml \
 ### Monitoring Bot Activity
 ```bash
 # View recent runs
-gh run list --workflow=monitor-org-dependabot.yml --limit 5
+gh run list --workflow=monitor-org-bot-prs.yml --limit 5
 
 # View specific run logs
 gh run view RUN_ID --log

@@ -1,11 +1,11 @@
 # aieng-bot-maintain
 
-Centralized maintenance bot that automatically manages Dependabot PRs across all Vector Institute repositories from a single location.
+Centralized maintenance bot that automatically manages bot PRs (Dependabot and pre-commit-ci) across all Vector Institute repositories from a single location.
 
 ## Features
 
 - **Organization-wide monitoring** - Scans all VectorInstitute repos every 6 hours
-- **Auto-merge** - Merges Dependabot PRs when all checks pass
+- **Auto-merge** - Merges bot PRs (Dependabot and pre-commit-ci) when all checks pass
 - **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Claude AI Agent SDK
 - **Centralized operation** - No installation needed in individual repositories
 - **Smart detection** - Categorizes failures and applies appropriate fix strategies
@@ -20,7 +20,7 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 │                                 │
 │  Runs every 6 hours:            │
 │  1. Scans VectorInstitute org   │
-│  2. Finds Dependabot PRs        │
+│  2. Finds bot PRs               │
 │  3. Checks status               │
 │  4. Merges or fixes PRs         │
 └──────────────┬──────────────────┘
@@ -30,9 +30,9 @@ Centralized maintenance bot that automatically manages Dependabot PRs across all
 ┌───────────────────────────────────┐
 │   VectorInstitute Organization    │
 │                                   │
-│  ├─ repo-1  (Dependabot PR #1)    │
-│  ├─ repo-2  (Dependabot PR #2)    │
-│  ├─ repo-3  (Dependabot PR #3)    │
+│  ├─ repo-1  (Bot PR #1)           │
+│  ├─ repo-2  (Bot PR #2)           │
+│  ├─ repo-3  (Bot PR #3)           │
 │  └─ repo-N  ...                   │
 └───────────────────────────────────┘
 ```
@@ -59,7 +59,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 ## How It Works
 
 **1. Monitor** (every 6 hours)
-- Scans all VectorInstitute repositories for open Dependabot PRs
+- Scans all VectorInstitute repositories for open bot PRs (Dependabot and pre-commit-ci)
 - Checks status of each PR
 - Routes to merge or fix workflow
 
@@ -82,7 +82,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
 **Workflows**
-- `monitor-org-dependabot.yml` - Scans org for Dependabot PRs every 6 hours
+- `monitor-org-bot-prs.yml` - Scans org for bot PRs (Dependabot and pre-commit-ci) every 6 hours
 - `fix-remote-pr.yml` - Fixes failing PRs using AI
 
 **AI Prompt Templates** (customize for your needs)
@@ -109,7 +109,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 **Trigger via CLI:**
 ```bash
 # Monitor all repositories
-gh workflow run monitor-org-dependabot.yml
+gh workflow run monitor-org-bot-prs.yml
 
 # Fix a specific PR (test with aieng-template-mvp#17)
 gh workflow run fix-remote-pr.yml \
@@ -130,7 +130,7 @@ Actions → Select workflow → Run workflow → Enter parameters
 **Debug commands:**
 ```bash
 # View recent workflow runs
-gh run list --workflow=monitor-org-dependabot.yml --limit 5
+gh run list --workflow=monitor-org-bot-prs.yml --limit 5
 
 # View logs for specific run
 gh run view RUN_ID --log

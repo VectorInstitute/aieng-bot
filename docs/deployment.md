@@ -20,7 +20,7 @@ Deploying the AI Engineering Maintenance Bot is simple - it runs from ONE centra
 
 - [ ] **2.1**: Manual test run of monitor workflow
   ```bash
-  gh workflow run monitor-org-dependabot.yml \
+  gh workflow run monitor-org-bot-prs.yml \
     --repo VectorInstitute/aieng-bot-maintain
   ```
 - [ ] **2.2**: Test fix workflow on specific PR
@@ -65,7 +65,7 @@ For experienced admins who just want to get it running:
 # Actions tab → Enable workflows
 
 # 3. Test
-gh workflow run monitor-org-dependabot.yml --repo VectorInstitute/aieng-bot-maintain
+gh workflow run monitor-org-bot-prs.yml --repo VectorInstitute/aieng-bot-maintain
 
 # 4. Monitor
 # Check Actions tab for runs every 6 hours
@@ -102,10 +102,10 @@ gh workflow run monitor-org-dependabot.yml --repo VectorInstitute/aieng-bot-main
 Monitor these metrics:
 ```bash
 # Check recent runs
-gh run list --workflow=monitor-org-dependabot.yml --limit 10
+gh run list --workflow=monitor-org-bot-prs.yml --limit 10
 
 # Check for failures
-gh run list --workflow=monitor-org-dependabot.yml --status failure --limit 5
+gh run list --workflow=monitor-org-bot-prs.yml --status failure --limit 5
 
 # View specific run
 gh run view RUN_ID --log
@@ -143,7 +143,7 @@ Target metrics after 2 weeks:
 If you want more or less frequent scanning:
 
 ```yaml
-# .github/workflows/monitor-org-dependabot.yml
+# .github/workflows/monitor-org-bot-prs.yml
 on:
   schedule:
     - cron: '0 */12 * * *'  # Every 12 hours (less frequent)
@@ -156,7 +156,7 @@ on:
 If certain repos need manual review:
 
 ```bash
-# In monitor-org-dependabot.yml, after getting REPOS
+# In monitor-org-bot-prs.yml, after getting REPOS
 REPOS=$(echo "$REPOS" | grep -v "critical-production-repo")
 REPOS=$(echo "$REPOS" | grep -v "experimental-repo")
 ```
@@ -172,7 +172,7 @@ Edit `.github/prompts/` templates to be more/less aggressive in fixes.
 If auto-merging incorrectly:
 
 ```bash
-# In monitor-org-dependabot.yml, adjust check logic
+# In monitor-org-bot-prs.yml, adjust check logic
 # Add filters for specific check names or PR titles
 ```
 
@@ -184,12 +184,12 @@ If something goes wrong:
 
 ```bash
 # Disable scheduled runs
-gh workflow disable monitor-org-dependabot.yml \
+gh workflow disable monitor-org-bot-prs.yml \
   --repo VectorInstitute/aieng-bot-maintain
 ```
 
 Or via GitHub UI:
-1. Actions → Monitor Organization Dependabot PRs
+1. Actions → Monitor Organization Bot PRs
 2. Click "..." → Disable workflow
 
 ### Investigation (While Disabled)
@@ -205,7 +205,7 @@ Or via GitHub UI:
 2. Test manually first
 3. Re-enable workflow:
    ```bash
-   gh workflow enable monitor-org-dependabot.yml
+   gh workflow enable monitor-org-bot-prs.yml
    ```
 
 ### Full Rollback (If Needed)
