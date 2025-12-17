@@ -1,0 +1,19 @@
+# Bot Avatar Placeholder
+
+This directory should contain the bot avatar images.
+
+## Required Files
+- `avatar.png` - Main avatar (512x512px minimum)
+- `avatar-small.png` - Thumbnail (128x128px)
+- `avatar.svg` - Vector version (optional)
+
+## Creation Instructions
+See BOT_IDENTITY.md for design specifications.
+
+Generate avatar using:
+1. AI image generation tools (DALL-E, Midjourney)
+2. Design tools (Figma, Adobe Illustrator)
+3. Commission from a designer
+
+## Recommended Prompt for AI Generation
+"Minimalist flat design robot icon for software maintenance bot, geometric shapes, blue and green colors, wrench symbol, professional tech company style, circular avatar, clean lines, white background, 512x512"

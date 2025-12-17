@@ -86,6 +86,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 - `fix-remote-pr.yml` - Fixes failing PRs using AI
 
 **AI Prompt Templates** (customize for your needs)
+- `fix-merge-conflicts.md` - Resolve merge conflicts with best practices
 - `fix-test-failures.md` - Test failure resolution strategies
 - `fix-lint-failures.md` - Linting/formatting fixes
 - `fix-security-audit.md` - Security vulnerability handling
@@ -94,6 +95,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 ## Capabilities
 
 **Can fix:**
+- Merge conflicts (dependency files, lock files, code)
 - Linting and formatting issues
 - Security vulnerabilities (dependency updates)
 - Simple test failures from API changes
@@ -120,9 +122,31 @@ gh workflow run fix-remote-pr.yml \
 **Trigger via GitHub UI:**
 Actions → Select workflow → Run workflow → Enter parameters
 
+## Dashboard
+
+**View comprehensive analytics and agent execution traces:**
+- 📊 **[Bot Dashboard](https://catalog.vectorinstitute.ai/aieng-bot-maintain)** - Interactive dashboard with:
+  - Overview table of all bot PR fixes
+  - Success rates and performance metrics
+  - Detailed agent execution traces (like LangSmith/Langfuse)
+  - Code diffs with syntax highlighting
+  - Failure analysis and reasoning timeline
+
+**Features:**
+- Real-time PR status tracking
+- Agent observability (tool calls, reasoning, actions)
+- Historical metrics and trends
+- Per-repo and per-failure-type analytics
+- Sortable/filterable PR table
+
+**Authentication:**
+- Restricted to @vectorinstitute.ai email addresses
+- Google OAuth 2.0 sign-in
+
 ## Monitoring
 
 **View bot activity:**
+- [Dashboard](https://catalog.vectorinstitute.ai/aieng-bot-maintain) - Comprehensive analytics and traces
 - Actions tab - All workflow runs and success/failure rates
 - PR comments - Detailed status updates on each PR
 - Run summary - PR count and actions taken per run
@@ -134,6 +158,9 @@ gh run list --workflow=monitor-org-bot-prs.yml --limit 5
 
 # View logs for specific run
 gh run view RUN_ID --log
+
+# Collect metrics manually
+gh workflow run collect-bot-metrics.yml
 ```
 
 ## Documentation

@@ -75,14 +75,25 @@ jobs:
           echo "Analyzing failures..."
           echo "$FAILED_CHECKS" | jq -r '.[] | "\(.name): \(.conclusion)"'
 
+          # Check for merge conflicts first
+          if git status | grep -q "Unmerged paths\|merge conflict"; then
+            echo "primary-type=merge_conflict" >> $GITHUB_OUTPUT
+            echo "failed-names=merge-conflict" >> $GITHUB_OUTPUT
+            echo "Detected merge conflicts"
+            exit 0
+          fi
+
           # Categorize failures
           TEST_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("test|spec|jest|pytest|unittest"; "i"))]')
           LINT_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("lint|format|pre-commit|eslint|prettier|black|flake8|ruff"; "i"))]')
           SECURITY_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("audit|security|snyk|dependabot|pip-audit"; "i"))]')
           BUILD_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("build|compile|webpack|vite|tsc"; "i"))]')
+          MERGE_CONFLICT_FAILURES=$(echo "$FAILED_CHECKS" | jq '[.[] | select(.name | test("merge|conflict"; "i"))]')
 
           # Determine primary failure type
-          if [ "$(echo "$TEST_FAILURES" | jq 'length')" -gt 0 ]; then
+          if [ "$(echo "$MERGE_CONFLICT_FAILURES" | jq 'length')" -gt 0 ]; then
+            echo "primary-type=merge_conflict" >> $GITHUB_OUTPUT
+          elif [ "$(echo "$TEST_FAILURES" | jq 'length')" -gt 0 ]; then
             echo "primary-type=test" >> $GITHUB_OUTPUT
           elif [ "$(echo "$LINT_FAILURES" | jq 'length')" -gt 0 ]; then
             echo "primary-type=lint" >> $GITHUB_OUTPUT
@@ -136,6 +147,7 @@ jobs:
 
           # Select appropriate prompt template
           case "$FAILURE_TYPE" in
+            merge_conflict) PROMPT_FILE="bot-repo/.github/prompts/fix-merge-conflicts.md" ;;
             test) PROMPT_FILE="bot-repo/.github/prompts/fix-test-failures.md" ;;
             lint) PROMPT_FILE="bot-repo/.github/prompts/fix-lint-failures.md" ;;
             security) PROMPT_FILE="bot-repo/.github/prompts/fix-security-audit.md" ;;
@@ -192,6 +204,17 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        continue-on-error: true
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        continue-on-error: true
+
       - name: Install Claude Agent SDK
         run: |
           pip install claude-agent-sdk
@@ -204,6 +227,12 @@ jobs:
           import asyncio
           import os
           import sys
+          from datetime import datetime
+
+          # Add bot repo to path to import tracer
+          sys.path.insert(0, os.path.join(os.getcwd(), '..', 'bot-repo'))
+
+          from scripts.agent_tracer import create_tracer_from_env
           from claude_agent_sdk import query, ClaudeAgentOptions
 
           async def main():
@@ -225,31 +254,35 @@ jobs:
 
               print("🔧 Starting automated code fixes with Claude Agent...")
 
+              # Initialize tracer
+              tracer = create_tracer_from_env()
+
               options = ClaudeAgentOptions(
                   allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep"],
                   permission_mode="acceptEdits",
                   cwd=os.getcwd()
               )
 
-              fix_summary = []
+              # Wrap agent stream with tracer
+              agent_stream = query(prompt=prompt, options=options)
+              traced_stream = tracer.capture_agent_stream(agent_stream)
 
-              async for message in query(prompt=prompt, options=options):
-                  # Capture agent's actions for summary
-                  if hasattr(message, 'content') and message.content:
-                      print(f"[Agent] {message.content[:200]}")
-                      if len(fix_summary) < 5:  # Keep concise
-                          fix_summary.append(str(message.content)[:100])
+              # Consume the traced stream
+              async for message in traced_stream:
+                  pass  # Tracer handles logging
+
+              print("✅ Agent completed fixes")
+
+              # Finalize trace (will update with commit info later)
+              tracer.finalize(status="SUCCESS")
+
+              # Save trace locally
+              trace_file = "/tmp/agent-execution-trace.json"
+              tracer.save_trace(trace_file)
 
               # Save summary for PR comment
               with open('/tmp/fix-summary.txt', 'w') as f:
-                  if fix_summary:
-                      f.write("Applied the following fixes:\n")
-                      for item in fix_summary[:3]:
-                          f.write(f"- {item}\n")
-                  else:
-                      f.write("Analyzed the issue and applied necessary fixes.")
-
-              print("✅ Agent completed fixes")
+                  f.write(tracer.get_summary())
 
           asyncio.run(main())
           PYTHON_SCRIPT_EOF
@@ -257,7 +290,70 @@ jobs:
           python /tmp/fix_with_agent.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TARGET_REPO: ${{ github.event.inputs.target_repo }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          PR_TITLE: ${{ steps.pr-details.outputs.pr-title }}
+          PR_AUTHOR: ${{ steps.pr-details.outputs.pr-author }}
+          PR_URL: https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}
+          FAILURE_TYPE: ${{ steps.analyze.outputs.primary-type }}
+          FAILED_CHECK_NAMES: ${{ steps.analyze.outputs.failed-names }}
+          FAILURE_LOGS: ${{ steps.get-logs.outputs.logs }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         continue-on-error: false
+
+      - name: Upload trace to GCS
+        if: always()
+        working-directory: target-repo
+        run: |
+          if [ -f /tmp/agent-execution-trace.json ]; then
+            # Generate date-based path: traces/YYYY/MM/DD/
+            DATE_PATH=$(date -u +"%Y/%m/%d")
+
+            # Generate filename: repo-name-pr-123-runid.json
+            REPO_NAME=$(echo "${{ github.event.inputs.target_repo }}" | sed 's/\//-/g')
+            TRACE_FILE="$REPO_NAME-pr-${{ github.event.inputs.pr_number }}-${{ github.run_id }}.json"
+
+            DEST_PATH="traces/$DATE_PATH/$TRACE_FILE"
+
+            echo "Uploading trace to gs://bot-dashboard-vectorinstitute/$DEST_PATH"
+
+            gcloud storage cp /tmp/agent-execution-trace.json \
+              "gs://bot-dashboard-vectorinstitute/$DEST_PATH" \
+              --content-type="application/json" || {
+              echo "⚠️ Failed to upload trace to GCS, will rely on GitHub artifact"
+            }
+
+            # Save trace URL for PR comment
+            echo "trace_url=https://storage.googleapis.com/bot-dashboard-vectorinstitute/$DEST_PATH" >> $GITHUB_OUTPUT
+
+            # Update traces index for faster lookups
+            cat > /tmp/trace-index-entry.json << EOF
+            {
+              "repo": "${{ github.event.inputs.target_repo }}",
+              "pr_number": ${{ github.event.inputs.pr_number }},
+              "trace_path": "$DEST_PATH",
+              "workflow_run_id": "${{ github.run_id }}",
+              "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            }
+          EOF
+
+            echo "✓ Trace uploaded successfully"
+          else
+            echo "⚠️ No trace file found at /tmp/agent-execution-trace.json"
+          fi
+        continue-on-error: true
+        id: upload-trace
+
+      - name: Upload trace as GitHub artifact (backup)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-trace-${{ github.event.inputs.pr_number }}-${{ github.run_id }}
+          path: /tmp/agent-execution-trace.json
+          retention-days: 90
+        continue-on-error: true
 
       - name: Check for changes and push
         id: push-fixes
@@ -318,6 +414,9 @@ jobs:
               FIX_SUMMARY=$(cat /tmp/fix-summary.txt)
             fi
 
+            TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
+            DASHBOARD_URL="https://catalog.vectorinstitute.ai/aieng-bot-maintain"
+
             cat > /tmp/pr-result.txt <<EOF
           🔧 **Automated fix applied**
 
@@ -326,6 +425,8 @@ jobs:
           ${FIX_SUMMARY}
 
           CI checks will re-run automatically.
+
+          📊 **[View detailed trace on dashboard](${DASHBOARD_URL})** | [Raw trace](${TRACE_URL})
 
           🤖 *AI Engineering Maintenance Bot*
           EOF
