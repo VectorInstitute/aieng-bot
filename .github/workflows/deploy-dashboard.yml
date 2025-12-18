@@ -76,6 +76,8 @@ jobs:
           docker build \
             -t "$IMAGE_URL" \
             -t "$LATEST_URL" \
+            --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+            --build-arg NEXT_PUBLIC_APP_URL="https://catalog.vectorinstitute.ai" \
             --cache-from type=gha,scope=bot-dashboard \
             --cache-to type=gha,mode=max,scope=bot-dashboard \
             dashboard/
