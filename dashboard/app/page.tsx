@@ -66,12 +66,12 @@ export default async function DashboardPage() {
                       <p className="text-sm font-semibold bg-gradient-to-r from-vector-magenta to-vector-violet bg-clip-text text-transparent">{user.email}</p>
                     </div>
                   )}
-                  <Link
-                    href="/api/auth/logout"
+                  <a
+                    href="/aieng-bot-maintain/api/auth/logout"
                     className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
                   >
                     Logout
-                  </Link>
+                  </a>
                 </div>
               </div>
             </div>
@@ -125,12 +125,12 @@ export default async function DashboardPage() {
                     <p className="text-sm font-semibold bg-gradient-to-r from-vector-magenta to-vector-violet bg-clip-text text-transparent">{user.email}</p>
                   </div>
                 )}
-                <Link
-                  href="/api/auth/logout"
+                <a
+                  href="/aieng-bot-maintain/api/auth/logout"
                   className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
                 >
                   Logout
-                </Link>
+                </a>
               </div>
             </div>
           </div>
