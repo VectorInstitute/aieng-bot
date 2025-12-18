@@ -351,7 +351,27 @@ jobs:
             }
           EOF
 
-            echo "✓ Trace uploaded successfully"
+            # Download existing index or create new one
+            if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/traces_index.json /tmp/traces_index.json 2>/dev/null; then
+              echo "Downloaded existing traces index"
+            else
+              echo '{"traces": [], "last_updated": ""}' > /tmp/traces_index.json
+              echo "Created new traces index"
+            fi
+
+            # Append new entry to index
+            jq --slurpfile entry /tmp/trace-index-entry.json \
+              '.traces += $entry | .last_updated = "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"' \
+              /tmp/traces_index.json > /tmp/traces_index_updated.json
+
+            # Upload updated index back to GCS
+            gcloud storage cp /tmp/traces_index_updated.json \
+              gs://bot-dashboard-vectorinstitute/data/traces_index.json \
+              --content-type="application/json" || {
+              echo "⚠️ Failed to update traces index"
+            }
+
+            echo "✓ Trace uploaded successfully and index updated"
           else
             echo "⚠️ No trace file found at /tmp/agent-execution-trace.json"
           fi

@@ -5,12 +5,15 @@ It captures tool calls, reasoning, actions, and errors in a structured format
 similar to LangSmith/Langfuse for later analysis and dashboard display.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import re
 import subprocess
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 
 class AgentExecutionTracer:
@@ -26,8 +29,8 @@ class AgentExecutionTracer:
 
     def __init__(
         self,
-        pr_info: Dict[str, Any],
-        failure_info: Dict[str, Any],
+        pr_info: dict[str, Any],
+        failure_info: dict[str, Any],
         workflow_run_id: str,
         github_run_url: str,
     ):
@@ -45,7 +48,7 @@ class AgentExecutionTracer:
         self.workflow_run_id = workflow_run_id
         self.github_run_url = github_run_url
 
-        self.trace: Dict[str, Any] = {
+        self.trace: dict[str, Any] = {
             "metadata": {
                 "workflow_run_id": workflow_run_id,
                 "github_run_url": github_run_url,
@@ -171,7 +174,7 @@ class AgentExecutionTracer:
 
     def extract_tool_info(
         self, content: str, event_type: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Extract tool name and parameters from message content.
 
         Returns:
@@ -207,6 +210,9 @@ class AgentExecutionTracer:
 
         """
         async for message in agent_stream:
+            # Determine message type from class name
+            msg_class = message.__class__.__name__
+
             # Extract content
             content = ""
             if hasattr(message, "content"):
@@ -221,29 +227,41 @@ class AgentExecutionTracer:
                 else:
                     content = str(message.content)
 
-            if content:
-                # Classify and record event
-                event_type = self.classify_message(content)
+            # Determine event type based on message class
+            if msg_class == "ToolResultBlock":
+                # Check if it's an actual error
+                is_error = getattr(message, "is_error", False)
+                event_type = "ERROR" if is_error else "TOOL_RESULT"
+            elif msg_class == "ToolUseBlock":
+                event_type = "TOOL_CALL"
+            elif msg_class == "TextBlock":
+                # Classify text content
+                event_type = self.classify_message(content if content else str(message))
+            else:
+                # Fallback to content-based classification
+                event_type = self.classify_message(content if content else str(message))
+
+            if content or str(message):
                 self.event_sequence += 1
 
-                event: Dict[str, Any] = {
+                event: dict[str, Any] = {
                     "seq": self.event_sequence,
                     "timestamp": datetime.now(UTC).isoformat(),
                     "type": event_type,
-                    "content": content,
+                    "content": content if content else str(message),
                 }
 
                 # Extract tool info if applicable
-                tool_info = self.extract_tool_info(content, event_type)
+                tool_info = self.extract_tool_info(content if content else str(message), event_type)
                 if tool_info:
                     event.update(tool_info)
 
                 self.trace["events"].append(event)
 
-                # Print for workflow logs
-                print(
-                    f"[Agent][{event_type}] {content[:200]}{'...' if len(content) > 200 else ''}"
-                )
+                # Print for workflow logs - only show first 200 chars
+                log_content = content if content else str(message)
+                truncated = log_content[:200] + '...' if len(log_content) > 200 else log_content
+                print(f"[Agent][{event_type}] {truncated}")
 
             # Pass through original message
             yield message
@@ -252,9 +270,9 @@ class AgentExecutionTracer:
         self,
         status: str = "SUCCESS",
         changes_made: int = 0,
-        files_modified: List[str] = None,
-        commit_sha: Optional[str] = None,
-        commit_url: Optional[str] = None,
+        files_modified: list[str] | None = None,
+        commit_sha: str | None = None,
+        commit_url: str | None = None,
     ):
         """Finalize trace with execution results.
 
