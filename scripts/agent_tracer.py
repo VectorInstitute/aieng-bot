@@ -172,9 +172,7 @@ class AgentExecutionTracer:
         # Default to INFO
         return "INFO"
 
-    def extract_tool_info(
-        self, content: str, event_type: str
-    ) -> dict[str, Any] | None:
+    def extract_tool_info(self, content: str, event_type: str) -> dict[str, Any] | None:
         """Extract tool name and parameters from message content.
 
         Returns:
@@ -252,7 +250,9 @@ class AgentExecutionTracer:
                 }
 
                 # Extract tool info if applicable
-                tool_info = self.extract_tool_info(content if content else str(message), event_type)
+                tool_info = self.extract_tool_info(
+                    content if content else str(message), event_type
+                )
                 if tool_info:
                     event.update(tool_info)
 
@@ -260,7 +260,9 @@ class AgentExecutionTracer:
 
                 # Print for workflow logs - only show first 200 chars
                 log_content = content if content else str(message)
-                truncated = log_content[:200] + '...' if len(log_content) > 200 else log_content
+                truncated = (
+                    log_content[:200] + "..." if len(log_content) > 200 else log_content
+                )
                 print(f"[Agent][{event_type}] {truncated}")
 
             # Pass through original message
