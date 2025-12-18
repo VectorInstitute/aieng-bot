@@ -333,7 +333,8 @@ jobs:
 
             gcloud storage cp /tmp/agent-execution-trace.json \
               "gs://bot-dashboard-vectorinstitute/$DEST_PATH" \
-              --content-type="application/json" || {
+              --content-type="application/json" \
+              --cache-control="no-cache, no-store, must-revalidate" || {
               echo "⚠️ Failed to upload trace to GCS, will rely on GitHub artifact"
             }
 
@@ -367,7 +368,8 @@ jobs:
             # Upload updated index back to GCS
             gcloud storage cp /tmp/traces_index_updated.json \
               gs://bot-dashboard-vectorinstitute/data/traces_index.json \
-              --content-type="application/json" || {
+              --content-type="application/json" \
+              --cache-control="no-cache, no-store, must-revalidate" || {
               echo "⚠️ Failed to update traces index"
             }
 

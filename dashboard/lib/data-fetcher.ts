@@ -58,7 +58,9 @@ export async function fetchBotMetricsHistory(): Promise<BotMetricsHistory | null
  */
 export async function fetchTraceIndex(): Promise<TraceIndex | null> {
   try {
-    const response = await fetch(`${GCS_BUCKET_URL}/data/traces_index.json`, {
+    // Add cache-busting parameter to bypass CDN cache
+    const cacheBuster = Date.now()
+    const response = await fetch(`${GCS_BUCKET_URL}/data/traces_index.json?t=${cacheBuster}`, {
       cache: 'no-store',
     })
 
@@ -81,7 +83,9 @@ export async function fetchTraceIndex(): Promise<TraceIndex | null> {
  */
 export async function fetchAgentTrace(tracePath: string): Promise<AgentTrace | null> {
   try {
-    const response = await fetch(`${GCS_BUCKET_URL}/${tracePath}`, {
+    // Add cache-busting parameter to bypass CDN cache
+    const cacheBuster = Date.now()
+    const response = await fetch(`${GCS_BUCKET_URL}/${tracePath}?t=${cacheBuster}`, {
       cache: 'no-store',
     })
 
