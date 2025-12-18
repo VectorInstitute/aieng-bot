@@ -105,34 +105,69 @@ jobs:
 
           echo "Analyzing $REPO#$PR_NUMBER"
 
-          # Get detailed status
-          STATUS_JSON=$(gh pr view $PR_NUMBER --repo "$REPO" --json statusCheckRollup,reviewDecision,mergeable)
+          # Initial delay to allow GitHub to compute merge status after checks complete
+          echo "⏳ Waiting 15 seconds for GitHub to compute merge status..."
+          sleep 15
 
-          # Check if all checks passed
-          ALL_PASSED=$(echo "$STATUS_JSON" | jq -r '
-            .statusCheckRollup
-            | if . == null then false
-              else map(select(.name != "Monitor Organization Bot PRs"))
-              | all(.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED" or .conclusion == null)
-              end
-          ')
+          # Retry logic for mergeable status (GitHub sometimes needs time to compute)
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+          ATTEMPT=1
 
-          # Check if any checks failed
-          HAS_FAILURES=$(echo "$STATUS_JSON" | jq -r '
-            .statusCheckRollup
-            | if . == null then false
-              else any(.conclusion == "FAILURE")
-              end
-          ')
+          while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            echo "📊 Attempt $ATTEMPT/$MAX_RETRIES: Checking PR status..."
 
-          # Check if mergeable
-          MERGEABLE=$(echo "$STATUS_JSON" | jq -r '.mergeable')
+            # Get detailed status
+            STATUS_JSON=$(gh pr view $PR_NUMBER --repo "$REPO" --json statusCheckRollup,reviewDecision,mergeable)
 
+            # Check if all checks passed
+            ALL_PASSED=$(echo "$STATUS_JSON" | jq -r '
+              .statusCheckRollup
+              | if . == null then false
+                else map(select(.name != "Monitor Organization Bot PRs"))
+                | all(.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED" or .conclusion == null)
+                end
+            ')
+
+            # Check if any checks failed
+            HAS_FAILURES=$(echo "$STATUS_JSON" | jq -r '
+              .statusCheckRollup
+              | if . == null then false
+                else any(.conclusion == "FAILURE")
+                end
+            ')
+
+            # Check if mergeable
+            MERGEABLE=$(echo "$STATUS_JSON" | jq -r '.mergeable')
+
+            echo "Status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
+
+            # If mergeable status is computed (not UNKNOWN), we're done
+            if [ "$MERGEABLE" != "UNKNOWN" ]; then
+              echo "✅ Mergeable status determined: $MERGEABLE"
+              break
+            fi
+
+            # If this was the last attempt, warn but continue
+            if [ $ATTEMPT -eq $MAX_RETRIES ]; then
+              echo "⚠️  Mergeable status still UNKNOWN after $MAX_RETRIES attempts. Proceeding anyway."
+              break
+            fi
+
+            # Wait before retry with exponential backoff
+            WAIT_TIME=$((RETRY_DELAY * ATTEMPT))
+            echo "⏳ Mergeable status is UNKNOWN. Waiting ${WAIT_TIME}s before retry..."
+            sleep $WAIT_TIME
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          # Set outputs
           echo "all-passed=$ALL_PASSED" >> $GITHUB_OUTPUT
           echo "has-failures=$HAS_FAILURES" >> $GITHUB_OUTPUT
           echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
 
-          echo "Status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
+          echo "📋 Final status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
@@ -171,6 +206,65 @@ jobs:
           gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
 
           echo "✅ Auto-merge configured for $REPO#$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+        continue-on-error: true
+
+      - name: Attempt merge despite UNKNOWN status (fallback)
+        if: steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'UNKNOWN' && steps.analyze.outputs.has-failures == 'false'
+        run: |
+          REPO="${{ matrix.pr.repo }}"
+          PR_NUMBER="${{ matrix.pr.number }}"
+
+          echo "⚠️  Mergeable status is UNKNOWN but all checks passed for $REPO#$PR_NUMBER"
+          echo "🔄 Attempting auto-merge anyway (will fail gracefully if conflicts exist)..."
+
+          # Check if already approved
+          REVIEW_DECISION=$(gh pr view $PR_NUMBER --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
+
+          if [ "$REVIEW_DECISION" != "APPROVED" ]; then
+            # Approve the PR
+            cat > /tmp/approve-msg.txt <<'EOF'
+          ✅ All checks passed. Auto-approving bot PR.
+
+          Note: Mergeable status was UNKNOWN, but attempting merge anyway.
+
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
+            gh pr review $PR_NUMBER --repo "$REPO" --approve --body-file /tmp/approve-msg.txt
+          fi
+
+          # Try to enable auto-merge (will fail if there are actual conflicts)
+          if gh pr merge $PR_NUMBER --repo "$REPO" --auto --squash 2>&1; then
+            echo "✅ Auto-merge configured successfully despite UNKNOWN status"
+
+            # Comment on success
+            cat > /tmp/success-msg.txt <<'EOF'
+          🎉 All checks passed! This PR will be automatically merged.
+
+          Note: GitHub's mergeable status was UNKNOWN, but no conflicts were detected.
+
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
+            gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
+          else
+            echo "⚠️  Auto-merge failed - there may be merge conflicts or branch protection rules"
+
+            # Comment about the issue
+            cat > /tmp/warning-msg.txt <<'EOF'
+          ⚠️  All checks passed, but auto-merge could not be enabled.
+
+          This might be due to:
+          - Merge conflicts that need manual resolution
+          - Branch protection rules requiring additional reviews
+          - GitHub still computing mergeable status
+
+          Please check the PR and merge manually if appropriate.
+
+          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+          EOF
+            gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/warning-msg.txt
+          fi
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
