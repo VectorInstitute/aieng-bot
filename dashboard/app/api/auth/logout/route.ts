@@ -6,7 +6,9 @@ export async function GET(request: NextRequest) {
     const session = await getSession()
     session.destroy()
 
-    return NextResponse.redirect(new URL('/aieng-bot-maintain/login', request.url))
+    // Use configured app URL for redirects
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.url
+    return NextResponse.redirect(new URL('/aieng-bot-maintain/login', baseUrl))
   } catch (error) {
     console.error('Logout error:', error)
     return NextResponse.json({ error: 'Logout failed' }, { status: 500 })

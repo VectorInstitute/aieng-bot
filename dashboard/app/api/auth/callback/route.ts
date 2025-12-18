@@ -8,20 +8,23 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code')
     const state = searchParams.get('state')
 
+    // Use configured app URL for redirects
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.url
+
     if (!code || !state) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=missing_params', request.url))
+      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=missing_params', baseUrl))
     }
 
     // Validate state
     const session = await getSession()
     if (state !== session.state) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=invalid_state', request.url))
+      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=invalid_state', baseUrl))
     }
 
     const codeVerifier = session.codeVerifier
 
     if (!codeVerifier) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=missing_verifier', request.url))
+      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=missing_verifier', baseUrl))
     }
 
     // Exchange code for tokens
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const error = await tokenResponse.text()
       console.error('Token exchange failed:', error)
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=token_exchange_failed', request.url))
+      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=token_exchange_failed', baseUrl))
     }
 
     const tokens = await tokenResponse.json()
@@ -56,14 +59,14 @@ export async function GET(request: NextRequest) {
     })
 
     if (!userInfoResponse.ok) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=userinfo_failed', request.url))
+      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=userinfo_failed', baseUrl))
     }
 
     const userInfo = await userInfoResponse.json()
 
     // Validate email domain
     if (!isEmailAllowed(userInfo.email)) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=unauthorized_domain', request.url))
+      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=unauthorized_domain', baseUrl))
     }
 
     // Save session
@@ -85,9 +88,10 @@ export async function GET(request: NextRequest) {
 
     await session.save()
 
-    return NextResponse.redirect(new URL('/aieng-bot-maintain', request.url))
+    return NextResponse.redirect(new URL('/aieng-bot-maintain', baseUrl))
   } catch (error) {
     console.error('Callback error:', error)
-    return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=unknown', request.url))
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.url
+    return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=unknown', baseUrl))
   }
 }
