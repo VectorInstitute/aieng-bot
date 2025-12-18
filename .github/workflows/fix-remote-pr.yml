@@ -67,6 +67,12 @@ jobs:
           path: target-repo
           fetch-depth: 0
 
+      - name: Configure git for agent
+        working-directory: target-repo
+        run: |
+          git config user.name "aieng-bot-maintain[bot]"
+          git config user.email "aieng-bot@vectorinstitute.ai"
+
       - name: Analyze failure type
         id: analyze
         working-directory: target-repo
@@ -203,7 +209,12 @@ jobs:
       - name: Setup Python for Agent SDK
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version-file: .python-version
+
+      - name: Install uv (Python package manager)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
