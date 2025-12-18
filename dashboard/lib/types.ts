@@ -6,8 +6,9 @@
 export interface AgentTrace {
   metadata: {
     workflow_run_id: string
-    github_run_url: string
-    timestamp: string
+    github_run_url?: string
+    workflow_url?: string
+    timestamp?: string
     pr: {
       repo: string
       number: number
@@ -15,7 +16,8 @@ export interface AgentTrace {
       author: string
       url: string
     }
-    failure: {
+    merge_type?: 'auto_merge' | 'agent_fix'
+    failure?: {
       type: 'test' | 'lint' | 'security' | 'build' | 'unknown'
       checks: string[]
       logs_truncated: string
@@ -23,10 +25,10 @@ export interface AgentTrace {
   }
   execution: {
     start_time: string
-    end_time: string | null
+    end_time?: string | null
     duration_seconds: number | null
-    model: string
-    tools_allowed: string[]
+    model: string | null
+    tools_allowed?: string[]
   }
   events: AgentEvent[]
   result: {
@@ -35,6 +37,7 @@ export interface AgentTrace {
     files_modified: string[]
     commit_sha: string | null
     commit_url: string | null
+    merge_method?: 'auto_merge' | 'agent_fix'
   }
 }
 

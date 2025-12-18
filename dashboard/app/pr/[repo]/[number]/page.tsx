@@ -114,10 +114,10 @@ export default async function PRPage({ params }: PRPageProps) {
           </div>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              Failure Type
+              {trace.metadata.merge_type === 'auto_merge' ? 'Merge Type' : 'Failure Type'}
             </p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 capitalize">
-              {trace.metadata.failure.type}
+              {trace.metadata.failure?.type || trace.metadata.merge_type || 'Unknown'}
             </p>
           </div>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
@@ -165,8 +165,8 @@ export default async function PRPage({ params }: PRPageProps) {
         )}
       </div>
 
-      {/* Failure Analysis */}
-      <FailureAnalysis failure={trace.metadata.failure} />
+      {/* Failure Analysis - only show for agent fixes */}
+      {trace.metadata.failure && <FailureAnalysis failure={trace.metadata.failure} />}
 
       {/* Agent Timeline */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">

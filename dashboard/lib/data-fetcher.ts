@@ -166,11 +166,15 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
         ? trace.execution.duration_seconds / 3600
         : null
 
+      // Handle both auto-merge and agent fix records
+      const failureType = trace.metadata.failure?.type ||
+        (trace.metadata.merge_type === 'auto_merge' ? 'auto_merge' : 'unknown')
+
       return {
         ...summary,
         title: trace.metadata.pr.title,
         author: trace.metadata.pr.author,
-        failure_type: trace.metadata.failure.type,
+        failure_type: failureType,
         status: trace.result.status,
         fix_time_hours: duration,
       }
