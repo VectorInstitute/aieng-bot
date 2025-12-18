@@ -1,18 +1,13 @@
 import { NextResponse } from 'next/server'
 import { authConfig, generatePKCE, generateState } from '@/lib/auth-config'
-import { getSession } from '@/lib/session'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
     // Generate PKCE parameters
     const { codeVerifier, codeChallenge } = await generatePKCE()
     const state = generateState()
-
-    // Store verifier and state in session
-    const session = await getSession()
-    session.codeVerifier = codeVerifier
-    session.state = state
-    await session.save()
 
     // Build authorization URL
     const params = new URLSearchParams({
@@ -29,7 +24,24 @@ export async function GET() {
 
     const authUrl = `${authConfig.google.authorizationEndpoint}?${params.toString()}`
 
-    return NextResponse.redirect(authUrl)
+    // Store PKCE and state in regular cookies (temporary, for callback)
+    const response = NextResponse.redirect(authUrl)
+    response.cookies.set('pkce_verifier', codeVerifier, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 600, // 10 minutes
+      path: '/',
+    })
+    response.cookies.set('oauth_state', state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 600, // 10 minutes
+      path: '/',
+    })
+
+    return response
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json({ error: 'Authentication failed' }, { status: 500 })
