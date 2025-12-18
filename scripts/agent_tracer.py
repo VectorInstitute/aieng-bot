@@ -228,8 +228,16 @@ class AgentExecutionTracer:
             # Determine event type based on message class
             if msg_class == "ToolResultBlock":
                 # Check if it's an actual error
-                is_error = getattr(message, "is_error", False)
-                event_type = "ERROR" if is_error else "TOOL_RESULT"
+                # Try to access is_error attribute, checking both direct attribute and string repr
+                is_error_attr = getattr(message, "is_error", None)
+                # If attribute not accessible, parse from string representation
+                if is_error_attr is None:
+                    msg_str = str(message)
+                    if "is_error=True" in msg_str:
+                        is_error_attr = True
+                    elif "is_error=False" in msg_str or "is_error=None" in msg_str:
+                        is_error_attr = False
+                event_type = "ERROR" if is_error_attr is True else "TOOL_RESULT"
             elif msg_class == "ToolUseBlock":
                 event_type = "TOOL_CALL"
             elif msg_class == "TextBlock":
