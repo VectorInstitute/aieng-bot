@@ -278,12 +278,29 @@ class AgentExecutionTracer:
                     "content": content if content else str(message),
                 }
 
-                # Extract tool info if applicable
-                tool_info = self.extract_tool_info(
-                    content if content else str(message), event_type
-                )
-                if tool_info:
-                    event.update(tool_info)
+                # Extract tool info for ToolUseBlock messages
+                if msg_class == "ToolUseBlock":
+                    # Extract directly from message attributes
+                    tool_name = getattr(message, "name", None)
+                    tool_input = getattr(message, "input", {})
+                    tool_id = getattr(message, "id", None)
+                    if tool_name:
+                        event["tool"] = tool_name
+                        event["parameters"] = tool_input
+                        if tool_id:
+                            event["tool_use_id"] = tool_id
+                elif msg_class == "ToolResultBlock":
+                    # Extract tool_use_id to link result to tool call
+                    tool_use_id = getattr(message, "tool_use_id", None)
+                    if tool_use_id:
+                        event["tool_use_id"] = tool_use_id
+                elif event_type == "TOOL_CALL":
+                    # Fallback: try to extract from content string
+                    tool_info = self.extract_tool_info(
+                        content if content else str(message), event_type
+                    )
+                    if tool_info:
+                        event.update(tool_info)
 
                 self.trace["events"].append(event)
 
