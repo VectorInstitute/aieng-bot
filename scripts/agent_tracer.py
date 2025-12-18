@@ -195,6 +195,64 @@ class AgentExecutionTracer:
 
         return None
 
+    def _extract_message_content(self, message: Any) -> str:
+        """Extract content string from message object.
+
+        Args:
+            message: Agent SDK message object
+
+        Returns:
+            Extracted content string
+
+        """
+        if not hasattr(message, "content"):
+            return ""
+
+        if isinstance(message.content, str):
+            return message.content
+
+        if isinstance(message.content, list):
+            # Handle content blocks
+            return " ".join(
+                block.get("text", "") if isinstance(block, dict) else str(block)
+                for block in message.content
+            )
+
+        return str(message.content)
+
+    def _determine_event_type(self, message: Any, msg_class: str, content: str) -> str:
+        """Determine event type based on message class and content.
+
+        Args:
+            message: Agent SDK message object
+            msg_class: Class name of message
+            content: Extracted content string
+
+        Returns:
+            Event type string (ERROR, TOOL_RESULT, TOOL_CALL, etc.)
+
+        """
+        if msg_class == "ToolResultBlock":
+            # Check if it's an actual error
+            is_error_attr = getattr(message, "is_error", None)
+            # If attribute not accessible, parse from string representation
+            if is_error_attr is None:
+                msg_str = str(message)
+                if "is_error=True" in msg_str:
+                    is_error_attr = True
+                elif "is_error=False" in msg_str or "is_error=None" in msg_str:
+                    is_error_attr = False
+            return "ERROR" if is_error_attr is True else "TOOL_RESULT"
+
+        if msg_class == "ToolUseBlock":
+            return "TOOL_CALL"
+
+        if msg_class == "TextBlock":
+            return self.classify_message(content if content else str(message))
+
+        # Fallback to content-based classification
+        return self.classify_message(content if content else str(message))
+
     async def capture_agent_stream(
         self, agent_stream: AsyncIterator[Any]
     ) -> AsyncIterator[Any]:
@@ -208,44 +266,9 @@ class AgentExecutionTracer:
 
         """
         async for message in agent_stream:
-            # Determine message type from class name
             msg_class = message.__class__.__name__
-
-            # Extract content
-            content = ""
-            if hasattr(message, "content"):
-                if isinstance(message.content, str):
-                    content = message.content
-                elif isinstance(message.content, list):
-                    # Handle content blocks
-                    content = " ".join(
-                        block.get("text", "") if isinstance(block, dict) else str(block)
-                        for block in message.content
-                    )
-                else:
-                    content = str(message.content)
-
-            # Determine event type based on message class
-            if msg_class == "ToolResultBlock":
-                # Check if it's an actual error
-                # Try to access is_error attribute, checking both direct attribute and string repr
-                is_error_attr = getattr(message, "is_error", None)
-                # If attribute not accessible, parse from string representation
-                if is_error_attr is None:
-                    msg_str = str(message)
-                    if "is_error=True" in msg_str:
-                        is_error_attr = True
-                    elif "is_error=False" in msg_str or "is_error=None" in msg_str:
-                        is_error_attr = False
-                event_type = "ERROR" if is_error_attr is True else "TOOL_RESULT"
-            elif msg_class == "ToolUseBlock":
-                event_type = "TOOL_CALL"
-            elif msg_class == "TextBlock":
-                # Classify text content
-                event_type = self.classify_message(content if content else str(message))
-            else:
-                # Fallback to content-based classification
-                event_type = self.classify_message(content if content else str(message))
+            content = self._extract_message_content(message)
+            event_type = self._determine_event_type(message, msg_class, content)
 
             if content or str(message):
                 self.event_sequence += 1
