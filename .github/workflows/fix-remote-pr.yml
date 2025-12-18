@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout bot repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: bot-repo
 
@@ -58,7 +58,7 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Checkout target repository PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.event.inputs.target_repo }}
           ref: refs/pull/${{ github.event.inputs.pr_number }}/head

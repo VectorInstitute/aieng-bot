@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout bot repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Find bot PRs across organization
         id: find-prs
@@ -95,7 +95,7 @@ jobs:
 
     steps:
       - name: Checkout bot repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Analyze PR status
         id: analyze
