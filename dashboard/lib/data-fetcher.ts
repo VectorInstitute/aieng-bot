@@ -175,3 +175,76 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
 
   return enriched
 }
+
+/**
+ * Compute bot metrics from PR summaries
+ */
+export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetrics {
+  const now = new Date().toISOString()
+
+  // Calculate stats
+  const totalPRs = prSummaries.length
+  const successfulFixes = prSummaries.filter(pr => pr.status === 'SUCCESS').length
+  const failedFixes = prSummaries.filter(pr => pr.status === 'FAILED').length
+  const partialFixes = prSummaries.filter(pr => pr.status === 'PARTIAL').length
+  const openPRs = prSummaries.filter(pr => pr.status === 'IN_PROGRESS').length
+
+  const successRate = totalPRs > 0 ? successfulFixes / totalPRs : 0
+
+  const fixTimes = prSummaries
+    .filter(pr => pr.fix_time_hours !== null)
+    .map(pr => pr.fix_time_hours!)
+  const avgFixTime = fixTimes.length > 0
+    ? fixTimes.reduce((a, b) => a + b, 0) / fixTimes.length
+    : 0
+
+  // Group by failure type
+  const byFailureType: Record<string, any> = {}
+  prSummaries.forEach(pr => {
+    const type = pr.failure_type || 'unknown'
+    if (!byFailureType[type]) {
+      byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0 }
+    }
+    byFailureType[type].count++
+    if (pr.status === 'SUCCESS') byFailureType[type].fixed++
+    if (pr.status === 'FAILED') byFailureType[type].failed++
+  })
+
+  // Calculate success rates per failure type
+  Object.keys(byFailureType).forEach(type => {
+    const data = byFailureType[type]
+    data.success_rate = data.count > 0 ? data.fixed / data.count : 0
+  })
+
+  // Group by repo
+  const byRepo: Record<string, any> = {}
+  prSummaries.forEach(pr => {
+    if (!byRepo[pr.repo]) {
+      byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0 }
+    }
+    byRepo[pr.repo].total_prs++
+    if (pr.status === 'SUCCESS') byRepo[pr.repo].bot_fixed++
+    if (pr.status === 'FAILED') byRepo[pr.repo].failed++
+  })
+
+  // Calculate success rates per repo
+  Object.keys(byRepo).forEach(repo => {
+    const data = byRepo[repo]
+    data.success_rate = data.total_prs > 0 ? data.bot_fixed / data.total_prs : 0
+  })
+
+  return {
+    snapshot_date: now,
+    stats: {
+      total_prs_scanned: totalPRs,
+      prs_auto_merged: 0, // We don't track auto-merges in traces yet
+      prs_bot_fixed: successfulFixes,
+      prs_failed: failedFixes,
+      prs_open: openPRs,
+      success_rate: successRate,
+      avg_fix_time_hours: avgFixTime,
+    },
+    by_failure_type: byFailureType,
+    by_repo: byRepo,
+  }
+}

@@ -233,16 +233,14 @@ class AgentExecutionTracer:
 
         """
         if msg_class == "ToolResultBlock":
-            # Check if it's an actual error
-            is_error_attr = getattr(message, "is_error", None)
-            # If attribute not accessible, parse from string representation
-            if is_error_attr is None:
-                msg_str = str(message)
-                if "is_error=True" in msg_str:
-                    is_error_attr = True
-                elif "is_error=False" in msg_str or "is_error=None" in msg_str:
-                    is_error_attr = False
-            return "ERROR" if is_error_attr is True else "TOOL_RESULT"
+            # For ToolResultBlock, always parse from string representation
+            # since is_error attribute access is unreliable
+            msg_str = str(message)
+            # Only mark as ERROR if explicitly is_error=True
+            if "is_error=True" in msg_str:
+                return "ERROR"
+            # Otherwise it's a successful tool result
+            return "TOOL_RESULT"
 
         if msg_class == "ToolUseBlock":
             return "TOOL_CALL"

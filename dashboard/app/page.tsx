@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import { isAuthenticated, getCurrentUser } from '@/lib/session'
-import { fetchBotMetrics, fetchTraceIndex, traceIndexToPRSummaries, enrichPRSummaries } from '@/lib/data-fetcher'
+import { fetchTraceIndex, traceIndexToPRSummaries, enrichPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
 import OverviewTable from '@/components/overview-table'
 import MetricsCharts from '@/components/metrics-charts'
 import PerformanceMetrics from '@/components/performance-metrics'
-import type { PRSummary } from '@/lib/types'
+import type { PRSummary, BotMetrics } from '@/lib/types'
 import { Activity } from 'lucide-react'
 import Link from 'next/link'
 
@@ -20,13 +20,13 @@ export default async function DashboardPage() {
 
   const user = await getCurrentUser()
 
-  // Fetch data
-  const metrics = await fetchBotMetrics()
+  // Fetch trace data directly from GCS and compute metrics
   let prSummaries: PRSummary[] = []
+  let metrics: BotMetrics | null = null
 
   try {
     const index = await fetchTraceIndex()
-    if (index) {
+    if (index && index.traces.length > 0) {
       const summaries = traceIndexToPRSummaries(index)
       // Limit to most recent 50 PRs for performance
       const recentSummaries = summaries
@@ -35,13 +35,16 @@ export default async function DashboardPage() {
 
       // Enrich with trace data
       prSummaries = await enrichPRSummaries(recentSummaries)
+
+      // Compute metrics from traces
+      metrics = computeMetricsFromPRSummaries(prSummaries)
     }
   } catch (error) {
     console.error('Error fetching trace data:', error)
   }
 
   // Show empty state if no data
-  if (!metrics) {
+  if (!metrics || prSummaries.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         {/* Vector Brand Header Accent */}
@@ -87,12 +90,12 @@ export default async function DashboardPage() {
               No Data Available
             </h2>
             <p className="text-slate-600 dark:text-slate-400 mb-4">
-              The bot hasn't collected any metrics yet. Metrics will appear here once the bot starts monitoring and fixing PRs.
+              The bot hasn't processed any PRs yet. Data will appear here once the bot starts monitoring and fixing PRs.
             </p>
             <div className="text-sm text-slate-500 dark:text-slate-500">
-              <p>Run the collection workflow to populate data:</p>
+              <p>Trigger the bot workflow to fix a PR:</p>
               <code className="block mt-2 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs">
-                gh workflow run collect-bot-metrics.yml
+                gh workflow run fix-remote-pr.yml --field target_repo="VectorInstitute/repo-name" --field pr_number="123"
               </code>
             </div>
           </div>
