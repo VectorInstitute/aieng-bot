@@ -13,7 +13,7 @@ const sessionOptions: SessionOptions = {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
-    path: '/aieng-bot-maintain',
+    path: '/',  // Changed from '/aieng-bot-maintain' to '/' to ensure cookie is accessible
     maxAge: 60 * 60 * 24 * 7, // 7 days
   },
 }

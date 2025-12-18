@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 
 function ErrorDisplay() {
   const searchParams = useSearchParams()
@@ -47,7 +46,7 @@ export default function LoginPage() {
           <ErrorDisplay />
         </Suspense>
 
-        <Link href="/api/auth/login">
+        <a href="/aieng-bot-maintain/api/auth/login">
           <button className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-2 border-slate-300 dark:border-slate-600 rounded-xl hover:border-vector-magenta dark:hover:border-vector-violet hover:shadow-lg hover:shadow-vector-magenta/20 transition-all duration-200 font-semibold">
             <svg className="w-6 h-6" viewBox="0 0 24 24">
               <path
@@ -69,7 +68,7 @@ export default function LoginPage() {
             </svg>
             Sign in with Google
           </button>
-        </Link>
+        </a>
 
         <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
           <p className="text-sm text-slate-600 dark:text-slate-400">
