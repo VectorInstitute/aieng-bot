@@ -125,10 +125,10 @@ jobs:
 
           if [ "$CURRENT_PR" = "$OLDEST_PR" ]; then
             echo "is_oldest=true" >> $GITHUB_OUTPUT
-            echo "✅ This is the oldest PR from $CURRENT_REPO - will process"
+            echo " This is the oldest PR from $CURRENT_REPO - will process"
           else
             echo "is_oldest=false" >> $GITHUB_OUTPUT
-            echo "⏭️  Skipping - PR #$OLDEST_PR should be merged first"
+            echo "  Skipping - PR #$OLDEST_PR should be merged first"
           fi
         continue-on-error: true
 
@@ -142,7 +142,7 @@ jobs:
           echo "Analyzing $REPO#$PR_NUMBER"
 
           # Initial delay to allow GitHub to compute merge status after checks complete
-          echo "⏳ Waiting 15 seconds for GitHub to compute merge status..."
+          echo " Waiting 15 seconds for GitHub to compute merge status..."
           sleep 15
 
           # Retry logic for mergeable status (GitHub sometimes needs time to compute)
@@ -151,7 +151,7 @@ jobs:
           ATTEMPT=1
 
           while [ $ATTEMPT -le $MAX_RETRIES ]; do
-            echo "📊 Attempt $ATTEMPT/$MAX_RETRIES: Checking PR status..."
+            echo " Attempt $ATTEMPT/$MAX_RETRIES: Checking PR status..."
 
             # Get detailed status
             STATUS_JSON=$(gh pr view $PR_NUMBER --repo "$REPO" --json statusCheckRollup,reviewDecision,mergeable)
@@ -180,19 +180,19 @@ jobs:
 
             # If mergeable status is computed (not UNKNOWN), we're done
             if [ "$MERGEABLE" != "UNKNOWN" ]; then
-              echo "✅ Mergeable status determined: $MERGEABLE"
+              echo " Mergeable status determined: $MERGEABLE"
               break
             fi
 
             # If this was the last attempt, warn but continue
             if [ $ATTEMPT -eq $MAX_RETRIES ]; then
-              echo "⚠️  Mergeable status still UNKNOWN after $MAX_RETRIES attempts. Proceeding anyway."
+              echo "  Mergeable status still UNKNOWN after $MAX_RETRIES attempts. Proceeding anyway."
               break
             fi
 
             # Wait before retry with exponential backoff
             WAIT_TIME=$((RETRY_DELAY * ATTEMPT))
-            echo "⏳ Mergeable status is UNKNOWN. Waiting ${WAIT_TIME}s before retry..."
+            echo " Mergeable status is UNKNOWN. Waiting ${WAIT_TIME}s before retry..."
             sleep $WAIT_TIME
 
             ATTEMPT=$((ATTEMPT + 1))
@@ -203,7 +203,7 @@ jobs:
           echo "has-failures=$HAS_FAILURES" >> $GITHUB_OUTPUT
           echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
 
-          echo "📋 Final status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
+          echo " Final status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
@@ -214,7 +214,7 @@ jobs:
           REPO="${{ matrix.pr.repo }}"
           PR_NUMBER="${{ matrix.pr.number }}"
 
-          echo "✅ All checks passed for $REPO#$PR_NUMBER - proceeding with auto-merge"
+          echo " All checks passed for $REPO#$PR_NUMBER - proceeding with auto-merge"
 
           # Check if already approved
           REVIEW_DECISION=$(gh pr view $PR_NUMBER --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
@@ -222,27 +222,27 @@ jobs:
           if [ "$REVIEW_DECISION" != "APPROVED" ]; then
             # Approve the PR
             cat > /tmp/approve-msg.txt <<'EOF'
-          ✅ All checks passed. Auto-approving bot PR.
+           All checks passed. Auto-approving bot PR.
 
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
           EOF
             gh pr review $PR_NUMBER --repo "$REPO" --approve --body-file /tmp/approve-msg.txt
           fi
 
           # Enable auto-merge
           gh pr merge $PR_NUMBER --repo "$REPO" --auto --squash || {
-            echo "⚠️  Auto-merge failed, may already be enabled or blocked by branch protection"
+            echo "  Auto-merge failed, may already be enabled or blocked by branch protection"
           }
 
           # Comment on success
           cat > /tmp/success-msg.txt <<'EOF'
-          🎉 All checks passed! This PR will be automatically merged.
+           All checks passed! This PR will be automatically merged.
 
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
           EOF
           gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
 
-          echo "✅ Auto-merge configured for $REPO#$PR_NUMBER"
+          echo " Auto-merge configured for $REPO#$PR_NUMBER"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
@@ -253,8 +253,8 @@ jobs:
           REPO="${{ matrix.pr.repo }}"
           PR_NUMBER="${{ matrix.pr.number }}"
 
-          echo "⚠️  Mergeable status is UNKNOWN but all checks passed for $REPO#$PR_NUMBER"
-          echo "🔄 Attempting auto-merge anyway (will fail gracefully if conflicts exist)..."
+          echo "  Mergeable status is UNKNOWN but all checks passed for $REPO#$PR_NUMBER"
+          echo " Attempting auto-merge anyway (will fail gracefully if conflicts exist)..."
 
           # Check if already approved
           REVIEW_DECISION=$(gh pr view $PR_NUMBER --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
@@ -262,34 +262,34 @@ jobs:
           if [ "$REVIEW_DECISION" != "APPROVED" ]; then
             # Approve the PR
             cat > /tmp/approve-msg.txt <<'EOF'
-          ✅ All checks passed. Auto-approving bot PR.
+           All checks passed. Auto-approving bot PR.
 
           Note: Mergeable status was UNKNOWN, but attempting merge anyway.
 
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
           EOF
             gh pr review $PR_NUMBER --repo "$REPO" --approve --body-file /tmp/approve-msg.txt
           fi
 
           # Try to enable auto-merge (will fail if there are actual conflicts)
           if gh pr merge $PR_NUMBER --repo "$REPO" --auto --squash 2>&1; then
-            echo "✅ Auto-merge configured successfully despite UNKNOWN status"
+            echo " Auto-merge configured successfully despite UNKNOWN status"
 
             # Comment on success
             cat > /tmp/success-msg.txt <<'EOF'
-          🎉 All checks passed! This PR will be automatically merged.
+           All checks passed! This PR will be automatically merged.
 
           Note: GitHub's mergeable status was UNKNOWN, but no conflicts were detected.
 
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
           EOF
             gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
           else
-            echo "⚠️  Auto-merge failed - there may be merge conflicts or branch protection rules"
+            echo "  Auto-merge failed - there may be merge conflicts or branch protection rules"
 
             # Comment about the issue
             cat > /tmp/warning-msg.txt <<'EOF'
-          ⚠️  All checks passed, but auto-merge could not be enabled.
+            All checks passed, but auto-merge could not be enabled.
 
           This might be due to:
           - Merge conflicts that need manual resolution
@@ -298,7 +298,7 @@ jobs:
 
           Please check the PR and merge manually if appropriate.
 
-          🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
           EOF
             gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/warning-msg.txt
           fi
@@ -386,7 +386,7 @@ jobs:
             "gs://bot-dashboard-vectorinstitute/$DEST_PATH" \
             --content-type="application/json" \
             --cache-control="no-cache, no-store, must-revalidate" || {
-            echo "⚠️ Failed to upload auto-merge record to GCS"
+            echo " Failed to upload auto-merge record to GCS"
           }
 
           # Update traces index
@@ -419,10 +419,10 @@ jobs:
             gs://bot-dashboard-vectorinstitute/data/traces_index.json \
             --content-type="application/json" \
             --cache-control="no-cache, no-store, must-revalidate" || {
-            echo "⚠️ Failed to update traces index"
+            echo " Failed to update traces index"
           }
 
-          echo "✅ Auto-merge recorded to GCS: $DEST_PATH"
+          echo " Auto-merge recorded to GCS: $DEST_PATH"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
@@ -434,7 +434,7 @@ jobs:
           OTHER_PRS="${{ steps.check-order.outputs.other_prs }}"
 
           if [ -n "$OTHER_PRS" ]; then
-            echo "🔄 Triggering branch updates for remaining PRs: $OTHER_PRS"
+            echo " Triggering branch updates for remaining PRs: $OTHER_PRS"
 
             IFS=',' read -ra PR_ARRAY <<< "$OTHER_PRS"
             for OTHER_PR in "${PR_ARRAY[@]}"; do
@@ -442,13 +442,13 @@ jobs:
 
               # Comment @dependabot rebase to trigger branch update
               gh pr comment $OTHER_PR --repo "$REPO" --body "@dependabot rebase" || {
-                echo "⚠️ Failed to trigger rebase for #$OTHER_PR"
+                echo " Failed to trigger rebase for #$OTHER_PR"
               }
 
               sleep 2  # Small delay between comments
             done
 
-            echo "✅ Branch update requests sent to remaining PRs"
+            echo " Branch update requests sent to remaining PRs"
           fi
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
@@ -468,7 +468,7 @@ jobs:
             --field target_repo="$REPO" \
             --field pr_number="$PR_NUMBER"
 
-          echo "🔧 Fix workflow triggered for $REPO#$PR_NUMBER"
+          echo " Fix workflow triggered for $REPO#$PR_NUMBER"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true

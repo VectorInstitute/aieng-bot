@@ -190,14 +190,17 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
 export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetrics {
   const now = new Date().toISOString()
 
-  // Calculate stats
+  // Calculate stats - differentiate between auto-merge and bot fixes
   const totalPRs = prSummaries.length
-  const successfulFixes = prSummaries.filter(pr => pr.status === 'SUCCESS').length
+  const autoMergedPRs = prSummaries.filter(pr => pr.failure_type === 'auto_merge' && pr.status === 'SUCCESS').length
+  const botFixedPRs = prSummaries.filter(pr => pr.failure_type !== 'auto_merge' && pr.status === 'SUCCESS').length
   const failedFixes = prSummaries.filter(pr => pr.status === 'FAILED').length
   const partialFixes = prSummaries.filter(pr => pr.status === 'PARTIAL').length
   const openPRs = prSummaries.filter(pr => pr.status === 'IN_PROGRESS').length
 
-  const successRate = totalPRs > 0 ? successfulFixes / totalPRs : 0
+  // Success rate should only count bot fixes (not auto-merges)
+  const totalAttempts = totalPRs - autoMergedPRs
+  const successRate = totalAttempts > 0 ? botFixedPRs / totalAttempts : 0
 
   const fixTimes = prSummaries
     .filter(pr => pr.fix_time_hours !== null)
@@ -206,7 +209,7 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
     ? fixTimes.reduce((a, b) => a + b, 0) / fixTimes.length
     : 0
 
-  // Group by failure type
+  // Group by failure type (auto_merge is tracked separately, not as "fixed")
   const byFailureType: Record<string, any> = {}
   prSummaries.forEach(pr => {
     const type = pr.failure_type || 'unknown'
@@ -214,14 +217,23 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0 }
     }
     byFailureType[type].count++
-    if (pr.status === 'SUCCESS') byFailureType[type].fixed++
-    if (pr.status === 'FAILED') byFailureType[type].failed++
+    // Only count as "fixed" if it's not an auto_merge
+    if (pr.status === 'SUCCESS' && type !== 'auto_merge') {
+      byFailureType[type].fixed++
+    }
+    if (pr.status === 'FAILED') {
+      byFailureType[type].failed++
+    }
   })
 
-  // Calculate success rates per failure type
+  // Calculate success rates per failure type (auto_merge always has 100% success)
   Object.keys(byFailureType).forEach(type => {
     const data = byFailureType[type]
-    data.success_rate = data.count > 0 ? data.fixed / data.count : 0
+    if (type === 'auto_merge') {
+      data.success_rate = 1.0 // Auto-merges by definition succeeded
+    } else {
+      data.success_rate = data.count > 0 ? data.fixed / data.count : 0
+    }
   })
 
   // Group by repo
@@ -231,22 +243,27 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0 }
     }
     byRepo[pr.repo].total_prs++
-    if (pr.status === 'SUCCESS') byRepo[pr.repo].bot_fixed++
+    if (pr.failure_type === 'auto_merge' && pr.status === 'SUCCESS') {
+      byRepo[pr.repo].auto_merged++
+    } else if (pr.status === 'SUCCESS') {
+      byRepo[pr.repo].bot_fixed++
+    }
     if (pr.status === 'FAILED') byRepo[pr.repo].failed++
   })
 
-  // Calculate success rates per repo
+  // Calculate success rates per repo (only for bot fix attempts, not auto-merges)
   Object.keys(byRepo).forEach(repo => {
     const data = byRepo[repo]
-    data.success_rate = data.total_prs > 0 ? data.bot_fixed / data.total_prs : 0
+    const fixAttempts = data.total_prs - data.auto_merged
+    data.success_rate = fixAttempts > 0 ? data.bot_fixed / fixAttempts : 0
   })
 
   return {
     snapshot_date: now,
     stats: {
       total_prs_scanned: totalPRs,
-      prs_auto_merged: 0, // We don't track auto-merges in traces yet
-      prs_bot_fixed: successfulFixes,
+      prs_auto_merged: autoMergedPRs,
+      prs_bot_fixed: botFixedPRs,
       prs_failed: failedFixes,
       prs_open: openPRs,
       success_rate: successRate,
