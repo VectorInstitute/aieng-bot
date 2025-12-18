@@ -1,0 +1,103 @@
+name: Collect Bot Metrics
+
+on:
+  schedule:
+    # Run weekly on Mondays at 12:00 UTC
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Number of days to look back'
+        required: false
+        default: '30'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  collect-metrics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Collect metrics
+        run: |
+          DAYS_BACK="${{ github.event.inputs.days_back || '30' }}"
+
+          echo "Collecting bot metrics for last $DAYS_BACK days..."
+
+          python scripts/collect_bot_metrics.py \
+            --days "$DAYS_BACK" \
+            --output /tmp/bot_metrics_latest.json \
+            --history /tmp/bot_metrics_history.json \
+            --upload-to-gcs \
+            --gcs-bucket bot-dashboard-vectorinstitute
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-metrics-${{ github.run_id }}
+          path: |
+            /tmp/bot_metrics_latest.json
+            /tmp/bot_metrics_history.json
+          retention-days: 90
+
+      - name: Output summary
+        if: always()
+        run: |
+          if [ -f /tmp/bot_metrics_latest.json ]; then
+            echo "## Bot Metrics Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Parse and display key metrics
+            TOTAL=$(jq -r '.stats.total_prs_scanned' /tmp/bot_metrics_latest.json)
+            AUTO_MERGED=$(jq -r '.stats.prs_auto_merged' /tmp/bot_metrics_latest.json)
+            BOT_FIXED=$(jq -r '.stats.prs_bot_fixed' /tmp/bot_metrics_latest.json)
+            FAILED=$(jq -r '.stats.prs_failed' /tmp/bot_metrics_latest.json)
+            SUCCESS_RATE=$(jq -r '.stats.success_rate' /tmp/bot_metrics_latest.json)
+            AVG_FIX_TIME=$(jq -r '.stats.avg_fix_time_hours' /tmp/bot_metrics_latest.json)
+
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total PRs Scanned | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| Auto-merged | $AUTO_MERGED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Bot-fixed | $BOT_FIXED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Success Rate | $(echo "$SUCCESS_RATE * 100" | bc)% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Avg Fix Time | ${AVG_FIX_TIME}h |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            echo "### By Failure Type" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Type | Count | Success Rate |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|-------|--------------|" >> $GITHUB_STEP_SUMMARY
+
+            jq -r '.by_failure_type | to_entries[] | "| \(.key) | \(.value.count) | \((.value.success_rate * 100) | round)% |"' /tmp/bot_metrics_latest.json >> $GITHUB_STEP_SUMMARY
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Metrics uploaded to GCS: gs://bot-dashboard-vectorinstitute/data/" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📊 [View dashboard](https://catalog.vectorinstitute.ai/aieng-bot-maintain)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Metrics file not found" >> $GITHUB_STEP_SUMMARY
+          fi
