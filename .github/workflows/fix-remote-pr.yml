@@ -457,19 +457,21 @@ jobs:
           TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
           DASHBOARD_URL="https://catalog.vectorinstitute.ai/aieng-bot-maintain"
 
-          cat > /tmp/pr-result.txt <<EOF
-**Automated fix applied**
+          echo "**Automated fix applied**" > /tmp/pr-result.txt
+          echo "" >> /tmp/pr-result.txt
+          echo "Fixed ${FAILURE_TYPE} failures after dependency updates." >> /tmp/pr-result.txt
+          echo "" >> /tmp/pr-result.txt
 
-Fixed ${FAILURE_TYPE} failures after dependency updates.
+          if [ -n "$FIX_SUMMARY" ]; then
+            echo "$FIX_SUMMARY" >> /tmp/pr-result.txt
+            echo "" >> /tmp/pr-result.txt
+          fi
 
-${FIX_SUMMARY}
-
-CI checks will re-run automatically.
-
-**[View detailed trace on dashboard](${DASHBOARD_URL})** | [Raw trace](${TRACE_URL})
-
-*AI Engineering Maintenance Bot*
-EOF
+          echo "CI checks will re-run automatically." >> /tmp/pr-result.txt
+          echo "" >> /tmp/pr-result.txt
+          echo "**[View detailed trace on dashboard](${DASHBOARD_URL})** | [Raw trace](${TRACE_URL})" >> /tmp/pr-result.txt
+          echo "" >> /tmp/pr-result.txt
+          echo "*AI Engineering Maintenance Bot*" >> /tmp/pr-result.txt
 
           gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-result.txt
         env:
