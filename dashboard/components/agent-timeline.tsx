@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { AgentEvent } from '@/lib/types'
+import { parseAgentMessage } from '@/lib/parse-agent-message'
 import {
   Brain,
   Wrench,
@@ -12,7 +13,9 @@ import {
   ChevronRight,
   Code,
   FileEdit,
-  Search
+  Search,
+  Terminal,
+  CheckCircle
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -33,14 +36,19 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
     setExpandedEvents(newExpanded)
   }
 
-  const getEventIcon = (type: string, tool?: string) => {
+  const getEventIcon = (type: string, tool?: string, parsedType?: string) => {
+    // For TOOL_RESULT events, show check icon
+    if (type === 'TOOL_RESULT') {
+      return <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+    }
+
     switch (type) {
       case 'REASONING':
         return <Brain className="w-5 h-5 text-purple-600 dark:text-purple-400" />
       case 'TOOL_CALL':
         if (tool === 'Read') return <Search className="w-5 h-5 text-blue-600 dark:text-blue-400" />
         if (tool === 'Edit' || tool === 'Write') return <FileEdit className="w-5 h-5 text-green-600 dark:text-green-400" />
-        if (tool === 'Bash') return <Code className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+        if (tool === 'Bash') return <Terminal className="w-5 h-5 text-orange-600 dark:text-orange-400" />
         return <Wrench className="w-5 h-5 text-blue-600 dark:text-blue-400" />
       case 'ACTION':
         return <Activity className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -59,6 +67,8 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
         return 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/10'
       case 'TOOL_CALL':
         return 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10'
+      case 'TOOL_RESULT':
+        return 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10'
       case 'ACTION':
         return 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10'
       case 'ERROR':
@@ -96,6 +106,10 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
           const isExpanded = expandedEvents.has(event.seq)
           const showDetails = hasDetails(event)
 
+          // Parse the content to make it more readable
+          const parsed = parseAgentMessage(event.content)
+          const displayContent = parsed.content
+
           return (
             <div
               key={event.seq}
@@ -109,7 +123,7 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
               <div className="flex items-start space-x-3">
                 {/* Icon */}
                 <div className="flex-shrink-0 mt-0.5">
-                  {getEventIcon(event.type, event.tool)}
+                  {getEventIcon(event.type, event.tool || parsed.metadata?.tool, parsed.type)}
                 </div>
 
                 {/* Content */}
@@ -120,18 +134,28 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
                         <span className="text-sm font-medium text-gray-900 dark:text-white">
                           {event.type.replace('_', ' ')}
                         </span>
-                        {event.tool && (
+                        {(event.tool || parsed.metadata?.tool) && (
                           <span className="text-xs font-mono px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                            {event.tool}
+                            {event.tool || parsed.metadata?.tool}
                           </span>
                         )}
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           #{event.seq}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-                        {event.content}
-                      </p>
+
+                      {/* Display parsed content */}
+                      {parsed.type === 'tool_use' && parsed.metadata?.parameters?.command ? (
+                        <div className="bg-gray-900 dark:bg-black rounded p-3 overflow-x-auto">
+                          <code className="text-xs text-green-400 font-mono">
+                            {displayContent}
+                          </code>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                          {displayContent}
+                        </p>
+                      )}
                     </div>
 
                     {/* Expand button */}
