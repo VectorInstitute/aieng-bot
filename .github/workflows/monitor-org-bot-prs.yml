@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write
 
 env:
   ORG_NAME: VectorInstitute
@@ -97,7 +98,42 @@ jobs:
       - name: Checkout bot repository
         uses: actions/checkout@v6
 
+      - name: Check if this is the oldest PR from this repo
+        id: check-order
+        run: |
+          CURRENT_REPO="${{ matrix.pr.repo }}"
+          CURRENT_PR="${{ matrix.pr.number }}"
+
+          # Get all PRs from the matrix for the same repo
+          ALL_PRS='${{ toJson(fromJson(needs.discover-bot-prs.outputs.prs)) }}'
+
+          # Find all PRs from the same repo
+          SAME_REPO_PRS=$(echo "$ALL_PRS" | jq -r --arg repo "$CURRENT_REPO" '
+            map(select(.repo == $repo)) | map(.number) | sort | .[]
+          ')
+
+          # Get the oldest (lowest number) PR
+          OLDEST_PR=$(echo "$SAME_REPO_PRS" | head -1)
+
+          # Count how many PRs from this repo
+          PR_COUNT=$(echo "$SAME_REPO_PRS" | wc -l | tr -d ' ')
+
+          echo "Repo: $CURRENT_REPO has $PR_COUNT PR(s)"
+          echo "Current PR: #$CURRENT_PR"
+          echo "Oldest PR: #$OLDEST_PR"
+          echo "other_prs=$(echo "$SAME_REPO_PRS" | grep -v "^$CURRENT_PR$" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+
+          if [ "$CURRENT_PR" = "$OLDEST_PR" ]; then
+            echo "is_oldest=true" >> $GITHUB_OUTPUT
+            echo "✅ This is the oldest PR from $CURRENT_REPO - will process"
+          else
+            echo "is_oldest=false" >> $GITHUB_OUTPUT
+            echo "⏭️  Skipping - PR #$OLDEST_PR should be merged first"
+          fi
+        continue-on-error: true
+
       - name: Analyze PR status
+        if: steps.check-order.outputs.is_oldest == 'true'
         id: analyze
         run: |
           REPO="${{ matrix.pr.repo }}"
@@ -172,7 +208,8 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Auto-merge passing PRs
-        if: steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'MERGEABLE'
+        if: steps.check-order.outputs.is_oldest == 'true' && steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'MERGEABLE'
+        id: auto-merge
         run: |
           REPO="${{ matrix.pr.repo }}"
           PR_NUMBER="${{ matrix.pr.number }}"
@@ -211,7 +248,7 @@ jobs:
         continue-on-error: true
 
       - name: Attempt merge despite UNKNOWN status (fallback)
-        if: steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'UNKNOWN' && steps.analyze.outputs.has-failures == 'false'
+        if: steps.check-order.outputs.is_oldest == 'true' && steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'UNKNOWN' && steps.analyze.outputs.has-failures == 'false'
         run: |
           REPO="${{ matrix.pr.repo }}"
           PR_NUMBER="${{ matrix.pr.number }}"
@@ -264,6 +301,154 @@ jobs:
           🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
           EOF
             gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/warning-msg.txt
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+        continue-on-error: true
+
+      - name: Setup Google Cloud SDK
+        if: steps.check-order.outputs.is_oldest == 'true' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: 'latest'
+
+      - name: Authenticate to Google Cloud
+        if: steps.check-order.outputs.is_oldest == 'true' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Record auto-merge to GCS
+        if: steps.check-order.outputs.is_oldest == 'true' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
+        run: |
+          REPO="${{ matrix.pr.repo }}"
+          PR_NUMBER="${{ matrix.pr.number }}"
+
+          echo "📝 Recording auto-merge to GCS for $REPO#$PR_NUMBER"
+
+          # Generate date-based path
+          DATE_PATH=$(date -u +"%Y/%m/%d")
+
+          # Generate filename
+          REPO_NAME=$(echo "$REPO" | sed 's/\//-/g')
+          RECORD_FILE="$REPO_NAME-pr-$PR_NUMBER-automerge-${{ github.run_id }}.json"
+
+          DEST_PATH="traces/$DATE_PATH/$RECORD_FILE"
+
+          # Get PR details
+          PR_DETAILS=$(gh pr view $PR_NUMBER --repo "$REPO" --json title,author,mergedAt,url)
+          PR_TITLE=$(echo "$PR_DETAILS" | jq -r '.title')
+          PR_AUTHOR=$(echo "$PR_DETAILS" | jq -r '.author.login')
+          PR_URL=$(echo "$PR_DETAILS" | jq -r '.url')
+
+          # Create auto-merge record
+          cat > /tmp/automerge-record.json << EOF
+          {
+            "metadata": {
+              "pr": {
+                "repo": "$REPO",
+                "number": $PR_NUMBER,
+                "title": "$PR_TITLE",
+                "url": "$PR_URL",
+                "author": "$PR_AUTHOR"
+              },
+              "merge_type": "auto_merge",
+              "workflow_run_id": "${{ github.run_id }}",
+              "workflow_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            },
+            "execution": {
+              "start_time": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+              "duration_seconds": 0,
+              "model": null
+            },
+            "events": [
+              {
+                "seq": 1,
+                "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+                "type": "INFO",
+                "content": "All checks passed. PR auto-merged without requiring bot fixes."
+              }
+            ],
+            "result": {
+              "status": "SUCCESS",
+              "changes_made": 0,
+              "files_modified": [],
+              "commit_sha": null,
+              "commit_url": null,
+              "merge_method": "auto_merge"
+            }
+          }
+          EOF
+
+          # Upload to GCS
+          gcloud storage cp /tmp/automerge-record.json \
+            "gs://bot-dashboard-vectorinstitute/$DEST_PATH" \
+            --content-type="application/json" \
+            --cache-control="no-cache, no-store, must-revalidate" || {
+            echo "⚠️ Failed to upload auto-merge record to GCS"
+          }
+
+          # Update traces index
+          if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/traces_index.json /tmp/traces_index.json 2>/dev/null; then
+            echo "Downloaded existing traces index"
+          else
+            echo '{"traces": [], "last_updated": ""}' > /tmp/traces_index.json
+            echo "Created new traces index"
+          fi
+
+          # Create index entry
+          cat > /tmp/trace-index-entry.json << EOF
+          {
+            "repo": "$REPO",
+            "pr_number": $PR_NUMBER,
+            "trace_path": "$DEST_PATH",
+            "workflow_run_id": "${{ github.run_id }}",
+            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "merge_type": "auto_merge"
+          }
+          EOF
+
+          # Append to index
+          jq --slurpfile entry /tmp/trace-index-entry.json \
+            '.traces += $entry | .last_updated = "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"' \
+            /tmp/traces_index.json > /tmp/traces_index_updated.json
+
+          # Upload updated index
+          gcloud storage cp /tmp/traces_index_updated.json \
+            gs://bot-dashboard-vectorinstitute/data/traces_index.json \
+            --content-type="application/json" \
+            --cache-control="no-cache, no-store, must-revalidate" || {
+            echo "⚠️ Failed to update traces index"
+          }
+
+          echo "✅ Auto-merge recorded to GCS: $DEST_PATH"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+        continue-on-error: true
+
+      - name: Trigger branch updates for remaining PRs
+        if: steps.check-order.outputs.is_oldest == 'true' && steps.check-order.outputs.other_prs != '' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
+        run: |
+          REPO="${{ matrix.pr.repo }}"
+          OTHER_PRS="${{ steps.check-order.outputs.other_prs }}"
+
+          if [ -n "$OTHER_PRS" ]; then
+            echo "🔄 Triggering branch updates for remaining PRs: $OTHER_PRS"
+
+            IFS=',' read -ra PR_ARRAY <<< "$OTHER_PRS"
+            for OTHER_PR in "${PR_ARRAY[@]}"; do
+              echo "Requesting rebase for #$OTHER_PR..."
+
+              # Comment @dependabot rebase to trigger branch update
+              gh pr comment $OTHER_PR --repo "$REPO" --body "@dependabot rebase" || {
+                echo "⚠️ Failed to trigger rebase for #$OTHER_PR"
+              }
+
+              sleep 2  # Small delay between comments
+            done
+
+            echo "✅ Branch update requests sent to remaining PRs"
           fi
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
