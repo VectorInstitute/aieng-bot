@@ -195,8 +195,7 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
   const autoMergedPRs = prSummaries.filter(pr => pr.failure_type === 'auto_merge' && pr.status === 'SUCCESS').length
   const botFixedPRs = prSummaries.filter(pr => pr.failure_type !== 'auto_merge' && pr.status === 'SUCCESS').length
   const failedFixes = prSummaries.filter(pr => pr.status === 'FAILED').length
-  const partialFixes = prSummaries.filter(pr => pr.status === 'PARTIAL').length
-  const openPRs = prSummaries.filter(pr => pr.status === 'IN_PROGRESS').length
+  // Note: PARTIAL is also treated as a failure - bot couldn't fully fix the PR
 
   // Success rate should only count bot fixes (not auto-merges)
   const totalAttempts = totalPRs - autoMergedPRs
@@ -210,7 +209,7 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
     : 0
 
   // Group by failure type (auto_merge is tracked separately, not as "fixed")
-  const byFailureType: Record<string, any> = {}
+  const byFailureType: Record<string, { count: number; fixed: number; failed: number; success_rate: number }> = {}
   prSummaries.forEach(pr => {
     const type = pr.failure_type || 'unknown'
     if (!byFailureType[type]) {
@@ -237,7 +236,7 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
   })
 
   // Group by repo
-  const byRepo: Record<string, any> = {}
+  const byRepo: Record<string, { total_prs: number; auto_merged: number; bot_fixed: number; failed: number; success_rate: number }> = {}
   prSummaries.forEach(pr => {
     if (!byRepo[pr.repo]) {
       byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0 }
@@ -265,7 +264,6 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       prs_auto_merged: autoMergedPRs,
       prs_bot_fixed: botFixedPRs,
       prs_failed: failedFixes,
-      prs_open: openPRs,
       success_rate: successRate,
       avg_fix_time_hours: avgFixTime,
     },

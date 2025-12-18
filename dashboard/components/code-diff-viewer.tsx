@@ -21,7 +21,7 @@ export default function CodeDiffViewer({
   const [isExpanded, setIsExpanded] = useState(false)
   const [showDiff, setShowDiff] = useState(!!oldCode)
   const [copied, setCopied] = useState(false)
-  const [isDark, setIsDark] = useState(true)
+  const isDark = true
 
   const handleCopy = async () => {
     try {

@@ -47,7 +47,7 @@ export interface AgentEvent {
   type: 'REASONING' | 'TOOL_CALL' | 'ACTION' | 'ERROR' | 'INFO'
   content: string
   tool?: string
-  parameters?: Record<string, any>
+  parameters?: Record<string, unknown>
   result_summary?: string
 }
 
@@ -59,7 +59,6 @@ export interface BotMetrics {
     prs_auto_merged: number
     prs_bot_fixed: number
     prs_failed: number
-    prs_open: number
     success_rate: number
     avg_fix_time_hours: number
   }

@@ -144,7 +144,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
               </div>
               {!showFullLogs && hasMoreLogs && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Showing first 50 lines. Click "Show All" to see complete logs.
+                  Showing first 50 lines. Click &quot;Show All&quot; to see complete logs.
                 </p>
               )}
             </div>

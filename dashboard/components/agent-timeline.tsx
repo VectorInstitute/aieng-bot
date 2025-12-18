@@ -11,7 +11,6 @@ import {
   Info,
   ChevronDown,
   ChevronRight,
-  Code,
   FileEdit,
   Search,
   Terminal,
@@ -36,7 +35,7 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
     setExpandedEvents(newExpanded)
   }
 
-  const getEventIcon = (type: string, tool?: string, parsedType?: string) => {
+  const getEventIcon = (type: string, tool?: string) => {
     // For TOOL_RESULT events, show check icon
     if (type === 'TOOL_RESULT') {
       return <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -123,7 +122,7 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
               <div className="flex items-start space-x-3">
                 {/* Icon */}
                 <div className="flex-shrink-0 mt-0.5">
-                  {getEventIcon(event.type, event.tool || parsed.metadata?.tool, parsed.type)}
+                  {getEventIcon(event.type, event.tool || parsed.metadata?.tool)}
                 </div>
 
                 {/* Content */}

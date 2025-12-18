@@ -9,7 +9,11 @@ export interface ParsedMessage {
     tool?: string
     toolUseId?: string
     isError?: boolean
-    [key: string]: any
+    parameters?: Record<string, unknown>
+    subtype?: string
+    duration?: number
+    turns?: number
+    [key: string]: unknown
   }
 }
 
@@ -43,7 +47,7 @@ function parseToolUseBlock(input: string): ParsedMessage | null {
   // Extract input parameters
   const inputMatch = input.match(/input=(\{.*\})/)
   let content = `Tool: ${tool}`
-  let metadata: any = { tool }
+  const metadata: ParsedMessage['metadata'] = { tool }
 
   if (inputMatch) {
     try {
@@ -67,7 +71,7 @@ function parseToolUseBlock(input: string): ParsedMessage | null {
       } else {
         content = `${tool}: ${JSON.stringify(params, null, 2)}`
       }
-    } catch (e) {
+    } catch {
       // If parsing fails, just show the tool name
       content = `Tool: ${tool}`
     }

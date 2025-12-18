@@ -4,7 +4,6 @@ import { fetchPRTrace } from '@/lib/data-fetcher'
 import { notFound } from 'next/navigation'
 import AgentTimeline from '@/components/agent-timeline'
 import FailureAnalysis from '@/components/failure-analysis'
-import PerformanceMetrics from '@/components/performance-metrics'
 import { Clock, GitBranch, User, ExternalLink } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
