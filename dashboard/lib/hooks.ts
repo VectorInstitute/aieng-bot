@@ -33,7 +33,7 @@ export function useTableData<T extends Record<string, unknown>>(
 
   // Get unique values for each filter field
   const filterOptions = useMemo(() => {
-    const options: Record<string, unknown[]> = {}
+    const options: Record<string, T[keyof T][]> = {}
     filterFields.forEach(field => {
       options[field as string] = getUniqueValues(data, field)
     })

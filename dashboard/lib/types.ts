@@ -98,7 +98,7 @@ export interface TraceIndex {
 }
 
 // PR summary for overview table
-export interface PRSummary {
+export interface PRSummary extends Record<string, unknown> {
   repo: string
   pr_number: number
   title: string

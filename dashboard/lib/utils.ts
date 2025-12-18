@@ -95,8 +95,8 @@ export function sortBy<T>(
   direction: 'asc' | 'desc' = 'asc'
 ): T[] {
   return [...array].sort((a, b) => {
-    let aVal = a[field]
-    let bVal = b[field]
+    const aVal = a[field]
+    const bVal = b[field]
 
     // Handle null/undefined
     if (aVal == null) return 1
@@ -104,8 +104,11 @@ export function sortBy<T>(
 
     // Handle dates
     if (aVal instanceof Date && bVal instanceof Date) {
-      aVal = aVal.getTime() as number
-      bVal = bVal.getTime() as number
+      const aTime = aVal.getTime()
+      const bTime = bVal.getTime()
+      if (aTime < bTime) return direction === 'asc' ? -1 : 1
+      if (aTime > bTime) return direction === 'asc' ? 1 : -1
+      return 0
     }
 
     if (aVal < bVal) return direction === 'asc' ? -1 : 1
@@ -136,9 +139,9 @@ export function searchFilter<T>(
 /**
  * Get unique values from array for a specific field
  */
-export function getUniqueValues<T>(items: T[], field: keyof T): unknown[] {
+export function getUniqueValues<T, K extends keyof T>(items: T[], field: K): T[K][] {
   const uniqueSet = new Set(items.map(item => item[field]).filter(Boolean))
-  return Array.from(uniqueSet)
+  return Array.from(uniqueSet) as T[K][]
 }
 
 /**

@@ -67,7 +67,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
             className="w-full"
           >
             <option value="all">All Statuses</option>
-            {filterOptions['status']?.map((status: string) => (
+            {(filterOptions['status'] as string[] | undefined)?.map((status) => (
               <option key={status} value={status}>
                 {status.replace('_', ' ')}
               </option>
@@ -85,7 +85,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
             className="w-full"
           >
             <option value="all">All Failure Types</option>
-            {filterOptions['failure_type']?.map((type: string) => (
+            {(filterOptions['failure_type'] as string[] | undefined)?.map((type) => (
               <option key={type} value={type}>
                 {type}
               </option>
