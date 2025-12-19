@@ -37,13 +37,16 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Install package
+        run: pip install -e .
+
       - name: Collect metrics
         run: |
           DAYS_BACK="${{ github.event.inputs.days_back || '30' }}"
 
           echo "Collecting bot metrics for last $DAYS_BACK days..."
 
-          python scripts/collect_bot_metrics.py \
+          collect-bot-metrics \
             --days "$DAYS_BACK" \
             --output /tmp/bot_metrics_latest.json \
             --history /tmp/bot_metrics_history.json \

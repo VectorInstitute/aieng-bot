@@ -304,10 +304,7 @@ jobs:
           import sys
           from datetime import datetime
 
-          # Add bot repo to path to import tracer
-          sys.path.insert(0, os.path.join(os.getcwd(), '..', 'bot-repo'))
-
-          from scripts.agent_tracer import create_tracer_from_env
+          from aieng_bot_maintain.observability import create_tracer_from_env
           from claude_agent_sdk import query, ClaudeAgentOptions
 
           async def main():

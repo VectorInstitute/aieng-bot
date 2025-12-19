@@ -1,4 +1,4 @@
-"""Agent Execution Tracer for Claude Agent SDK.
+"""Agent execution tracer for Claude Agent SDK.
 
 This module provides comprehensive observability for Claude Agent SDK executions.
 It captures tool calls, reasoning, actions, and errors in a structured format
@@ -17,7 +17,7 @@ from typing import Any
 
 
 class AgentExecutionTracer:
-    """Captures and structures agent execution traces from Claude Agent SDK.
+    """Capture and structure agent execution traces from Claude Agent SDK.
 
     Features:
     - Full message content capture (no truncation)
@@ -25,6 +25,37 @@ class AgentExecutionTracer:
     - Tool invocation parsing from message content
     - Structured JSON output with comprehensive schema
     - GCS upload support
+
+    Parameters
+    ----------
+    pr_info : dict[str, Any]
+        PR context dict with keys: repo, number, title, author, url.
+    failure_info : dict[str, Any]
+        Failure context dict with keys: type, checks, logs_truncated.
+    workflow_run_id : str
+        GitHub Actions run ID.
+    github_run_url : str
+        URL to GitHub Actions run.
+
+    Attributes
+    ----------
+    pr_info : dict[str, Any]
+        PR context information.
+    failure_info : dict[str, Any]
+        Failure context information.
+    workflow_run_id : str
+        GitHub Actions run ID.
+    github_run_url : str
+        URL to GitHub Actions run.
+    trace : dict[str, Any]
+        Complete trace data structure.
+    event_sequence : int
+        Sequential counter for events.
+    start_time : datetime
+        Trace start timestamp.
+    tool_patterns : dict[str, str]
+        Regex patterns for tool call extraction.
+
     """
 
     def __init__(
@@ -36,11 +67,16 @@ class AgentExecutionTracer:
     ):
         """Initialize tracer with PR and workflow context.
 
-        Args:
-            pr_info: Dict with keys: repo, number, title, author, url
-            failure_info: Dict with keys: type, checks, logs_truncated
-            workflow_run_id: GitHub Actions run ID
-            github_run_url: URL to GitHub Actions run
+        Parameters
+        ----------
+        pr_info : dict[str, Any]
+            PR context dict with keys: repo, number, title, author, url.
+        failure_info : dict[str, Any]
+            Failure context dict with keys: type, checks, logs_truncated.
+        workflow_run_id : str
+            GitHub Actions run ID.
+        github_run_url : str
+            URL to GitHub Actions run.
 
         """
         self.pr_info = pr_info
@@ -88,8 +124,15 @@ class AgentExecutionTracer:
     def classify_message(self, content: str) -> str:
         """Classify message type based on content patterns.
 
-        Returns:
-            One of: REASONING, TOOL_CALL, ACTION, ERROR, INFO
+        Parameters
+        ----------
+        content : str
+            Message content to classify.
+
+        Returns
+        -------
+        str
+            One of: "REASONING", "TOOL_CALL", "ACTION", "ERROR", "INFO".
 
         """
         content_lower = content.lower()
@@ -175,8 +218,18 @@ class AgentExecutionTracer:
     def extract_tool_info(self, content: str, event_type: str) -> dict[str, Any] | None:
         """Extract tool name and parameters from message content.
 
-        Returns:
-            Dict with tool, parameters, and other info, or None if not a tool call
+        Parameters
+        ----------
+        content : str
+            Message content to parse.
+        event_type : str
+            Event type (must be "TOOL_CALL" for extraction).
+
+        Returns
+        -------
+        dict[str, Any] or None
+            Dict with tool, parameters, and result_summary fields,
+            or None if not a tool call.
 
         """
         if event_type != "TOOL_CALL":
@@ -198,11 +251,15 @@ class AgentExecutionTracer:
     def _extract_message_content(self, message: Any) -> str:
         """Extract content string from message object.
 
-        Args:
-            message: Agent SDK message object
+        Parameters
+        ----------
+        message : Any
+            Agent SDK message object.
 
-        Returns:
-            Extracted content string
+        Returns
+        -------
+        str
+            Extracted content string.
 
         """
         if not hasattr(message, "content"):
@@ -223,13 +280,19 @@ class AgentExecutionTracer:
     def _determine_event_type(self, message: Any, msg_class: str, content: str) -> str:
         """Determine event type based on message class and content.
 
-        Args:
-            message: Agent SDK message object
-            msg_class: Class name of message
-            content: Extracted content string
+        Parameters
+        ----------
+        message : Any
+            Agent SDK message object.
+        msg_class : str
+            Class name of message.
+        content : str
+            Extracted content string.
 
-        Returns:
-            Event type string (ERROR, TOOL_RESULT, TOOL_CALL, etc.)
+        Returns
+        -------
+        str
+            Event type (ERROR, TOOL_RESULT, TOOL_CALL, etc.).
 
         """
         if msg_class == "ToolResultBlock":
@@ -256,11 +319,15 @@ class AgentExecutionTracer:
     ) -> AsyncIterator[Any]:
         """Wrap agent stream to capture messages while passing them through.
 
-        Args:
-            agent_stream: Async iterator from Claude Agent SDK query()
+        Parameters
+        ----------
+        agent_stream : AsyncIterator[Any]
+            Async iterator from Claude Agent SDK query().
 
-        Yields:
-            Original messages from agent stream
+        Yields
+        ------
+        Any
+            Original messages from agent stream.
 
         """
         async for message in agent_stream:
@@ -324,12 +391,18 @@ class AgentExecutionTracer:
     ) -> None:
         """Finalize trace with execution results.
 
-        Args:
-            status: SUCCESS, FAILED, or PARTIAL
-            changes_made: Number of changes applied
-            files_modified: List of file paths modified
-            commit_sha: Git commit SHA if committed
-            commit_url: URL to commit on GitHub
+        Parameters
+        ----------
+        status : str, optional
+            Execution status: "SUCCESS", "FAILED", or "PARTIAL" (default="SUCCESS").
+        changes_made : int, optional
+            Number of changes applied (default=0).
+        files_modified : list[str] or None, optional
+            List of file paths modified (default=None).
+        commit_sha : str or None, optional
+            Git commit SHA if committed (default=None).
+        commit_url : str or None, optional
+            URL to commit on GitHub (default=None).
 
         """
         end_time = datetime.now(UTC)
@@ -351,8 +424,14 @@ class AgentExecutionTracer:
     def save_trace(self, filepath: str) -> None:
         """Save trace to JSON file.
 
-        Args:
-            filepath: Path to save trace JSON
+        Parameters
+        ----------
+        filepath : str
+            Path to save trace JSON.
+
+        Notes
+        -----
+        Creates parent directories if they don't exist.
 
         """
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -367,13 +446,24 @@ class AgentExecutionTracer:
     ) -> bool:
         """Upload trace JSON to Google Cloud Storage.
 
-        Args:
-            bucket_name: GCS bucket name (without gs:// prefix)
-            trace_filepath: Local path to trace JSON file
-            destination_blob_name: Target path in GCS bucket
+        Parameters
+        ----------
+        bucket_name : str
+            GCS bucket name (without gs:// prefix).
+        trace_filepath : str
+            Local path to trace JSON file.
+        destination_blob_name : str
+            Target path in GCS bucket.
 
-        Returns:
-            True if upload succeeded, False otherwise
+        Returns
+        -------
+        bool
+            True if upload succeeded, False otherwise.
+
+        Notes
+        -----
+        Uses gcloud CLI (must be authenticated in workflow).
+        Prints status messages to stdout.
 
         """
         try:
@@ -401,8 +491,10 @@ class AgentExecutionTracer:
     def get_summary(self) -> str:
         """Generate human-readable summary of execution.
 
-        Returns:
-            Summary string for PR comments
+        Returns
+        -------
+        str
+            Summary string for PR comments with execution statistics.
 
         """
         event_counts: dict[str, int] = {}
@@ -441,22 +533,23 @@ class AgentExecutionTracer:
 def create_tracer_from_env() -> AgentExecutionTracer:
     """Create tracer from environment variables set by GitHub Actions workflow.
 
-    Expected env vars:
-    - TARGET_REPO
-    - PR_NUMBER
-    - PR_TITLE
-    - PR_AUTHOR
-    - PR_URL
-    - FAILURE_TYPE
-    - FAILED_CHECK_NAMES
-    - FAILURE_LOGS (truncated)
-    - GITHUB_RUN_ID
-    - GITHUB_SERVER_URL
-    - GITHUB_REPOSITORY
-    - GITHUB_RUN_ID (for URL construction)
+    Expected environment variables:
+    - TARGET_REPO: Repository name (owner/repo)
+    - PR_NUMBER: Pull request number
+    - PR_TITLE: Pull request title
+    - PR_AUTHOR: Pull request author
+    - PR_URL: Pull request URL
+    - FAILURE_TYPE: Failure type classification
+    - FAILED_CHECK_NAMES: Comma-separated list of failed check names
+    - FAILURE_LOGS: Truncated failure logs
+    - GITHUB_RUN_ID: GitHub Actions run ID
+    - GITHUB_SERVER_URL: GitHub server URL
+    - GITHUB_REPOSITORY: Repository name for URL construction
 
-    Returns:
-        Configured AgentExecutionTracer instance
+    Returns
+    -------
+    AgentExecutionTracer
+        Configured tracer instance ready to capture agent execution.
 
     """
     pr_info = {

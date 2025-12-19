@@ -34,6 +34,7 @@ Changelog = "https://github.com/VectorInstitute/aieng-bot-maintain/releases"
 
 [project.scripts]
 classify-pr-failure = "aieng_bot_maintain.cli:classify_pr_failure_cli"
+collect-bot-metrics = "aieng_bot_maintain.cli:collect_metrics_cli"
 
 [tool.hatchling.build.targets.wheel]
 packages = ["src/aieng_bot_maintain"]

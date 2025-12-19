@@ -15,6 +15,8 @@ from .classifier.models import (
     FailureType,
     PRContext,
 )
+from .metrics import MetricsCollector
+from .observability import AgentExecutionTracer, create_tracer_from_env
 
 __all__ = [
     "PRFailureClassifier",
@@ -22,5 +24,8 @@ __all__ = [
     "ClassificationResult",
     "FailureType",
     "PRContext",
+    "MetricsCollector",
+    "AgentExecutionTracer",
+    "create_tracer_from_env",
     "__version__",
 ]
