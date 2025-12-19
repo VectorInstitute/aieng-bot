@@ -383,8 +383,8 @@ jobs:
           PR_TITLE: ${{ steps.pr-details.outputs.pr-title }}
           PR_AUTHOR: ${{ steps.pr-details.outputs.pr-author }}
           PR_URL: https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}
-          FAILURE_TYPE: ${{ steps.analyze.outputs.primary-type }}
-          FAILED_CHECK_NAMES: ${{ steps.analyze.outputs.failed-names }}
+          FAILURE_TYPE: ${{ steps.analyze.outputs.failure-type }}
+          FAILED_CHECK_NAMES: ${{ steps.analyze.outputs.failed-check-names }}
           FAILURE_LOGS: ${{ steps.get-logs.outputs.logs }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
