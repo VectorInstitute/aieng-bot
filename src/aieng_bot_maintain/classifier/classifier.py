@@ -90,9 +90,7 @@ class PRFailureClassifier:
             re.IGNORECASE,
         )
         security_lines = [
-            (i, line)
-            for i, line in enumerate(lines)
-            if security_pattern.search(line)
+            (i, line) for i, line in enumerate(lines) if security_pattern.search(line)
         ]
 
         if security_lines:
