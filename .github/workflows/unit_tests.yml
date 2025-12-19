@@ -1,0 +1,60 @@
+name: unit tests
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .pre-commit-config.yaml
+      - .github/workflows/code_checks.yml
+      - .github/workflows/unit_tests.yml
+      - '**.py'
+      - uv.lock
+      - pyproject.toml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .pre-commit-config.yaml
+      - .github/workflows/code_checks.yml
+      - .github/workflows/unit_tests.yml
+      - '**.py'
+      - uv.lock
+      - pyproject.toml
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7.1.6
+        with:
+          version: "0.9.11"
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      - name: Run unit tests with coverage
+        run: |
+          uv run pytest --cov src/aieng_bot_maintain --cov-report=xml --cov-report=term tests/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true

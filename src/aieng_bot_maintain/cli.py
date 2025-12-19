@@ -3,10 +3,26 @@
 import argparse
 import json
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 from .classifier import PRFailureClassifier
 from .classifier.models import CheckFailure, PRContext
 from .utils.logging import get_console, log_error, log_info, log_success
+
+
+def get_version() -> str:
+    """Get the installed version of the package.
+
+    Returns
+    -------
+    str
+        Version string from package metadata.
+
+    """
+    try:
+        return version("aieng-bot-maintain")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def classify_pr_failure_cli() -> None:
@@ -17,6 +33,7 @@ def classify_pr_failure_cli() -> None:
 
     """
     parser = argparse.ArgumentParser(
+        prog="classify-pr-failure",
         description="Classify PR failure type using Claude API",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -29,6 +46,12 @@ Examples:
   classify-pr-failure --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
     --failure-logs "$(cat logs.txt)" --output-format json
         """,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_version()}",
+        help="Show version number and exit",
     )
     parser.add_argument("--pr-info", required=True, help="PR info JSON string")
     parser.add_argument(
