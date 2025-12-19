@@ -184,11 +184,23 @@ jobs:
           # Run Python classifier (using installed CLI entry point)
           # Pass file path instead of content to avoid bash variable size limits
           cd ../bot-repo
-          CLASSIFICATION=$(classify-pr-failure \
+
+          echo "Running classifier..."
+          if ! classify-pr-failure \
             --pr-info "$PR_INFO" \
             --failed-checks "$FAILED_CHECKS" \
             --failure-logs-file /tmp/failure-logs.txt \
-            --output-format github)
+            --output-format github > /tmp/classification-output.txt 2> /tmp/classification-error.txt; then
+            echo "❌ Classification failed with exit code $?"
+            echo "STDOUT:"
+            cat /tmp/classification-output.txt || echo "(no stdout)"
+            echo ""
+            echo "STDERR:"
+            cat /tmp/classification-error.txt || echo "(no stderr)"
+            exit 1
+          fi
+
+          CLASSIFICATION=$(cat /tmp/classification-output.txt)
 
           # Parse and output results
           echo "$CLASSIFICATION" >> $GITHUB_OUTPUT
