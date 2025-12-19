@@ -321,7 +321,7 @@ class AgentExecutionTracer:
         files_modified: list[str] | None = None,
         commit_sha: str | None = None,
         commit_url: str | None = None,
-    ):
+    ) -> None:
         """Finalize trace with execution results.
 
         Args:
@@ -348,7 +348,7 @@ class AgentExecutionTracer:
             }
         )
 
-    def save_trace(self, filepath: str):
+    def save_trace(self, filepath: str) -> None:
         """Save trace to JSON file.
 
         Args:
@@ -405,7 +405,7 @@ class AgentExecutionTracer:
             Summary string for PR comments
 
         """
-        event_counts = {}
+        event_counts: dict[str, int] = {}
         for event in self.trace["events"]:
             event_type = event["type"]
             event_counts[event_type] = event_counts.get(event_type, 0) + 1

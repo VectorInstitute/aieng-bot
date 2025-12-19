@@ -452,7 +452,7 @@ def create_summary_table(results: dict) -> Table:
     return table
 
 
-def main():
+def main() -> int:
     """Run the bot PR merging script."""
     parser = argparse.ArgumentParser(
         description="Automatically merge bot PRs (dependabot and pre-commit-ci) with passing checks",

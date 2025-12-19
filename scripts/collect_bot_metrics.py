@@ -317,7 +317,7 @@ def load_history(filepath: str) -> Dict[str, Any]:
 
 def save_metrics(
     metrics: Dict[str, Any], output_file: str, history_file: Optional[str] = None
-):
+) -> None:
     """Save metrics to JSON files.
 
     Args:
@@ -368,7 +368,7 @@ def upload_to_gcs(local_file: str, bucket: str, destination: str) -> bool:
         return False
 
 
-def main():
+def main() -> None:
     """Collect and aggregate bot PR metrics from GitHub."""
     parser = argparse.ArgumentParser(description="Collect bot PR metrics")
     parser.add_argument(

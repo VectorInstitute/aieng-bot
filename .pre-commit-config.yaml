@@ -33,6 +33,15 @@ repos:
     - id: ruff-format
       types_or: [python, jupyter]
 
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+    - id: mypy
+      entry: python3 -m mypy --config-file pyproject.toml
+      language: system
+      types: [python]
+      exclude: "tests"
+
   - repo: https://github.com/crate-ci/typos
     rev: v1  # v1.19.0
     hooks:
@@ -58,5 +67,5 @@ ci:
     autoupdate_branch: ''
     autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
     autoupdate_schedule: weekly
-    skip: [nextjs-lint]
+    skip: [nextjs-lint, mypy]
     submodules: false
