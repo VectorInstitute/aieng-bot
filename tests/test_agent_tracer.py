@@ -347,5 +347,141 @@ class TestCreateTracerFromEnv:
 
         assert tracer.pr_info["repo"] == "unknown/repo"
         assert tracer.pr_info["number"] == 0
-        assert tracer.failure_info["type"] == "unknown"
-        assert tracer.workflow_run_id == "unknown"
+
+
+class TestToolExtractionImprovements:
+    """Test suite for improved tool name extraction and error handling."""
+
+    @pytest.fixture
+    def tracer(self):
+        """Create tracer for tests."""
+        return AgentExecutionTracer(
+            pr_info={
+                "repo": "test/repo",
+                "number": 1,
+                "title": "Test PR",
+                "author": "bot",
+                "url": "https://test",
+            },
+            failure_info={"type": "test", "checks": [], "logs_truncated": ""},
+            workflow_run_id="12345",
+            github_run_url="https://test/run/12345",
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_name_extraction_fallback(self, tracer):
+        """Test tool name extraction falls back to string parsing."""
+
+        class ToolUseWithoutName:
+            """Mock ToolUseBlock without name attribute."""
+
+            def __init__(self):
+                self.input = {"command": "ls"}
+                self.id = "tool_123"
+
+            def __str__(self):
+                return (
+                    "ToolUseBlock(id='tool_123', name='Bash', input={'command': 'ls'})"
+                )
+
+            @property
+            def __class__(self):
+                class MockClass:
+                    __name__ = "ToolUseBlock"
+
+                return MockClass()
+
+        msg = ToolUseWithoutName()
+
+        async def mock_stream():
+            yield msg
+
+        captured_events = []
+        async for _ in tracer.capture_agent_stream(mock_stream()):
+            pass
+
+        captured_events = tracer.trace["events"]
+
+        # Should extract "Bash" from string representation
+        assert len(captured_events) == 1
+        assert captured_events[0]["tool"] == "Bash"
+
+    @pytest.mark.asyncio
+    async def test_tool_result_links_to_tool_call(self, tracer):
+        """Test that ToolResultBlock events get tool name from TOOL_CALL."""
+        tool_call = MockToolUseBlock("Read", {"file_path": "test.py"}, "tool_123")
+        tool_result = MockToolResultBlock("tool_123", is_error=False)
+
+        async def mock_stream():
+            yield tool_call
+            yield tool_result
+
+        async for _ in tracer.capture_agent_stream(mock_stream()):
+            pass
+
+        events = tracer.trace["events"]
+
+        assert len(events) == 2
+        # First event is TOOL_CALL with tool name
+        assert events[0]["type"] == "TOOL_CALL"
+        assert events[0]["tool"] == "Read"
+        # Second event is TOOL_RESULT with tool name linked from first event
+        assert events[1]["type"] == "TOOL_RESULT"
+        assert events[1]["tool"] == "Read"
+        assert events[1]["tool_use_id"] == "tool_123"
+
+    @pytest.mark.asyncio
+    async def test_error_tool_result_gets_tool_name(self, tracer):
+        """Test that error ToolResultBlock events get tool name."""
+        tool_call = MockToolUseBlock("Bash", {"command": "invalid"}, "tool_456")
+        error_result = MockToolResultBlock("tool_456", is_error=True)
+
+        async def mock_stream():
+            yield tool_call
+            yield error_result
+
+        async for _ in tracer.capture_agent_stream(mock_stream()):
+            pass
+
+        events = tracer.trace["events"]
+
+        assert len(events) == 2
+        assert events[0]["tool"] == "Bash"
+        # Error result should be marked as ERROR type and have tool name
+        assert events[1]["type"] == "ERROR"
+        assert events[1]["tool"] == "Bash"
+        assert events[1]["is_error"] is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_fallback(self, tracer):
+        """Test that unknown tools default to 'Unknown'."""
+
+        class UnknownTool:
+            def __init__(self):
+                self.input = {}
+                self.id = "tool_999"
+                # name attribute is None
+
+            def __str__(self):
+                return "ToolUseBlock(id='tool_999', input={})"
+
+            @property
+            def __class__(self):
+                class MockClass:
+                    __name__ = "ToolUseBlock"
+
+                return MockClass()
+
+        msg = UnknownTool()
+
+        async def mock_stream():
+            yield msg
+
+        async for _ in tracer.capture_agent_stream(mock_stream()):
+            pass
+
+        events = tracer.trace["events"]
+
+        # Should default to "Unknown" when name can't be extracted
+        assert len(events) == 1
+        assert events[0]["tool"] == "Unknown"

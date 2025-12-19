@@ -314,6 +314,66 @@ class AgentExecutionTracer:
         # Fallback to content-based classification
         return self.classify_message(content if content else str(message))
 
+    def _process_tool_use_block(self, message: Any, event: dict[str, Any]) -> None:
+        """Process ToolUseBlock message and extract tool information.
+
+        Parameters
+        ----------
+        message : Any
+            ToolUseBlock message.
+        event : dict[str, Any]
+            Event dictionary to populate.
+
+        """
+        tool_name = getattr(message, "name", None)
+        tool_input = getattr(message, "input", {})
+        tool_id = getattr(message, "id", None)
+
+        # If tool_name is None, try extracting from string representation
+        if not tool_name:
+            msg_str = str(message)
+            name_match = re.search(r"name=['\"](\w+)['\"]", msg_str)
+            if name_match:
+                tool_name = name_match.group(1)
+
+        # Always set tool name (default to "Unknown" if all else fails)
+        event["tool"] = tool_name if tool_name else "Unknown"
+        event["parameters"] = tool_input
+        if tool_id:
+            event["tool_use_id"] = tool_id
+
+    def _process_tool_result_block(self, message: Any, event: dict[str, Any]) -> None:
+        """Process ToolResultBlock message and link to original tool call.
+
+        Parameters
+        ----------
+        message : Any
+            ToolResultBlock message.
+        event : dict[str, Any]
+            Event dictionary to populate.
+
+        """
+        tool_use_id = getattr(message, "tool_use_id", None)
+        if tool_use_id:
+            event["tool_use_id"] = tool_use_id
+
+        # Find the original tool call to set tool name on result
+        if tool_use_id:
+            for prev_event in reversed(self.trace["events"]):
+                if (
+                    prev_event.get("tool_use_id") == tool_use_id
+                    and prev_event.get("type") == "TOOL_CALL"
+                ):
+                    event["tool"] = prev_event.get("tool", "Unknown")
+                    break
+
+        # Check if this is an error result
+        is_error = getattr(message, "is_error", None)
+        if is_error is True or (is_error is None and "is_error=True" in str(message)):
+            event["is_error"] = True
+            # Override type to ERROR for better visibility
+            event["type"] = "ERROR"
+
     async def capture_agent_stream(
         self, agent_stream: AsyncIterator[Any]
     ) -> AsyncIterator[Any]:
@@ -345,22 +405,11 @@ class AgentExecutionTracer:
                     "content": content if content else str(message),
                 }
 
-                # Extract tool info for ToolUseBlock messages
+                # Extract tool info based on message class
                 if msg_class == "ToolUseBlock":
-                    # Extract directly from message attributes
-                    tool_name = getattr(message, "name", None)
-                    tool_input = getattr(message, "input", {})
-                    tool_id = getattr(message, "id", None)
-                    if tool_name:
-                        event["tool"] = tool_name
-                        event["parameters"] = tool_input
-                        if tool_id:
-                            event["tool_use_id"] = tool_id
+                    self._process_tool_use_block(message, event)
                 elif msg_class == "ToolResultBlock":
-                    # Extract tool_use_id to link result to tool call
-                    tool_use_id = getattr(message, "tool_use_id", None)
-                    if tool_use_id:
-                        event["tool_use_id"] = tool_use_id
+                    self._process_tool_result_block(message, event)
                 elif event_type == "TOOL_CALL":
                     # Fallback: try to extract from content string
                     tool_info = self.extract_tool_info(
