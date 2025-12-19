@@ -1,18 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "aieng-bot-maintain"
 version = "0.1.0"
 description = "Vector Institute AI Engineering Bot for Maintenance Tasks"
 readme = "README.md"
-authors = [ {name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
-license = "Apache-2.0"
+authors = [{name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
+license = {text = "Apache-2.0"}
 requires-python = ">=3.12"
+keywords = ["github", "automation", "dependabot", "maintenance", "ai", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Version Control :: Git",
+]
 dependencies = [
     "anthropic>=0.42.0",
     "pyyaml>=6.0.2",
+    "rich>=13.0.0",
 ]
 
 [project.urls]
+Homepage = "https://github.com/VectorInstitute/aieng-bot-maintain"
 Repository = "https://github.com/VectorInstitute/aieng-bot-maintain"
+Issues = "https://github.com/VectorInstitute/aieng-bot-maintain/issues"
+Changelog = "https://github.com/VectorInstitute/aieng-bot-maintain/releases"
+
+[project.scripts]
+classify-pr-failure = "aieng_bot_maintain.cli:classify_pr_failure_cli"
+
+[tool.hatchling.build.targets.wheel]
+packages = ["src/aieng_bot_maintain"]
 
 [dependency-groups]
 dev = [

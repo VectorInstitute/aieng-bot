@@ -77,25 +77,58 @@ jobs:
         id: get-logs
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
-          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          FAILED_CHECKS='${{ steps.pr-details.outputs.failed-checks }}'
 
-          # Get the most recent workflow run for the PR
-          HEAD_REF="${{ steps.pr-details.outputs.head-ref }}"
-          RUN_ID=$(gh run list --repo "$REPO" --branch "$HEAD_REF" --limit 5 \
-            --json databaseId,status,conclusion \
-            --jq '.[] | select(.conclusion == "failure") | .databaseId' | head -1)
+          echo "Extracting failure logs from failed checks..."
 
-          if [ -n "$RUN_ID" ]; then
-            echo "Fetching logs for run $RUN_ID in $REPO"
-            gh run view $RUN_ID --repo "$REPO" --log > /tmp/failure-logs.txt 2>&1 || echo "Could not fetch logs"
+          # Extract job URLs and fetch their logs
+          > /tmp/failure-logs.txt
 
-            # Truncate if too large
-            if [ -f /tmp/failure-logs.txt ]; then
-              tail -5000 /tmp/failure-logs.txt > /tmp/failure-logs-truncated.txt
-              mv /tmp/failure-logs-truncated.txt /tmp/failure-logs.txt
+          echo "$FAILED_CHECKS" | jq -r '.[].detailsUrl' | while read -r JOB_URL; do
+            if [ -n "$JOB_URL" ]; then
+              # Extract run ID and job ID from URL
+              # Format: https://github.com/OWNER/REPO/actions/runs/RUN_ID/job/JOB_ID
+              RUN_ID=$(echo "$JOB_URL" | grep -oP 'runs/\K[0-9]+')
+              JOB_ID=$(echo "$JOB_URL" | grep -oP 'job/\K[0-9]+')
+
+              echo "Fetching logs for job $JOB_ID in run $RUN_ID"
+
+              # Fetch full run logs
+              gh run view "$RUN_ID" --repo "$REPO" --log > /tmp/full-logs.txt 2>&1 || continue
+
+              # Extract relevant failure sections (errors, failures, security issues)
+              grep -i -E "(error|fail|traceback|exception|exit code [^0]|vulnerability|vulnerabilities|CVE-|GHSA-|audit|found [0-9]+ known)" /tmp/full-logs.txt | tail -2000 >> /tmp/failure-logs.txt || true
+
+              # Also get the last 1000 lines which often contain the summary
+              tail -1000 /tmp/full-logs.txt >> /tmp/failure-logs.txt
+
+              rm -f /tmp/full-logs.txt
             fi
+          done
+
+          # If we got no logs, try fallback method
+          if [ ! -s /tmp/failure-logs.txt ]; then
+            echo "No logs from specific jobs, trying fallback..."
+            HEAD_REF="${{ steps.pr-details.outputs.head-ref }}"
+            RUN_ID=$(gh run list --repo "$REPO" --branch "$HEAD_REF" --limit 5 \
+              --json databaseId,status,conclusion \
+              --jq '.[] | select(.conclusion == "failure") | .databaseId' | head -1)
+
+            if [ -n "$RUN_ID" ]; then
+              gh run view $RUN_ID --repo "$REPO" --log > /tmp/full-logs.txt 2>&1
+              grep -i -E "(error|fail|traceback|exception|exit code [^0]|vulnerability|vulnerabilities|CVE-|GHSA-|audit|found [0-9]+ known)" /tmp/full-logs.txt | tail -2000 > /tmp/failure-logs.txt || true
+              tail -1000 /tmp/full-logs.txt >> /tmp/failure-logs.txt
+              rm -f /tmp/full-logs.txt
+            fi
+          fi
+
+          # Final truncation to ensure we don't exceed size limits (keep last 5000 lines)
+          if [ -f /tmp/failure-logs.txt ] && [ -s /tmp/failure-logs.txt ]; then
+            tail -5000 /tmp/failure-logs.txt > /tmp/failure-logs-truncated.txt
+            mv /tmp/failure-logs-truncated.txt /tmp/failure-logs.txt
+            echo "Extracted $(wc -l < /tmp/failure-logs.txt) lines of failure logs"
           else
-            echo "No failed run found" > /tmp/failure-logs.txt
+            echo "No failure logs could be extracted" > /tmp/failure-logs.txt
           fi
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
@@ -145,9 +178,9 @@ jobs:
             FAILURE_LOGS=$(cat /tmp/failure-logs.txt)
           fi
 
-          # Run Python classifier
+          # Run Python classifier (using installed CLI entry point)
           cd ../bot-repo
-          CLASSIFICATION=$(python3 scripts/classify_pr_failure.py \
+          CLASSIFICATION=$(classify-pr-failure \
             --pr-info "$PR_INFO" \
             --failed-checks "$FAILED_CHECKS" \
             --failure-logs "$FAILURE_LOGS" \
