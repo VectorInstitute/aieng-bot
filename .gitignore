@@ -49,3 +49,4 @@ env/
 CLAUDE.md
 
 aieng_bot_maintain.egg-info/
+coverage.xml
