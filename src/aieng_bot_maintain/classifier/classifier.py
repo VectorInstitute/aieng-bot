@@ -92,10 +92,11 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         # Format failed checks
         checks_info = json.dumps([asdict(check) for check in failed_checks], indent=2)
 
-        # Build prompt (take LAST 5000 chars since grep extracts relevant errors)
-        # For grep-extracted logs, the most relevant info is usually at the end
+        # Build prompt (take FIRST 5000 chars since grep extracts relevant errors to the beginning)
+        # The workflow grep command extracts error lines first, then adds last 1000 lines
+        # So the actual error messages are at the BEGINNING of the extracted logs
         log_sample = (
-            failure_logs[-5000:].strip()
+            failure_logs[:5000].strip()
             if len(failure_logs) > 5000
             else failure_logs.strip()
         )
