@@ -546,3 +546,91 @@ jobs:
           gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-result.txt
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Wait for checks to complete
+        if: steps.apply-fix.outcome == 'success'
+        id: wait-checks
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+
+          echo "✓ Fix pushed successfully"
+          echo "Waiting for CI checks to complete before triggering auto-merge..."
+          echo ""
+
+          MAX_WAIT_MINUTES=15
+          CHECK_INTERVAL=30  # Check every 30 seconds
+          MAX_ATTEMPTS=$((MAX_WAIT_MINUTES * 60 / CHECK_INTERVAL))
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "⏳ Check attempt $ATTEMPT/$MAX_ATTEMPTS (waiting ${CHECK_INTERVAL}s between checks)..."
+
+            # Get check status
+            STATUS=$(gh pr view $PR_NUMBER --repo "$REPO" --json statusCheckRollup --jq '
+              .statusCheckRollup
+              | if . == null or length == 0 then
+                  "NO_CHECKS"
+                else
+                  if any(.conclusion == null or .conclusion == "" or .status == "IN_PROGRESS" or .status == "QUEUED" or .status == "PENDING") then
+                    "RUNNING"
+                  elif any(.conclusion == "FAILURE") then
+                    "FAILED"
+                  else
+                    "COMPLETED"
+                  end
+                end
+            ')
+
+            echo "  Status: $STATUS"
+
+            if [ "$STATUS" = "COMPLETED" ]; then
+              echo ""
+              echo "✅ All checks completed successfully!"
+              echo "checks_completed=true" >> $GITHUB_OUTPUT
+              break
+            elif [ "$STATUS" = "FAILED" ]; then
+              echo ""
+              echo "❌ Some checks failed. Will not trigger auto-merge."
+              echo "   The monitor workflow will re-attempt fixes on its next run."
+              echo "checks_completed=false" >> $GITHUB_OUTPUT
+              exit 0
+            elif [ "$STATUS" = "NO_CHECKS" ] && [ $ATTEMPT -gt 2 ]; then
+              # If no checks after 1 minute, something might be wrong
+              echo ""
+              echo "⚠️  No checks found on PR. This might indicate:"
+              echo "   - Repository has no CI configured"
+              echo "   - Checks haven't started yet (will retry)"
+              echo ""
+            fi
+
+            # If this is the last attempt, give up and let scheduled monitor handle it
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo ""
+              echo "⏱️  Timeout: Checks still running after ${MAX_WAIT_MINUTES} minutes"
+              echo "   Will not trigger auto-merge now."
+              echo "   The monitor workflow (runs every 6h) will merge when checks complete."
+              echo "checks_completed=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            sleep $CHECK_INTERVAL
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Trigger monitor workflow for auto-merge
+        if: steps.wait-checks.outputs.checks_completed == 'true'
+        run: |
+          echo "🚀 Triggering monitor workflow to auto-merge PR..."
+          echo ""
+
+          # Trigger the monitor workflow to check and merge the PR
+          gh workflow run monitor-org-bot-prs.yml \
+            --repo VectorInstitute/aieng-bot-maintain
+
+          echo "✓ Monitor workflow triggered"
+          echo "  It will check the PR and auto-merge if all conditions are met."
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
