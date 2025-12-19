@@ -2,7 +2,7 @@
  * Data fetching utilities for GCS storage
  */
 
-import type { AgentTrace, BotMetrics, BotMetricsHistory, TraceIndex, PRSummary } from './types'
+import type { AgentTrace, BotMetrics, BotMetricsHistory, BotActivityLog, PRSummary } from './types'
 
 const GCS_BUCKET_URL = 'https://storage.googleapis.com/bot-dashboard-vectorinstitute'
 
@@ -54,26 +54,26 @@ export async function fetchBotMetricsHistory(): Promise<BotMetricsHistory | null
 }
 
 /**
- * Fetch traces index for fast lookups
+ * Fetch bot activity log (unified view of auto-merges and bot fixes)
  */
-export async function fetchTraceIndex(): Promise<TraceIndex | null> {
+export async function fetchBotActivityLog(): Promise<BotActivityLog | null> {
   try {
     // Add cache-busting parameter to bypass CDN cache
     const cacheBuster = Date.now()
-    const response = await fetch(`${GCS_BUCKET_URL}/data/traces_index.json?t=${cacheBuster}`, {
+    const response = await fetch(`${GCS_BUCKET_URL}/data/bot_activity_log.json?t=${cacheBuster}`, {
       cache: 'no-store',
     })
 
     if (!response.ok) {
       if (response.status !== 404) {
-        console.error('Failed to fetch trace index:', response.statusText)
+        console.error('Failed to fetch bot activity log:', response.statusText)
       }
       return null
     }
 
     return await response.json()
   } catch (error) {
-    console.error('Error fetching trace index:', error)
+    console.error('Error fetching bot activity log:', error)
     return null
   }
 }
@@ -106,24 +106,21 @@ export async function fetchAgentTrace(tracePath: string): Promise<AgentTrace | n
  */
 export async function fetchPRTrace(repo: string, prNumber: number): Promise<AgentTrace | null> {
   try {
-    // First try to fetch the trace index
-    const index = await fetchTraceIndex()
+    // Fetch the activity log to find the trace path
+    const activityLog = await fetchBotActivityLog()
 
-    if (index) {
-      // Find matching trace in index
-      const traceEntry = index.traces
-        .filter(t => t.repo === repo && t.pr_number === prNumber)
+    if (activityLog) {
+      // Find matching activity entry
+      const activity = activityLog.activities
+        .filter(a => a.repo === repo && a.pr_number === prNumber && a.type === 'bot_fix')
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
 
-      if (traceEntry) {
-        return await fetchAgentTrace(traceEntry.trace_path)
+      if (activity && activity.trace_path) {
+        return await fetchAgentTrace(activity.trace_path)
       }
     }
 
-    // Fallback: Try to construct likely path
-    // Format: traces/YYYY/MM/DD/repo-name-pr-number-runid.json
-    // We don't know the run ID, so this is a best-effort attempt
-    console.warn('Trace index not found, cannot locate PR trace without index')
+    console.warn('Activity log not found or PR has no trace (may be auto-merge)')
     return null
   } catch (error) {
     console.error('Error fetching PR trace:', error)
@@ -132,30 +129,37 @@ export async function fetchPRTrace(repo: string, prNumber: number): Promise<Agen
 }
 
 /**
- * Convert trace index to PR summaries for overview table
+ * Convert bot activity log to PR summaries for overview table
  */
-export function traceIndexToPRSummaries(index: TraceIndex): PRSummary[] {
-  return index.traces.map(entry => ({
-    repo: entry.repo,
-    pr_number: entry.pr_number,
-    title: '', // Will be filled when trace is loaded
-    author: '', // Will be filled when trace is loaded
-    failure_type: '', // Will be filled when trace is loaded
-    status: entry.status || 'IN_PROGRESS',
-    fix_time_hours: null, // Will be calculated when trace is loaded
-    timestamp: entry.timestamp,
-    trace_path: entry.trace_path,
-    pr_url: `https://github.com/${entry.repo}/pull/${entry.pr_number}`,
-    workflow_run_url: `https://github.com/VectorInstitute/aieng-bot-maintain/actions/runs/${entry.workflow_run_id}`,
+export function activityLogToPRSummaries(log: BotActivityLog): PRSummary[] {
+  return log.activities.map(activity => ({
+    repo: activity.repo,
+    pr_number: activity.pr_number,
+    title: activity.pr_title,
+    author: activity.pr_author,
+    failure_type: activity.failure_type || (activity.type === 'auto_merge' ? 'auto_merge' : 'unknown'),
+    status: activity.status,
+    fix_time_hours: activity.fix_time_hours || null,
+    timestamp: activity.timestamp,
+    trace_path: activity.trace_path || '',
+    pr_url: activity.pr_url,
+    workflow_run_url: activity.github_run_url,
   }))
 }
 
 /**
- * Enrich PR summaries with trace data
+ * Enrich PR summaries with trace data (only for bot_fix entries that have traces)
+ * Auto-merge entries already have all data from activity log
  */
 export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSummary[]> {
   const enriched = await Promise.all(
     summaries.map(async (summary) => {
+      // Skip auto-merges and entries without trace paths
+      if (summary.failure_type === 'auto_merge' || !summary.trace_path) {
+        return summary
+      }
+
+      // Fetch trace for bot_fix entries to get detailed execution info
       const trace = await fetchAgentTrace(summary.trace_path)
 
       if (!trace) {
@@ -166,17 +170,10 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
         ? trace.execution.duration_seconds / 3600
         : null
 
-      // Handle both auto-merge and agent fix records
-      const failureType = trace.metadata.failure?.type ||
-        (trace.metadata.merge_type === 'auto_merge' ? 'auto_merge' : 'unknown')
-
       return {
         ...summary,
-        title: trace.metadata.pr.title,
-        author: trace.metadata.pr.author,
-        failure_type: failureType,
         status: trace.result.status,
-        fix_time_hours: duration,
+        fix_time_hours: duration || summary.fix_time_hours,
       }
     })
   )

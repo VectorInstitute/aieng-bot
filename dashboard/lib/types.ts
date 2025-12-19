@@ -77,24 +77,31 @@ export interface BotMetrics {
   }>
 }
 
-export interface BotMetricsHistory {
-  snapshots: BotMetrics[]
+// Bot activity log types (unified view of auto-merges and bot fixes)
+export interface BotActivity {
+  type: 'auto_merge' | 'bot_fix'
+  repo: string
+  pr_number: number
+  pr_title: string
+  pr_author: string
+  pr_url: string
+  timestamp: string
+  workflow_run_id: string
+  github_run_url: string
+  status: 'SUCCESS' | 'FAILED' | 'PARTIAL'
+  failure_type?: string
+  trace_path?: string
+  fix_time_hours?: number
+}
+
+export interface BotActivityLog {
+  activities: BotActivity[]
   last_updated: string | null
 }
 
-// Trace index for fast lookups
-export interface TraceIndexEntry {
-  repo: string
-  pr_number: number
-  trace_path: string
-  workflow_run_id: string
-  timestamp: string
-  status?: 'SUCCESS' | 'FAILED' | 'PARTIAL'
-}
-
-export interface TraceIndex {
-  traces: TraceIndexEntry[]
-  last_updated: string
+export interface BotMetricsHistory {
+  snapshots: BotMetrics[]
+  last_updated: string | null
 }
 
 // PR summary for overview table

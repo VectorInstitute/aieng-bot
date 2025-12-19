@@ -68,6 +68,12 @@ export const FAILURE_TYPES = {
     text: 'text-gray-700 dark:text-gray-400',
     color: '#6b7280',
   },
+  auto_merge: {
+    label: 'Auto-Merge',
+    bg: 'bg-teal-100 dark:bg-teal-900/20',
+    text: 'text-teal-700 dark:text-teal-400',
+    color: '#14b8a6',
+  },
 } as const
 
 // Vector Institute brand colors

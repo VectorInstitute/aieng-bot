@@ -450,6 +450,59 @@ jobs:
             }
 
             echo "✓ Trace uploaded successfully and index updated"
+
+            # Also record to activity log for unified dashboard view
+            echo "📊 Recording bot fix activity to activity log..."
+
+            # Extract key info from trace
+            TRACE_STATUS=$(jq -r '.result.status' /tmp/agent-execution-trace.json)
+            FAILURE_TYPE=$(jq -r '.metadata.failure.type' /tmp/agent-execution-trace.json)
+            FIX_TIME=$(jq -r '.execution.duration_seconds / 3600' /tmp/agent-execution-trace.json)
+
+            # Create activity entry
+            ACTIVITY_JSON=$(cat <<ACTIVITY_EOF
+            {
+              "type": "bot_fix",
+              "repo": "${{ github.event.inputs.target_repo }}",
+              "pr_number": ${{ github.event.inputs.pr_number }},
+              "pr_title": "${{ steps.pr-details.outputs.title }}",
+              "pr_author": "${{ steps.pr-details.outputs.author }}",
+              "pr_url": "https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}",
+              "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+              "workflow_run_id": "${{ github.run_id }}",
+              "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "status": "$TRACE_STATUS",
+              "failure_type": "$FAILURE_TYPE",
+              "trace_path": "$DEST_PATH",
+              "fix_time_hours": $FIX_TIME
+            }
+          ACTIVITY_EOF
+            )
+
+            # Download existing activity log or create new one
+            ACTIVITY_LOG="/tmp/bot_activity_log.json"
+            if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/bot_activity_log.json "$ACTIVITY_LOG" 2>/dev/null; then
+              echo "✓ Downloaded existing activity log"
+            else
+              echo '{"activities": [], "last_updated": null}' > "$ACTIVITY_LOG"
+              echo "✓ Created new activity log"
+            fi
+
+            # Append new activity and update timestamp
+            TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            jq --argjson new_activity "$ACTIVITY_JSON" \
+               --arg timestamp "$TIMESTAMP" \
+               '.activities += [$new_activity] | .last_updated = $timestamp' \
+               "$ACTIVITY_LOG" > /tmp/updated_activity_log.json
+
+            # Upload back to GCS
+            gcloud storage cp /tmp/updated_activity_log.json gs://bot-dashboard-vectorinstitute/data/bot_activity_log.json \
+              --content-type=application/json \
+              --cache-control="no-cache, no-store, must-revalidate" || {
+              echo " Failed to update activity log"
+            }
+
+            echo "✓ Bot fix activity recorded to GCS"
           else
             echo " No trace file found at /tmp/agent-execution-trace.json"
           fi

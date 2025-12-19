@@ -306,123 +306,70 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true
 
-      - name: Setup Google Cloud SDK
-        if: steps.check-order.outputs.is_oldest == 'true' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          version: 'latest'
 
       - name: Authenticate to Google Cloud
-        if: steps.check-order.outputs.is_oldest == 'true' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
+        if: steps.auto-merge.outcome == 'success'
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
+      - name: Set up Cloud SDK
+        if: steps.auto-merge.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v3
+
       - name: Record auto-merge to GCS
-        if: steps.check-order.outputs.is_oldest == 'true' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
+        if: steps.auto-merge.outcome == 'success'
         run: |
           REPO="${{ matrix.pr.repo }}"
           PR_NUMBER="${{ matrix.pr.number }}"
+          PR_TITLE="${{ matrix.pr.title }}"
+          PR_URL="${{ matrix.pr.url }}"
+          WORKFLOW_RUN_ID="${{ github.run_id }}"
 
-          echo "📝 Recording auto-merge to GCS for $REPO#$PR_NUMBER"
+          # Get PR author
+          PR_AUTHOR=$(gh pr view $PR_NUMBER --repo "$REPO" --json author --jq '.author.login')
 
-          # Generate date-based path
-          DATE_PATH=$(date -u +"%Y/%m/%d")
+          echo "📊 Recording auto-merge activity to GCS..."
 
-          # Generate filename
-          REPO_NAME=$(echo "$REPO" | sed 's/\//-/g')
-          RECORD_FILE="$REPO_NAME-pr-$PR_NUMBER-automerge-${{ github.run_id }}.json"
-
-          DEST_PATH="traces/$DATE_PATH/$RECORD_FILE"
-
-          # Get PR details
-          PR_DETAILS=$(gh pr view $PR_NUMBER --repo "$REPO" --json title,author,mergedAt,url)
-          PR_TITLE=$(echo "$PR_DETAILS" | jq -r '.title')
-          PR_AUTHOR=$(echo "$PR_DETAILS" | jq -r '.author.login')
-          PR_URL=$(echo "$PR_DETAILS" | jq -r '.url')
-
-          # Create auto-merge record
-          cat > /tmp/automerge-record.json << EOF
+          # Create activity entry
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          ACTIVITY_JSON=$(cat <<EOF
           {
-            "metadata": {
-              "pr": {
-                "repo": "$REPO",
-                "number": $PR_NUMBER,
-                "title": "$PR_TITLE",
-                "url": "$PR_URL",
-                "author": "$PR_AUTHOR"
-              },
-              "merge_type": "auto_merge",
-              "workflow_run_id": "${{ github.run_id }}",
-              "workflow_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            },
-            "execution": {
-              "start_time": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-              "duration_seconds": 0,
-              "model": null
-            },
-            "events": [
-              {
-                "seq": 1,
-                "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-                "type": "INFO",
-                "content": "All checks passed. PR auto-merged without requiring bot fixes."
-              }
-            ],
-            "result": {
-              "status": "SUCCESS",
-              "changes_made": 0,
-              "files_modified": [],
-              "commit_sha": null,
-              "commit_url": null,
-              "merge_method": "auto_merge"
-            }
-          }
-          EOF
-
-          # Upload to GCS
-          gcloud storage cp /tmp/automerge-record.json \
-            "gs://bot-dashboard-vectorinstitute/$DEST_PATH" \
-            --content-type="application/json" \
-            --cache-control="no-cache, no-store, must-revalidate" || {
-            echo " Failed to upload auto-merge record to GCS"
-          }
-
-          # Update traces index
-          if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/traces_index.json /tmp/traces_index.json 2>/dev/null; then
-            echo "Downloaded existing traces index"
-          else
-            echo '{"traces": [], "last_updated": ""}' > /tmp/traces_index.json
-            echo "Created new traces index"
-          fi
-
-          # Create index entry
-          cat > /tmp/trace-index-entry.json << EOF
-          {
+            "type": "auto_merge",
             "repo": "$REPO",
             "pr_number": $PR_NUMBER,
-            "trace_path": "$DEST_PATH",
-            "workflow_run_id": "${{ github.run_id }}",
-            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "merge_type": "auto_merge"
+            "pr_title": "$PR_TITLE",
+            "pr_author": "$PR_AUTHOR",
+            "pr_url": "$PR_URL",
+            "timestamp": "$TIMESTAMP",
+            "workflow_run_id": "$WORKFLOW_RUN_ID",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "status": "SUCCESS"
           }
           EOF
+          )
 
-          # Append to index
-          jq --slurpfile entry /tmp/trace-index-entry.json \
-            '.traces += $entry | .last_updated = "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"' \
-            /tmp/traces_index.json > /tmp/traces_index_updated.json
+          # Download existing activity log or create new one
+          ACTIVITY_LOG="/tmp/bot_activity_log.json"
+          if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/bot_activity_log.json "$ACTIVITY_LOG" 2>/dev/null; then
+            echo "✓ Downloaded existing activity log"
+          else
+            echo '{"activities": [], "last_updated": null}' > "$ACTIVITY_LOG"
+            echo "✓ Created new activity log"
+          fi
 
-          # Upload updated index
-          gcloud storage cp /tmp/traces_index_updated.json \
-            gs://bot-dashboard-vectorinstitute/data/traces_index.json \
-            --content-type="application/json" \
-            --cache-control="no-cache, no-store, must-revalidate" || {
-            echo " Failed to update traces index"
-          }
+          # Append new activity and update timestamp
+          jq --argjson new_activity "$ACTIVITY_JSON" \
+             --arg timestamp "$TIMESTAMP" \
+             '.activities += [$new_activity] | .last_updated = $timestamp' \
+             "$ACTIVITY_LOG" > /tmp/updated_log.json
 
-          echo " Auto-merge recorded to GCS: $DEST_PATH"
+          # Upload back to GCS
+          gcloud storage cp /tmp/updated_log.json gs://bot-dashboard-vectorinstitute/data/bot_activity_log.json \
+            --content-type=application/json
+
+          echo "✓ Auto-merge activity recorded to GCS"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: true

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { isAuthenticated, getCurrentUser } from '@/lib/session'
-import { fetchTraceIndex, traceIndexToPRSummaries, enrichPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
+import { fetchBotActivityLog, activityLogToPRSummaries, enrichPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
 import OverviewTable from '@/components/overview-table'
 import PRVelocityChart from '@/components/pr-velocity-chart'
 import PerformanceMetrics from '@/components/performance-metrics'
@@ -19,27 +19,29 @@ export default async function DashboardPage() {
 
   const user = await getCurrentUser()
 
-  // Fetch trace data directly from GCS and compute metrics
+  // Fetch activity log from GCS (includes both auto-merges and bot fixes)
   let prSummaries: PRSummary[] = []
   let metrics: BotMetrics | null = null
 
   try {
-    const index = await fetchTraceIndex()
-    if (index && index.traces.length > 0) {
-      const summaries = traceIndexToPRSummaries(index)
-      // Limit to most recent 50 PRs for performance
+    const activityLog = await fetchBotActivityLog()
+    if (activityLog && activityLog.activities.length > 0) {
+      // Convert activities to PR summaries
+      const summaries = activityLogToPRSummaries(activityLog)
+
+      // Limit to most recent 100 activities for performance
       const recentSummaries = summaries
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 50)
+        .slice(0, 100)
 
-      // Enrich with trace data
+      // Enrich with trace data (only for bot_fix entries, auto_merge already has all data)
       prSummaries = await enrichPRSummaries(recentSummaries)
 
-      // Compute metrics from traces
+      // Compute metrics from all activities (includes auto-merges)
       metrics = computeMetricsFromPRSummaries(prSummaries)
     }
   } catch (error) {
-    console.error('Error fetching trace data:', error)
+    console.error('Error fetching activity data:', error)
   }
 
   // Show empty state if no data

@@ -15,6 +15,9 @@ interface OverviewTableProps {
 type SortField = 'timestamp' | 'repo' | 'status' | 'failure_type' | 'fix_time_hours'
 
 export default function OverviewTable({ prSummaries }: OverviewTableProps) {
+  // Filter out auto-merge entries since they don't involve agent fixes
+  const botFixesOnly = prSummaries.filter(pr => pr.failure_type !== 'auto_merge')
+
   const {
     data: processedData,
     sortField,
@@ -27,7 +30,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
     setFilter,
     totalCount,
     filteredCount,
-  } = useTableData<PRSummary>(prSummaries, {
+  } = useTableData<PRSummary>(botFixesOnly, {
     initialSortField: 'timestamp',
     initialSortDirection: 'desc',
     searchFields: ['repo', 'title', 'author'],
