@@ -47,3 +47,5 @@ env/
 
 # Project-specific
 CLAUDE.md
+
+aieng_bot_maintain.egg-info/

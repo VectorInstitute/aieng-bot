@@ -5,12 +5,14 @@ description = "Vector Institute AI Engineering Bot for Maintenance Tasks"
 readme = "README.md"
 authors = [ {name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
 license = "Apache-2.0"
-repository = "https://github.com/VectorInstitute/aieng-bot-maintain"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.42.0",
     "pyyaml>=6.0.2",
 ]
+
+[project.urls]
+Repository = "https://github.com/VectorInstitute/aieng-bot-maintain"
 
 [dependency-groups]
 dev = [
