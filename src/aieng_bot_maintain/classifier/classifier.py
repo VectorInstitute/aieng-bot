@@ -2,11 +2,12 @@
 
 import json
 import os
+import re
 from dataclasses import asdict
 
 import anthropic
 
-from ..utils.logging import log_error, log_warning
+from ..utils.logging import log_error, log_info, log_warning
 from .models import (
     CheckFailure,
     ClassificationResult,
@@ -57,6 +58,117 @@ class PRFailureClassifier:
 
         self.client = anthropic.Anthropic(api_key=self.api_key)
 
+    def _extract_relevant_logs(self, failure_logs: str, max_chars: int = 5000) -> str:
+        """Extract the most relevant parts of failure logs.
+
+        Prioritizes:
+        1. Security vulnerabilities (GHSA-, CVE-, vulnerability tables)
+        2. Clear error patterns (exceptions, assertions, exit codes)
+        3. Intelligent sampling if no clear patterns found
+
+        Parameters
+        ----------
+        failure_logs : str
+            Full failure logs.
+        max_chars : int, optional
+            Maximum characters to return, by default 5000.
+
+        Returns
+        -------
+        str
+            Extracted relevant log section.
+
+        """
+        if len(failure_logs) <= max_chars:
+            return failure_logs.strip()
+
+        lines = failure_logs.split("\n")
+
+        # Priority 1: Security vulnerabilities (pip-audit format, CVEs, GHSAs)
+        security_pattern = re.compile(
+            r"(GHSA-|CVE-|vulnerability|vulnerabilities|\| [0-9.]+.*?\|.*?GHSA)",
+            re.IGNORECASE,
+        )
+        security_lines = [
+            (i, line)
+            for i, line in enumerate(lines)
+            if security_pattern.search(line)
+        ]
+
+        if security_lines:
+            # Found security-related content - extract with context
+            log_info(f"Found {len(security_lines)} security-related log lines")
+            return self._extract_with_context(
+                lines, [i for i, _ in security_lines], max_chars
+            )
+
+        # Priority 2: Clear error patterns
+        error_pattern = re.compile(
+            r"(##\[error\]|Error:|ERROR:|Exception:|Traceback|AssertionError|exit code [1-9])",
+            re.IGNORECASE,
+        )
+        error_lines = [
+            (i, line) for i, line in enumerate(lines) if error_pattern.search(line)
+        ]
+
+        if error_lines:
+            log_info(f"Found {len(error_lines)} error-related log lines")
+            return self._extract_with_context(
+                lines, [i for i, _ in error_lines], max_chars
+            )
+
+        # Priority 3: Sample from middle (where actual job execution usually is)
+        # Skip first 20% (setup) and last 20% (cleanup), focus on middle 60%
+        start_idx = len(lines) // 5
+        end_idx = (len(lines) * 4) // 5
+        middle_section = "\n".join(lines[start_idx:end_idx])
+
+        if len(middle_section) <= max_chars:
+            log_info("Using middle section of logs")
+            return middle_section.strip()
+
+        # Take from middle section
+        return middle_section[:max_chars].strip()
+
+    def _extract_with_context(
+        self, lines: list[str], relevant_indices: list[int], max_chars: int
+    ) -> str:
+        """Extract relevant lines with surrounding context.
+
+        Parameters
+        ----------
+        lines : list[str]
+            All log lines.
+        relevant_indices : list[int]
+            Indices of relevant lines.
+        max_chars : int
+            Maximum characters to return.
+
+        Returns
+        -------
+        str
+            Extracted lines with context.
+
+        """
+        # Get relevant lines with 5 lines of context before and after
+        context_lines = set()
+        for idx in relevant_indices:
+            for i in range(max(0, idx - 5), min(len(lines), idx + 6)):
+                context_lines.add(i)
+
+        # Sort and extract
+        selected_lines = [lines[i] for i in sorted(context_lines)]
+        result = "\n".join(selected_lines)
+
+        if len(result) <= max_chars:
+            return result.strip()
+
+        # If still too long, prioritize the relevant lines themselves
+        priority_lines = [lines[i] for i in sorted(relevant_indices)]
+        result = "\n".join(priority_lines)
+
+        return result[:max_chars].strip()
+
     def classify(
         self,
         pr_context: PRContext,
@@ -92,14 +204,8 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         # Format failed checks
         checks_info = json.dumps([asdict(check) for check in failed_checks], indent=2)
 
-        # Build prompt (take FIRST 5000 chars since grep extracts relevant errors to the beginning)
-        # The workflow grep command extracts error lines first, then adds last 1000 lines
-        # So the actual error messages are at the BEGINNING of the extracted logs
-        log_sample = (
-            failure_logs[:5000].strip()
-            if len(failure_logs) > 5000
-            else failure_logs.strip()
-        )
+        # Smart log sampling: prioritize security-specific patterns, then sample intelligently
+        log_sample = self._extract_relevant_logs(failure_logs)
 
         prompt = CLASSIFICATION_PROMPT.format(
             pr_context=pr_info.strip(),
