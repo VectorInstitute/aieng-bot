@@ -1,9 +1,11 @@
 """Logging utilities using Rich console."""
 
+import sys
+
 from rich.console import Console
 
-# Global console instance
-console = Console()
+# Global console instance - write to stderr to avoid interfering with stdout
+console = Console(stderr=True)
 
 
 def get_console() -> Console:
