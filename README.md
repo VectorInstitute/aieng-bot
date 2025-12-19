@@ -1,5 +1,14 @@
 # aieng-bot-maintain
 
+----------------------------------------------------------------------------------------
+
+[![code checks](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/code_checks.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/code_checks.yml)
+[![unit tests](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/unit_tests.yml)
+[![docs](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/docs.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/docs.yml)
+[![codecov](https://codecov.io/github/VectorInstitute/aieng-bot-maintain/graph/badge.svg?token=83MYFZ3UPA)](https://codecov.io/github/VectorInstitute/aieng-bot-maintain)
+![GitHub License](https://img.shields.io/github/license/VectorInstitute/aieng-bot-maintain)
+
+
 Centralized maintenance bot that automatically manages bot PRs (Dependabot and pre-commit-ci) across all Vector Institute repositories from a single location.
 
 ## Features
