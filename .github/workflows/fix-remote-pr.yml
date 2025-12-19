@@ -172,18 +172,22 @@ jobs:
             --arg head_ref "${{ steps.pr-details.outputs.head-ref }}" \
             '{repo: $repo, pr_number: $pr_number, pr_title: $pr_title, pr_author: $pr_author, base_ref: $base_ref, head_ref: $head_ref}')
 
-          # Get failure logs
-          FAILURE_LOGS=""
-          if [ -f /tmp/failure-logs.txt ]; then
-            FAILURE_LOGS=$(cat /tmp/failure-logs.txt)
+          # Check if failure logs file exists
+          if [ ! -f /tmp/failure-logs.txt ]; then
+            echo "⚠️  Warning: Failure logs file not found at /tmp/failure-logs.txt"
+            echo "No failure logs could be extracted" > /tmp/failure-logs.txt
           fi
 
+          echo "Failure logs file size: $(wc -c < /tmp/failure-logs.txt) bytes"
+          echo "Failure logs file lines: $(wc -l < /tmp/failure-logs.txt) lines"
+
           # Run Python classifier (using installed CLI entry point)
+          # Pass file path instead of content to avoid bash variable size limits
           cd ../bot-repo
           CLASSIFICATION=$(classify-pr-failure \
             --pr-info "$PR_INFO" \
             --failed-checks "$FAILED_CHECKS" \
-            --failure-logs "$FAILURE_LOGS" \
+            --failure-logs-file /tmp/failure-logs.txt \
             --output-format github)
 
           # Parse and output results

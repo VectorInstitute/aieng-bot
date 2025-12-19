@@ -110,6 +110,7 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         # Haiku 4.5: $1/$5 per million tokens (67% cheaper than Sonnet)
         # Matches Sonnet 4 performance on coding tasks
         try:
+            log_warning(f"Calling Claude API with prompt length: {len(prompt)} chars")
             response = self.client.messages.create(
                 model="claude-haiku-4-5",  # Haiku 4.5: fast, cheap, accurate
                 max_tokens=512,  # Reduced - only need JSON response
@@ -121,6 +122,7 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
             first_block = response.content[0]
             if hasattr(first_block, "text"):
                 response_text = first_block.text.strip()
+                log_warning(f"Claude response: {response_text[:500]}")
             else:
                 raise ValueError(
                     f"Expected TextBlock in response, got {type(first_block).__name__}"
