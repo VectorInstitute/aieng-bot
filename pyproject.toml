@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aieng-bot-maintain"
-version = "0.1.0"
+version = "0.2.0"
 description = "Vector Institute AI Engineering Bot for Maintenance Tasks"
 readme = "README.md"
 authors = [{name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
@@ -35,6 +35,7 @@ Changelog = "https://github.com/VectorInstitute/aieng-bot-maintain/releases"
 [project.scripts]
 classify-pr-failure = "aieng_bot_maintain.cli:classify_pr_failure_cli"
 collect-bot-metrics = "aieng_bot_maintain.cli:collect_metrics_cli"
+process-repo-queue = "aieng_bot_maintain.cli:process_repo_queue_cli"
 
 [tool.hatchling.build.targets.wheel]
 packages = ["src/aieng_bot_maintain"]

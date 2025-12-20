@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       prs: ${{ steps.find-prs.outputs.prs }}
+      repos: ${{ steps.find-prs.outputs.repos }}
 
     steps:
       - name: Checkout bot repository
@@ -79,18 +80,23 @@ jobs:
           echo "Found $(echo "$PRS_JSON" | jq 'length') bot PRs"
           echo "$PRS_JSON" | jq -c '.'
 
+          # Extract unique repos for matrix
+          REPOS_JSON=$(echo "$PRS_JSON" | jq -c '[.[].repo] | unique')
+          echo "Unique repos: $(echo "$REPOS_JSON" | jq 'length')"
+
           # Save to output (handle GitHub Actions output size limits)
           echo "prs=$(echo "$PRS_JSON" | jq -c '.')" >> $GITHUB_OUTPUT
+          echo "repos=$REPOS_JSON" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
-  process-passing-prs:
+  process-repo-queues:
     runs-on: ubuntu-latest
     needs: discover-bot-prs
-    if: needs.discover-bot-prs.outputs.prs != '[]'
+    if: needs.discover-bot-prs.outputs.repos != '[]'
     strategy:
       matrix:
-        pr: ${{ fromJson(needs.discover-bot-prs.outputs.prs) }}
+        repo: ${{ fromJson(needs.discover-bot-prs.outputs.repos) }}
       max-parallel: 5
       fail-fast: false
 
@@ -98,331 +104,39 @@ jobs:
       - name: Checkout bot repository
         uses: actions/checkout@v6
 
-      - name: Check if this is the oldest PR from this repo
-        id: check-order
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
         run: |
-          CURRENT_REPO="${{ matrix.pr.repo }}"
-          CURRENT_PR="${{ matrix.pr.number }}"
-
-          # Get all PRs from the matrix for the same repo
-          ALL_PRS='${{ toJson(fromJson(needs.discover-bot-prs.outputs.prs)) }}'
-
-          # Find all PRs from the same repo
-          SAME_REPO_PRS=$(echo "$ALL_PRS" | jq -r --arg repo "$CURRENT_REPO" '
-            map(select(.repo == $repo)) | map(.number) | sort | .[]
-          ')
-
-          # Get the oldest (lowest number) PR
-          OLDEST_PR=$(echo "$SAME_REPO_PRS" | head -1)
-
-          # Count how many PRs from this repo
-          PR_COUNT=$(echo "$SAME_REPO_PRS" | wc -l | tr -d ' ')
-
-          echo "Repo: $CURRENT_REPO has $PR_COUNT PR(s)"
-          echo "Current PR: #$CURRENT_PR"
-          echo "Oldest PR: #$OLDEST_PR"
-          echo "other_prs=$(echo "$SAME_REPO_PRS" | grep -v "^$CURRENT_PR$" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
-
-          if [ "$CURRENT_PR" = "$OLDEST_PR" ]; then
-            echo "is_oldest=true" >> $GITHUB_OUTPUT
-            echo " This is the oldest PR from $CURRENT_REPO - will process"
-          else
-            echo "is_oldest=false" >> $GITHUB_OUTPUT
-            echo "  Skipping - PR #$OLDEST_PR should be merged first"
-          fi
-        continue-on-error: true
-
-      - name: Analyze PR status
-        if: steps.check-order.outputs.is_oldest == 'true'
-        id: analyze
-        run: |
-          REPO="${{ matrix.pr.repo }}"
-          PR_NUMBER="${{ matrix.pr.number }}"
-
-          echo "Analyzing $REPO#$PR_NUMBER"
-
-          # Initial delay to allow GitHub to compute merge status after checks complete
-          echo " Waiting 15 seconds for GitHub to compute merge status..."
-          sleep 15
-
-          # Retry logic for mergeable status (GitHub sometimes needs time to compute)
-          MAX_RETRIES=5
-          RETRY_DELAY=10
-          ATTEMPT=1
-
-          while [ $ATTEMPT -le $MAX_RETRIES ]; do
-            echo " Attempt $ATTEMPT/$MAX_RETRIES: Checking PR status..."
-
-            # Get detailed status
-            STATUS_JSON=$(gh pr view $PR_NUMBER --repo "$REPO" --json statusCheckRollup,reviewDecision,mergeable)
-
-            # Check if all checks passed
-            ALL_PASSED=$(echo "$STATUS_JSON" | jq -r '
-              .statusCheckRollup
-              | if . == null then false
-                else map(select(.name != "Monitor Organization Bot PRs"))
-                | all(.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED" or .conclusion == null)
-                end
-            ')
-
-            # Check if any checks failed
-            HAS_FAILURES=$(echo "$STATUS_JSON" | jq -r '
-              .statusCheckRollup
-              | if . == null then false
-                else any(.conclusion == "FAILURE")
-                end
-            ')
-
-            # Check if mergeable
-            MERGEABLE=$(echo "$STATUS_JSON" | jq -r '.mergeable')
-
-            echo "Status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
-
-            # If mergeable status is computed (not UNKNOWN), we're done
-            if [ "$MERGEABLE" != "UNKNOWN" ]; then
-              echo " Mergeable status determined: $MERGEABLE"
-              break
-            fi
-
-            # If this was the last attempt, warn but continue
-            if [ $ATTEMPT -eq $MAX_RETRIES ]; then
-              echo "  Mergeable status still UNKNOWN after $MAX_RETRIES attempts. Proceeding anyway."
-              break
-            fi
-
-            # Wait before retry with exponential backoff
-            WAIT_TIME=$((RETRY_DELAY * ATTEMPT))
-            echo " Mergeable status is UNKNOWN. Waiting ${WAIT_TIME}s before retry..."
-            sleep $WAIT_TIME
-
-            ATTEMPT=$((ATTEMPT + 1))
-          done
-
-          # Set outputs
-          echo "all-passed=$ALL_PASSED" >> $GITHUB_OUTPUT
-          echo "has-failures=$HAS_FAILURES" >> $GITHUB_OUTPUT
-          echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
-
-          echo " Final status: all_passed=$ALL_PASSED, has_failures=$HAS_FAILURES, mergeable=$MERGEABLE"
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
-
-      - name: Auto-merge passing PRs
-        if: steps.check-order.outputs.is_oldest == 'true' && steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'MERGEABLE'
-        id: auto-merge
-        run: |
-          REPO="${{ matrix.pr.repo }}"
-          PR_NUMBER="${{ matrix.pr.number }}"
-
-          echo " All checks passed for $REPO#$PR_NUMBER - proceeding with auto-merge"
-
-          # Check if already approved
-          REVIEW_DECISION=$(gh pr view $PR_NUMBER --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
-
-          if [ "$REVIEW_DECISION" != "APPROVED" ]; then
-            # Approve the PR
-            cat > /tmp/approve-msg.txt <<'EOF'
-           All checks passed. Auto-approving bot PR.
-
-           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-          EOF
-            gh pr review $PR_NUMBER --repo "$REPO" --approve --body-file /tmp/approve-msg.txt
-          fi
-
-          # Enable auto-merge
-          gh pr merge $PR_NUMBER --repo "$REPO" --auto --squash || {
-            echo "  Auto-merge failed, may already be enabled or blocked by branch protection"
-          }
-
-          # Comment on success
-          cat > /tmp/success-msg.txt <<'EOF'
-           All checks passed! This PR will be automatically merged.
-
-           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-          EOF
-          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
-
-          echo " Auto-merge configured for $REPO#$PR_NUMBER"
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
-        continue-on-error: true
-
-      - name: Attempt merge despite UNKNOWN status (fallback)
-        if: steps.check-order.outputs.is_oldest == 'true' && steps.analyze.outputs.all-passed == 'true' && steps.analyze.outputs.mergeable == 'UNKNOWN' && steps.analyze.outputs.has-failures == 'false'
-        run: |
-          REPO="${{ matrix.pr.repo }}"
-          PR_NUMBER="${{ matrix.pr.number }}"
-
-          echo "  Mergeable status is UNKNOWN but all checks passed for $REPO#$PR_NUMBER"
-          echo " Attempting auto-merge anyway (will fail gracefully if conflicts exist)..."
-
-          # Check if already approved
-          REVIEW_DECISION=$(gh pr view $PR_NUMBER --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
-
-          if [ "$REVIEW_DECISION" != "APPROVED" ]; then
-            # Approve the PR
-            cat > /tmp/approve-msg.txt <<'EOF'
-           All checks passed. Auto-approving bot PR.
-
-          Note: Mergeable status was UNKNOWN, but attempting merge anyway.
-
-           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-          EOF
-            gh pr review $PR_NUMBER --repo "$REPO" --approve --body-file /tmp/approve-msg.txt
-          fi
-
-          # Try to enable auto-merge (will fail if there are actual conflicts)
-          if gh pr merge $PR_NUMBER --repo "$REPO" --auto --squash 2>&1; then
-            echo " Auto-merge configured successfully despite UNKNOWN status"
-
-            # Comment on success
-            cat > /tmp/success-msg.txt <<'EOF'
-           All checks passed! This PR will be automatically merged.
-
-          Note: GitHub's mergeable status was UNKNOWN, but no conflicts were detected.
-
-           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-          EOF
-            gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/success-msg.txt
-          else
-            echo "  Auto-merge failed - there may be merge conflicts or branch protection rules"
-
-            # Comment about the issue
-            cat > /tmp/warning-msg.txt <<'EOF'
-            All checks passed, but auto-merge could not be enabled.
-
-          This might be due to:
-          - Merge conflicts that need manual resolution
-          - Branch protection rules requiring additional reviews
-          - GitHub still computing mergeable status
-
-          Please check the PR and merge manually if appropriate.
-
-           *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
-          EOF
-            gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/warning-msg.txt
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
-        continue-on-error: true
-
+          pip install -e .
 
       - name: Authenticate to Google Cloud
-        if: steps.auto-merge.outcome == 'success'
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        if: steps.auto-merge.outcome == 'success'
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Record auto-merge to GCS
-        if: steps.auto-merge.outcome == 'success'
+      - name: Process repository queue
         run: |
-          REPO="${{ matrix.pr.repo }}"
-          PR_NUMBER="${{ matrix.pr.number }}"
-          PR_TITLE="${{ matrix.pr.title }}"
-          PR_URL="${{ matrix.pr.url }}"
-          WORKFLOW_RUN_ID="${{ github.run_id }}"
-
-          # Get PR author
-          PR_AUTHOR=$(gh pr view $PR_NUMBER --repo "$REPO" --json author --jq '.author.login')
-
-          echo "📊 Recording auto-merge activity to GCS..."
-
-          # Create activity entry
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          ACTIVITY_JSON=$(cat <<EOF
-          {
-            "type": "auto_merge",
-            "repo": "$REPO",
-            "pr_number": $PR_NUMBER,
-            "pr_title": "$PR_TITLE",
-            "pr_author": "$PR_AUTHOR",
-            "pr_url": "$PR_URL",
-            "timestamp": "$TIMESTAMP",
-            "workflow_run_id": "$WORKFLOW_RUN_ID",
-            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "status": "SUCCESS"
-          }
-          EOF
-          )
-
-          # Download existing activity log or create new one
-          ACTIVITY_LOG="/tmp/bot_activity_log.json"
-          if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/bot_activity_log.json "$ACTIVITY_LOG" 2>/dev/null; then
-            echo "✓ Downloaded existing activity log"
-          else
-            echo '{"activities": [], "last_updated": null}' > "$ACTIVITY_LOG"
-            echo "✓ Created new activity log"
-          fi
-
-          # Append new activity and update timestamp
-          jq --argjson new_activity "$ACTIVITY_JSON" \
-             --arg timestamp "$TIMESTAMP" \
-             '.activities += [$new_activity] | .last_updated = $timestamp' \
-             "$ACTIVITY_LOG" > /tmp/updated_log.json
-
-          # Upload back to GCS
-          gcloud storage cp /tmp/updated_log.json gs://bot-dashboard-vectorinstitute/data/bot_activity_log.json \
-            --content-type=application/json
-
-          echo "✓ Auto-merge activity recorded to GCS"
+          process-repo-queue \
+            --repo "${{ matrix.repo }}" \
+            --workflow-run-id "${{ github.run_id }}" \
+            --all-prs '${{ needs.discover-bot-prs.outputs.prs }}'
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         continue-on-error: true
 
-      - name: Trigger branch updates for remaining PRs
-        if: steps.check-order.outputs.is_oldest == 'true' && steps.check-order.outputs.other_prs != '' && (steps.auto-merge.conclusion == 'success' || steps.auto-merge.outcome == 'success')
-        run: |
-          REPO="${{ matrix.pr.repo }}"
-          OTHER_PRS="${{ steps.check-order.outputs.other_prs }}"
-
-          if [ -n "$OTHER_PRS" ]; then
-            echo " Triggering branch updates for remaining PRs: $OTHER_PRS"
-
-            IFS=',' read -ra PR_ARRAY <<< "$OTHER_PRS"
-            for OTHER_PR in "${PR_ARRAY[@]}"; do
-              echo "Requesting rebase for #$OTHER_PR..."
-
-              # Comment @dependabot rebase to trigger branch update
-              gh pr comment $OTHER_PR --repo "$REPO" --body "@dependabot rebase" || {
-                echo " Failed to trigger rebase for #$OTHER_PR"
-              }
-
-              sleep 2  # Small delay between comments
-            done
-
-            echo " Branch update requests sent to remaining PRs"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
-        continue-on-error: true
-
-      - name: Trigger fix for failing PRs
-        if: steps.analyze.outputs.has-failures == 'true'
-        run: |
-          REPO="${{ matrix.pr.repo }}"
-          PR_NUMBER="${{ matrix.pr.number }}"
-
-          echo "❌ Failures detected in $REPO#$PR_NUMBER - triggering fix workflow"
-
-          # Trigger the fix workflow via repository dispatch
-          gh workflow run fix-remote-pr.yml \
-            --repo ${{ github.repository }} \
-            --field target_repo="$REPO" \
-            --field pr_number="$PR_NUMBER"
-
-          echo " Fix workflow triggered for $REPO#$PR_NUMBER"
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
-        continue-on-error: true
 
   report-summary:
     runs-on: ubuntu-latest
-    needs: [discover-bot-prs, process-passing-prs]
+    needs: [discover-bot-prs, process-repo-queues]
     if: always()
 
     steps:
