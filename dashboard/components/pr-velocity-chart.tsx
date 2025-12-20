@@ -29,9 +29,9 @@ function aggregateByDate(prSummaries: PRSummary[]): ChartDataPoint[] {
     }
 
     const data = dataByDate.get(dateKey)!
-    if (pr.failure_type === 'auto_merge' && pr.status === 'SUCCESS') {
+    if (pr.type === 'auto_merge' && pr.status === 'SUCCESS') {
       data.autoMerged++
-    } else if (pr.status === 'SUCCESS') {
+    } else if (pr.type === 'bot_fix' && pr.status === 'SUCCESS') {
       data.botFixed++
     }
   })

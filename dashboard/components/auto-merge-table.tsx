@@ -3,7 +3,7 @@
 import type { PRSummary } from '@/lib/types'
 import { ArrowUpDown, ExternalLink, Clock, GitMerge, GitBranch } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { Input, Select, StatusBadge } from './ui'
+import { Input, Select } from './ui'
 import { useTableData } from '@/lib/hooks'
 import { getRepoName } from '@/lib/utils'
 import { CLASSES } from '@/lib/constants'
@@ -24,7 +24,6 @@ export default function AutoMergeTable({ prSummaries }: AutoMergeTableProps) {
     sortDirection,
     searchQuery,
     filters,
-    filterOptions,
     handleSort,
     setSearchQuery,
     setFilter,
@@ -71,8 +70,8 @@ export default function AutoMergeTable({ prSummaries }: AutoMergeTableProps) {
             Rebased
           </label>
           <Select
-            value={filters['was_rebased'] !== undefined ? String(filters['was_rebased']) : 'all'}
-            onChange={(e) => setFilter('was_rebased', e.target.value === 'all' ? undefined : e.target.value === 'true')}
+            value={filters['was_rebased'] !== undefined ? filters['was_rebased'] : 'all'}
+            onChange={(e) => setFilter('was_rebased', e.target.value === 'all' ? undefined : e.target.value)}
             className="w-full"
           >
             <option value="all">All</option>

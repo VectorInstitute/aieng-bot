@@ -348,25 +348,6 @@ class WorkflowClient:
                 ]
             )
 
-            # Comment success
-            success_msg = (
-                "✅ All checks passed! This PR will be automatically merged.\n\n"
-                "🤖 *AI Engineering Maintenance Bot - "
-                "Maintaining Vector Institute Repositories built by AI Engineering*"
-            )
-            self._run_gh_command(
-                [
-                    "gh",
-                    "pr",
-                    "comment",
-                    str(pr.pr_number),
-                    "--repo",
-                    pr.repo,
-                    "--body",
-                    success_msg,
-                ]
-            )
-
             print(f"  ✓ Auto-merge enabled for {pr.repo}#{pr.pr_number}")
             return True
 

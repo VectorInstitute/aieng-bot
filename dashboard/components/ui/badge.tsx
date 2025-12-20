@@ -49,11 +49,19 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
 }
 
 interface FailureTypeBadgeProps {
-  type: string
+  type: string | undefined
   className?: string
 }
 
 export function FailureTypeBadge({ type, className }: FailureTypeBadgeProps) {
+  if (!type) {
+    return (
+      <Badge variant="default" className={className}>
+        N/A
+      </Badge>
+    )
+  }
+
   const typeKey = type as FailureType
   const config = FAILURE_TYPES[typeKey]
 

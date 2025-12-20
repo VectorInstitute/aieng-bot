@@ -47,7 +47,7 @@ export function useTableData<T extends Record<string, unknown>>(
     // Apply field-specific filters
     Object.entries(filters).forEach(([field, value]) => {
       if (value !== 'all') {
-        result = result.filter(item => item[field] === value)
+        result = result.filter(item => String(item[field]) === value)
       }
     })
 
@@ -71,8 +71,15 @@ export function useTableData<T extends Record<string, unknown>>(
     }
   }
 
-  const setFilter = (field: string, value: string) => {
-    setFilters(prev => ({ ...prev, [field]: value }))
+  const setFilter = (field: string, value: string | undefined) => {
+    setFilters(prev => {
+      if (value === undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [field]: _, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [field]: value }
+    })
   }
 
   return {

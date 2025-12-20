@@ -199,13 +199,12 @@ class TestWorkflowClient:
             MagicMock(returncode=0, stdout=json.dumps({"reviewDecision": None})),
             MagicMock(returncode=0, stdout=""),  # approve
             MagicMock(returncode=0, stdout=""),  # merge
-            MagicMock(returncode=0, stdout=""),  # comment
         ]
 
         result = workflow_client.auto_merge_pr(sample_pr)
 
         assert result is True
-        assert mock_run.call_count == 4
+        assert mock_run.call_count == 3
 
     @patch("subprocess.run")
     def test_auto_merge_pr_already_approved(self, mock_run, workflow_client, sample_pr):
@@ -213,13 +212,12 @@ class TestWorkflowClient:
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout=json.dumps({"reviewDecision": "APPROVED"})),
             MagicMock(returncode=0, stdout=""),  # merge
-            MagicMock(returncode=0, stdout=""),  # comment
         ]
 
         result = workflow_client.auto_merge_pr(sample_pr)
 
         assert result is True
-        assert mock_run.call_count == 3
+        assert mock_run.call_count == 2
 
     @patch("subprocess.run")
     def test_auto_merge_pr_failure(self, mock_run, workflow_client, sample_pr):
