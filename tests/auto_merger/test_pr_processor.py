@@ -51,6 +51,12 @@ class TestPRProcessor:
     @patch("time.sleep")
     def test_trigger_rebase_success(self, mock_sleep, pr_processor, sample_pr):
         """Test successful rebase triggering."""
+        # Mock status check to show no conflicts
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "MERGEABLE",
+        )
         pr_processor.workflow_client.trigger_rebase.return_value = True
 
         result = pr_processor._trigger_rebase(sample_pr)
@@ -58,12 +64,19 @@ class TestPRProcessor:
         assert result is False  # False means continue processing
         assert sample_pr.status == PRStatus.REBASING
         assert sample_pr.rebase_started_at is not None
+        pr_processor.status_poller.check_pr_status.assert_called_once_with(sample_pr)
         pr_processor.workflow_client.trigger_rebase.assert_called_once_with(sample_pr)
         mock_sleep.assert_called_once_with(60)
 
     @patch("time.sleep")
     def test_trigger_rebase_failure(self, mock_sleep, pr_processor, sample_pr):
         """Test rebase triggering failure."""
+        # Mock status check to show no conflicts
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "MERGEABLE",
+        )
         pr_processor.workflow_client.trigger_rebase.return_value = False
 
         result = pr_processor._trigger_rebase(sample_pr)
@@ -71,6 +84,22 @@ class TestPRProcessor:
         assert result is True  # True means move to next PR
         assert sample_pr.status == PRStatus.FAILED
         assert sample_pr.error_message == "Failed to trigger rebase"
+
+    def test_trigger_rebase_skips_if_conflict(self, pr_processor, sample_pr):
+        """Test that rebase is skipped if conflict detected early."""
+        # Mock status check to show conflict
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "CONFLICTING",
+        )
+
+        result = pr_processor._trigger_rebase(sample_pr)
+
+        assert result is False  # Route to fix workflow
+        assert sample_pr.status == PRStatus.CHECKS_FAILED
+        # Should NOT call trigger_rebase if conflict detected
+        pr_processor.workflow_client.trigger_rebase.assert_not_called()
 
     def test_wait_for_checks_detects_merge_conflict(self, pr_processor, sample_pr):
         """Test that merge conflicts are detected early."""

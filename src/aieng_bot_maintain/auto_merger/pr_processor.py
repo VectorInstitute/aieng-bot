@@ -3,6 +3,7 @@
 import time
 from datetime import UTC, datetime
 
+from ..utils.logging import log_error, log_info, log_success, log_warning
 from .models import PRQueueItem, PRStatus
 from .status_poller import StatusPoller
 from .workflow_client import WorkflowClient
@@ -70,10 +71,10 @@ class PRProcessor:
             True if PR should advance to next, False to retry later.
 
         """
-        print(f"\n{'=' * 60}")
-        print(f"Processing {pr.repo}#{pr.pr_number}: {pr.pr_title}")
-        print(f"Current status: {pr.status.value}")
-        print(f"{'=' * 60}\n")
+        log_info("=" * 60)
+        log_info(f"Processing {pr.repo}#{pr.pr_number}: {pr.pr_title}")
+        log_info(f"Current status: {pr.status.value}")
+        log_info("=" * 60)
 
         # Process PR through multiple steps in single run
         max_iterations = 10
@@ -88,7 +89,7 @@ class PRProcessor:
                 return True  # Done with this PR
 
         # Should not reach here, but return False to retry later if we do
-        print(f"⚠ Max iterations reached for PR {pr.repo}#{pr.pr_number}")
+        log_warning(f"Max iterations reached for PR {pr.repo}#{pr.pr_number}")
         return False
 
     def _process_current_status(self, pr: PRQueueItem) -> bool:
@@ -137,7 +138,19 @@ class PRProcessor:
             True to move to next PR, False to retry later.
 
         """
-        print("→ Step 1: Triggering rebase")
+        log_info("→ Step 1: Checking PR status before rebase")
+
+        # Check for merge conflicts first - no point rebasing if already conflicted
+        _, _, mergeable = self.status_poller.check_pr_status(pr)
+        if mergeable == "CONFLICTING":
+            log_warning(
+                "Merge conflict detected, skipping rebase and routing to fix workflow"
+            )
+            pr.status = PRStatus.CHECKS_FAILED
+            pr.last_updated = datetime.now(UTC).isoformat()
+            return False
+
+        log_info("Triggering rebase")
         if not self.workflow_client.trigger_rebase(pr):
             pr.error_message = "Failed to trigger rebase"
             pr.status = PRStatus.FAILED
@@ -147,7 +160,7 @@ class PRProcessor:
         pr.status = PRStatus.REBASING
         pr.rebase_started_at = datetime.now(UTC).isoformat()
         pr.last_updated = datetime.now(UTC).isoformat()
-        print("  ⏳ Waiting for rebase to complete...")
+        log_info("Waiting for rebase to complete...")
 
         # Give rebase time to complete (Dependabot is usually fast)
         time.sleep(60)
@@ -167,14 +180,14 @@ class PRProcessor:
             True to move to next PR, False to retry later.
 
         """
-        print("→ Step 2: Waiting for checks to complete")
+        log_info("→ Step 2: Waiting for checks to complete")
         pr.status = PRStatus.WAITING_CHECKS
         pr.last_updated = datetime.now(UTC).isoformat()
 
         # Check for merge conflicts early before waiting for checks
         _, _, mergeable = self.status_poller.check_pr_status(pr)
         if mergeable == "CONFLICTING":
-            print("  ⚠ Merge conflict detected, routing to fix workflow")
+            log_warning("Merge conflict detected, routing to fix workflow")
             pr.status = PRStatus.CHECKS_FAILED
             pr.last_updated = datetime.now(UTC).isoformat()
             return False
@@ -193,7 +206,7 @@ class PRProcessor:
             return False
 
         # RUNNING or NO_CHECKS
-        print("  ⚠ Checks still running or not found, will retry next run")
+        log_warning("Checks still running or not found, will retry next run")
         return False
 
     def _attempt_auto_merge(self, pr: PRQueueItem) -> bool:
@@ -210,7 +223,7 @@ class PRProcessor:
             True to move to next PR, False to retry later.
 
         """
-        print("→ Step 3: Auto-merging PR")
+        log_info("→ Step 3: Auto-merging PR")
 
         all_passed, has_failures, mergeable = self.status_poller.check_pr_status(pr)
 
@@ -224,7 +237,9 @@ class PRProcessor:
             pr.last_updated = datetime.now(UTC).isoformat()
             return True
 
-        print(f"  ⚠ PR not mergeable (mergeable={mergeable}, all_passed={all_passed})")
+        log_warning(
+            f"PR not mergeable (mergeable={mergeable}, all_passed={all_passed})"
+        )
         if has_failures or mergeable == "CONFLICTING":
             # Treat merge conflicts like check failures - they can be fixed
             pr.status = PRStatus.CHECKS_FAILED
@@ -250,7 +265,7 @@ class PRProcessor:
             True to move to next PR, False to retry later.
 
         """
-        print("→ Step 4: Triggering fix workflow")
+        log_info("→ Step 4: Triggering fix workflow")
 
         run_id = self.workflow_client.trigger_fix_workflow(pr)
         if not run_id:
@@ -279,7 +294,7 @@ class PRProcessor:
             True to move to next PR, False to retry later.
 
         """
-        print("→ Step 5: Waiting for fix workflow to complete")
+        log_info("→ Step 5: Waiting for fix workflow to complete")
 
         if not pr.fix_workflow_run_id:
             pr.error_message = "Missing fix workflow run ID"
@@ -299,7 +314,7 @@ class PRProcessor:
             return self._handle_fix_failure(pr, workflow_status)
 
         # RUNNING or UNKNOWN
-        print("  ⚠ Fix workflow still running, will check next run")
+        log_warning("Fix workflow still running, will check next run")
         return False
 
     def _verify_fix_success(self, pr: PRQueueItem) -> bool:
@@ -316,7 +331,7 @@ class PRProcessor:
             True to move to next PR, False to retry later.
 
         """
-        print("  ✓ Fix workflow succeeded, verifying checks")
+        log_success("Fix workflow succeeded, verifying checks")
         pr.status = PRStatus.WAITING_CHECKS
         pr.last_updated = datetime.now(UTC).isoformat()
 
@@ -377,8 +392,8 @@ class PRProcessor:
 
         """
         if pr.attempt_count < pr.max_attempts:
-            print(f"  ⚠ Attempt {pr.attempt_count}/{pr.max_attempts}, will retry")
+            log_warning(f"Attempt {pr.attempt_count}/{pr.max_attempts}, will retry")
             pr.status = PRStatus.CHECKS_FAILED
             return False
-        print("  ✗ Max attempts reached, giving up")
+        log_error("Max attempts reached, giving up")
         return True
