@@ -4,6 +4,7 @@ import { fetchPRTrace } from '@/lib/data-fetcher'
 import { notFound } from 'next/navigation'
 import AgentTimeline from '@/components/agent-timeline'
 import FailureAnalysis from '@/components/failure-analysis'
+import ExecutionMetrics from '@/components/execution-metrics'
 import { Clock, GitBranch, User, ExternalLink } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -166,6 +167,13 @@ export default async function PRPage({ params }: PRPageProps) {
 
       {/* Failure Analysis - only show for agent fixes */}
       {trace.metadata.failure && <FailureAnalysis failure={trace.metadata.failure} />}
+
+      {/* Execution Metrics - show if metrics are available */}
+      {trace.execution.metrics && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <ExecutionMetrics trace={trace} />
+        </div>
+      )}
 
       {/* Agent Timeline */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">

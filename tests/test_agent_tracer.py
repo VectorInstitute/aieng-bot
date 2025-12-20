@@ -349,6 +349,242 @@ class TestCreateTracerFromEnv:
         assert tracer.pr_info["number"] == 0
 
 
+class TestRefactoredHelperMethods:
+    """Test suite for refactored helper methods."""
+
+    @pytest.fixture
+    def tracer(self):
+        """Create tracer for tests."""
+        return AgentExecutionTracer(
+            pr_info={
+                "repo": "test/repo",
+                "number": 1,
+                "title": "Test PR",
+                "author": "bot",
+                "url": "https://test",
+            },
+            failure_info={"type": "test", "checks": [], "logs_truncated": ""},
+            workflow_run_id="12345",
+            github_run_url="https://test/run/12345",
+        )
+
+    def test_determine_event_type_from_string_tool_result_success(self, tracer):
+        """Test event type determination from string for successful tool result."""
+        msg_str = "ToolResultBlock(tool_use_id='tool_123', is_error=False)"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "TOOL_RESULT"
+
+    def test_determine_event_type_from_string_tool_result_error(self, tracer):
+        """Test event type determination from string for error tool result."""
+        msg_str = "ToolResultBlock(tool_use_id='tool_123', is_error=True)"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "ERROR"
+
+    def test_determine_event_type_from_string_tool_use_block(self, tracer):
+        """Test event type determination from string for tool use."""
+        msg_str = "ToolUseBlock(name='Read', input={'file_path': 'test.py'})"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "TOOL_CALL"
+
+    def test_determine_event_type_from_string_text_block(self, tracer):
+        """Test event type determination from string for text block."""
+        msg_str = "TextBlock(text='Analyzing the code')"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "REASONING"
+
+    def test_determine_event_type_from_string_system_message(self, tracer):
+        """Test event type determination from string for system message."""
+        msg_str = "SystemMessage(content='System info')"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "INFO"
+
+    def test_determine_event_type_from_string_result_message_success(self, tracer):
+        """Test event type determination from string for successful result message."""
+        msg_str = "ResultMessage(result='Success', is_error=False, subtype='success')"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "INFO"
+
+    def test_determine_event_type_from_string_result_message_error(self, tracer):
+        """Test event type determination from string for error result message."""
+        msg_str = "ResultMessage(result='Failed', is_error=True)"
+        result = tracer._determine_event_type_from_string(msg_str, "")
+        assert result == "ERROR"
+
+    def test_determine_event_type_from_string_fallback_to_classification(self, tracer):
+        """Test event type determination falls back to content classification."""
+        msg_str = "UnknownMessage(content='Error occurred')"
+        result = tracer._determine_event_type_from_string(msg_str, "Error occurred")
+        assert result == "ERROR"
+
+    def test_extract_scalar_fields_from_result(self, tracer):
+        """Test extraction of scalar fields from ResultMessage string."""
+        msg_str = (
+            "ResultMessage(subtype='success', duration_ms=1500, "
+            "duration_api_ms=1200, is_error=False, num_turns=3, "
+            "session_id='abc123', total_cost_usd=0.0042)"
+        )
+        metrics = tracer._extract_scalar_fields_from_result(msg_str)
+
+        assert metrics["subtype"] == "success"
+        assert metrics["duration_ms"] == 1500
+        assert metrics["duration_api_ms"] == 1200
+        assert metrics["is_error"] is False
+        assert metrics["num_turns"] == 3
+        assert metrics["session_id"] == "abc123"
+        assert metrics["total_cost_usd"] == 0.0042
+
+    def test_extract_scalar_fields_handles_invalid_numbers(self, tracer):
+        """Test scalar field extraction handles invalid number formats."""
+        msg_str = "ResultMessage(duration_ms='invalid', total_cost_usd='bad')"
+        metrics = tracer._extract_scalar_fields_from_result(msg_str)
+
+        assert metrics["duration_ms"] is None
+        assert metrics["total_cost_usd"] is None
+
+    def test_extract_usage_from_result_with_valid_dict(self, tracer):
+        """Test usage extraction from ResultMessage with valid dict."""
+        msg_str = (
+            "ResultMessage(usage={'input_tokens': 1000, 'output_tokens': 500, "
+            "'cache_read_input_tokens': 200, 'cache_creation_input_tokens': 100})"
+        )
+        usage = tracer._extract_usage_from_result(msg_str)
+
+        assert usage["input_tokens"] == 1000
+        assert usage["output_tokens"] == 500
+        assert usage["cache_read_input_tokens"] == 200
+        assert usage["cache_creation_input_tokens"] == 100
+
+    def test_extract_usage_from_result_no_usage(self, tracer):
+        """Test usage extraction when usage field is missing."""
+        msg_str = "ResultMessage(subtype='success', duration_ms=1500)"
+        usage = tracer._extract_usage_from_result(msg_str)
+
+        assert usage == {}
+
+    def test_extract_usage_from_result_malformed_dict(self, tracer):
+        """Test usage extraction handles malformed dict gracefully."""
+        msg_str = "ResultMessage(usage={'input_tokens': 1000, 'output_tokens': 500})"
+        usage = tracer._extract_usage_from_result(msg_str)
+
+        # Should still extract available fields
+        assert "input_tokens" in usage
+        assert "output_tokens" in usage
+
+    def test_extract_result_text_single_quotes(self, tracer):
+        """Test result text extraction with single quotes."""
+        msg_str = "ResultMessage(result='Successfully fixed the issue')"
+        result_text = tracer._extract_result_text(msg_str)
+
+        assert result_text == "Successfully fixed the issue"
+
+    def test_extract_result_text_double_quotes(self, tracer):
+        """Test result text extraction with double quotes."""
+        msg_str = 'ResultMessage(result="Successfully fixed the issue")'
+        result_text = tracer._extract_result_text(msg_str)
+
+        assert result_text == "Successfully fixed the issue"
+
+    def test_extract_result_text_with_escaped_characters(self, tracer):
+        """Test result text extraction handles escaped characters."""
+        msg_str = "ResultMessage(result='Line 1\\nLine 2 text')"
+        result_text = tracer._extract_result_text(msg_str)
+
+        assert "Line 1\nLine 2" in result_text
+        assert "text" in result_text
+
+    def test_extract_result_text_empty(self, tracer):
+        """Test result text extraction when result is missing."""
+        msg_str = "ResultMessage(subtype='success')"
+        result_text = tracer._extract_result_text(msg_str)
+
+        assert result_text == ""
+
+    def test_format_result_metrics_success(self, tracer):
+        """Test formatting result metrics for successful execution."""
+        metrics = {
+            "subtype": "success",
+            "duration_ms": 1500,
+            "duration_api_ms": 1200,
+            "num_turns": 3,
+            "total_cost_usd": 0.0042,
+            "usage": {
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_read_input_tokens": 200,
+            },
+        }
+        result_text = "Fixed the test failures"
+
+        formatted = tracer._format_result_metrics(metrics, result_text)
+
+        assert "✓ Agent Execution Complete" in formatted
+        assert "Duration: 1.5s" in formatted
+        assert "API Time: 1.2s" in formatted
+        assert "Turns: 3" in formatted
+        assert "Cost: $0.0042" in formatted
+        assert "1,000 in" in formatted
+        assert "500 out" in formatted
+        assert "200 cached" in formatted
+        assert "Result: Fixed the test failures" in formatted
+
+    def test_format_result_metrics_failure(self, tracer):
+        """Test formatting result metrics for failed execution."""
+        metrics = {
+            "subtype": "error",
+            "duration_ms": 800,
+            "duration_api_ms": 600,
+            "num_turns": 2,
+            "total_cost_usd": 0.002,
+            "usage": {},
+        }
+        result_text = "Could not fix the issue"
+
+        formatted = tracer._format_result_metrics(metrics, result_text)
+
+        assert "✗ Agent Execution Complete" in formatted
+        assert "Duration: 0.8s" in formatted
+
+    def test_format_result_metrics_truncates_long_result(self, tracer):
+        """Test that long result text is truncated."""
+        metrics = {
+            "subtype": "success",
+            "duration_ms": 1000,
+            "duration_api_ms": 800,
+            "num_turns": 1,
+            "total_cost_usd": 0.001,
+            "usage": {},
+        }
+        result_text = "x" * 600  # Long text
+
+        formatted = tracer._format_result_metrics(metrics, result_text)
+
+        assert "..." in formatted
+        assert len(formatted.split("Result: ")[1]) < 600
+
+    def test_parse_result_message_integration(self, tracer):
+        """Test _parse_result_message integrates all helper methods."""
+
+        class MockResultMessage:
+            def __str__(self):
+                return (
+                    "ResultMessage(subtype='success', duration_ms=1500, "
+                    "duration_api_ms=1200, is_error=False, num_turns=3, "
+                    "total_cost_usd=0.0042, "
+                    "usage={'input_tokens': 1000, 'output_tokens': 500}, "
+                    "result='Fixed all issues')"
+                )
+
+        message = MockResultMessage()
+        formatted_content, metrics = tracer._parse_result_message(message)
+
+        assert metrics is not None
+        assert metrics["subtype"] == "success"
+        assert metrics["duration_ms"] == 1500
+        assert metrics["usage"]["input_tokens"] == 1000
+        assert "✓ Agent Execution Complete" in formatted_content
+        assert "Fixed all issues" in formatted_content
+
+
 class TestToolExtractionImprovements:
     """Test suite for improved tool name extraction and error handling."""
 

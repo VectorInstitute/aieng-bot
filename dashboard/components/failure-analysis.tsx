@@ -5,7 +5,7 @@ import { AlertCircle, ChevronDown, ChevronRight, AlertTriangle, Shield, Wrench, 
 
 interface FailureAnalysisProps {
   failure: {
-    type: 'test' | 'lint' | 'security' | 'build' | 'unknown'
+    type: 'test' | 'lint' | 'security' | 'build' | 'merge_conflict' | 'unknown'
     checks: string[]
     logs_truncated: string
   }
@@ -25,6 +25,8 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return <Shield className="w-6 h-6 text-red-600 dark:text-red-400" />
       case 'build':
         return <Code className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+      case 'merge_conflict':
+        return <AlertCircle className="w-6 h-6 text-pink-600 dark:text-pink-400" />
       default:
         return <AlertTriangle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
     }
@@ -40,6 +42,8 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
       case 'build':
         return 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/10'
+      case 'merge_conflict':
+        return 'border-pink-200 dark:border-pink-800 bg-pink-50 dark:bg-pink-900/10'
       default:
         return 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10'
     }
@@ -55,6 +59,8 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return 'Security vulnerabilities detected. The bot analyzed and resolved security issues in dependencies.'
       case 'build':
         return 'Build compilation errors detected. The bot fixed configuration and code issues to restore builds.'
+      case 'merge_conflict':
+        return 'Merge conflicts detected. The bot analyzed conflicting files and resolved conflicts following best practices.'
       default:
         return 'Unclassified failure detected. The bot attempted to diagnose and resolve the issue.'
     }
@@ -217,6 +223,26 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   <li className="flex items-start space-x-2">
                     <span className="text-orange-600 dark:text-orange-400 mt-0.5">•</span>
                     <span>Validated successful compilation</span>
+                  </li>
+                </>
+              )}
+              {failure.type === 'merge_conflict' && (
+                <>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-pink-600 dark:text-pink-400 mt-0.5">•</span>
+                    <span>Identified conflicting files and conflict markers</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-pink-600 dark:text-pink-400 mt-0.5">•</span>
+                    <span>For lock files: regenerated from dependency manifest</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-pink-600 dark:text-pink-400 mt-0.5">•</span>
+                    <span>For source files: merged changes preserving functionality</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-pink-600 dark:text-pink-400 mt-0.5">•</span>
+                    <span>Validated successful merge and removed conflict markers</span>
                   </li>
                 </>
               )}

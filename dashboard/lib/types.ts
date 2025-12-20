@@ -18,7 +18,7 @@ export interface AgentTrace {
     }
     merge_type?: 'auto_merge' | 'agent_fix'
     failure?: {
-      type: 'test' | 'lint' | 'security' | 'build' | 'unknown'
+      type: 'test' | 'lint' | 'security' | 'build' | 'merge_conflict' | 'unknown'
       checks: string[]
       logs_truncated: string
     }
@@ -29,6 +29,30 @@ export interface AgentTrace {
     duration_seconds: number | null
     model: string | null
     tools_allowed?: string[]
+    metrics?: {
+      subtype: 'success' | 'error'
+      duration_ms: number
+      duration_api_ms: number
+      is_error: boolean
+      num_turns: number
+      session_id: string
+      total_cost_usd: number
+      usage: {
+        input_tokens: number
+        cache_creation_input_tokens?: number
+        cache_read_input_tokens?: number
+        output_tokens: number
+        server_tool_use?: {
+          web_search_requests: number
+          web_fetch_requests: number
+        }
+        service_tier?: string
+        cache_creation?: {
+          ephemeral_1h_input_tokens: number
+          ephemeral_5m_input_tokens: number
+        }
+      }
+    } | null
   }
   events: AgentEvent[]
   result: {
@@ -44,11 +68,13 @@ export interface AgentTrace {
 export interface AgentEvent {
   seq: number
   timestamp: string
-  type: 'REASONING' | 'TOOL_CALL' | 'ACTION' | 'ERROR' | 'INFO'
+  type: 'REASONING' | 'TOOL_CALL' | 'TOOL_RESULT' | 'ACTION' | 'ERROR' | 'INFO'
   content: string
   tool?: string
   parameters?: Record<string, unknown>
   result_summary?: string
+  tool_use_id?: string
+  is_error?: boolean
 }
 
 // Bot metrics types

@@ -7,6 +7,7 @@ similar to LangSmith/Langfuse for later analysis and dashboard display.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -98,6 +99,7 @@ class AgentExecutionTracer:
                 "duration_seconds": None,
                 "model": "claude-sonnet-4.5",
                 "tools_allowed": ["Read", "Edit", "Bash", "Glob", "Grep"],
+                "metrics": None,  # Will be populated from ResultMessage
             },
             "events": [],
             "result": {
@@ -248,6 +250,109 @@ class AgentExecutionTracer:
 
         return None
 
+    def _extract_tool_use_content(self, block: Any) -> str:
+        """Extract content from ToolUseBlock.
+
+        Parameters
+        ----------
+        block : Any
+            ToolUseBlock instance.
+
+        Returns
+        -------
+        str
+            Formatted tool use description.
+
+        """
+        tool_name = getattr(block, "name", None)
+        tool_input = getattr(block, "input", {})
+
+        if not tool_name or not tool_input:
+            return str(block)
+
+        if tool_input.get("command"):
+            return f"$ {tool_input['command']}"
+
+        if tool_input.get("file_path"):
+            if tool_input.get("old_string"):
+                return f"Edit file: {tool_input['file_path']}"
+            return f"Read: {tool_input['file_path']}"
+
+        return f"{tool_name}: {json.dumps(tool_input)}"
+
+    def _extract_tool_result_content(self, block: Any) -> str:
+        """Extract content from ToolResultBlock.
+
+        Parameters
+        ----------
+        block : Any
+            ToolResultBlock instance.
+
+        Returns
+        -------
+        str
+            Tool result content.
+
+        """
+        if hasattr(block, "content"):
+            result_content = block.content
+            return (
+                result_content
+                if isinstance(result_content, str)
+                else str(result_content)
+            )
+        return str(block)
+
+    def _extract_text_block_content(self, block: Any) -> str:
+        """Extract content from TextBlock.
+
+        Parameters
+        ----------
+        block : Any
+            TextBlock instance.
+
+        Returns
+        -------
+        str
+            Text content.
+
+        """
+        if hasattr(block, "text"):
+            return block.text
+
+        # Fallback to parsing from string
+        text_match = re.search(r'text=["\'](.+)["\']', str(block), re.DOTALL)
+        if text_match:
+            return text_match.group(1).replace("\\n", "\n").replace("\\'", "'")
+        return str(block)
+
+    def _extract_display_content(self, block: Any, block_class: str) -> str:
+        """Extract displayable content from a block based on its type.
+
+        Parameters
+        ----------
+        block : Any
+            Content block.
+        block_class : str
+            Class name of the block.
+
+        Returns
+        -------
+        str
+            Human-readable display content.
+
+        """
+        if block_class.endswith("ToolUseBlock"):
+            return self._extract_tool_use_content(block)
+
+        if block_class.endswith("ToolResultBlock"):
+            return self._extract_tool_result_content(block)
+
+        if block_class.endswith("TextBlock"):
+            return self._extract_text_block_content(block)
+
+        return str(block)
+
     def _extract_message_content(self, message: Any) -> str:
         """Extract content string from message object.
 
@@ -277,6 +382,46 @@ class AgentExecutionTracer:
 
         return str(message.content)
 
+    def _determine_event_type_from_string(self, msg_str: str, content: str) -> str:
+        """Determine event type from message string representation.
+
+        Parameters
+        ----------
+        msg_str : str
+            String representation of message.
+        content : str
+            Extracted content string for fallback classification.
+
+        Returns
+        -------
+        str
+            Event type (ERROR, TOOL_RESULT, TOOL_CALL, etc.).
+
+        """
+        # Map message type prefixes to event types
+        type_mapping = {
+            "ToolUseBlock(": "TOOL_CALL",
+            "TextBlock(": "REASONING",
+            "SystemMessage(": "INFO",
+        }
+
+        for prefix, event_type in type_mapping.items():
+            if msg_str.startswith(prefix):
+                return event_type
+
+        # Special handling for ToolResultBlock and ResultMessage (can be ERROR or success)
+        if msg_str.startswith("ToolResultBlock("):
+            return "ERROR" if "is_error=True" in msg_str else "TOOL_RESULT"
+
+        if msg_str.startswith("ResultMessage("):
+            return "ERROR" if "is_error=True" in msg_str else "INFO"
+
+        # Fallback: avoid false positives from "is_error=False"
+        if "is_error=False" in msg_str or "subtype='success'" in msg_str:
+            return "INFO"
+
+        return self.classify_message(content if content else msg_str)
+
     def _determine_event_type(self, message: Any, msg_class: str, content: str) -> str:
         """Determine event type based on message class and content.
 
@@ -295,24 +440,24 @@ class AgentExecutionTracer:
             Event type (ERROR, TOOL_RESULT, TOOL_CALL, etc.).
 
         """
-        if msg_class == "ToolResultBlock":
+        # Handle both short class names and namespaced class names
+        # (e.g., "ToolUseBlock" or "claude_agent_sdk.ToolUseBlock")
+        if msg_class.endswith("ToolResultBlock"):
             # For ToolResultBlock, always parse from string representation
             # since is_error attribute access is unreliable
             msg_str = str(message)
-            # Only mark as ERROR if explicitly is_error=True
-            if "is_error=True" in msg_str:
-                return "ERROR"
-            # Otherwise it's a successful tool result
-            return "TOOL_RESULT"
+            return "ERROR" if "is_error=True" in msg_str else "TOOL_RESULT"
 
-        if msg_class == "ToolUseBlock":
+        if msg_class.endswith("ToolUseBlock"):
             return "TOOL_CALL"
 
-        if msg_class == "TextBlock":
-            return self.classify_message(content if content else str(message))
+        if msg_class.endswith("TextBlock"):
+            # TextBlock is always reasoning/explanation from the assistant
+            return "REASONING"
 
-        # Fallback to content-based classification
-        return self.classify_message(content if content else str(message))
+        # Check string representation for SDK message types
+        msg_str = str(message)
+        return self._determine_event_type_from_string(msg_str, content)
 
     def _process_tool_use_block(self, message: Any, event: dict[str, Any]) -> None:
         """Process ToolUseBlock message and extract tool information.
@@ -332,13 +477,39 @@ class AgentExecutionTracer:
         # If tool_name is None, try extracting from string representation
         if not tool_name:
             msg_str = str(message)
+            # Try multiple regex patterns to extract tool name
             name_match = re.search(r"name=['\"](\w+)['\"]", msg_str)
+            if not name_match:
+                # Try without quotes (e.g., name=Bash)
+                name_match = re.search(r"name=(\w+)", msg_str)
             if name_match:
                 tool_name = name_match.group(1)
 
+        # Extract tool_input from string representation if empty
+        if not tool_input or (isinstance(tool_input, dict) and not tool_input):
+            msg_str = str(message)
+            # Try to extract input dict from string representation
+            input_match = re.search(r"input=(\{[^}]+\})", msg_str)
+            if input_match:
+                try:
+                    # Convert Python dict string to JSON-like format
+                    input_str = input_match.group(1)
+                    input_str = input_str.replace("'", '"')
+                    tool_input = json.loads(input_str)
+                except (json.JSONDecodeError, ValueError):
+                    # If parsing fails, store as string
+                    tool_input = {"raw": input_match.group(1)}
+
+        # Extract tool_id from string representation if None
+        if not tool_id:
+            msg_str = str(message)
+            id_match = re.search(r"id=['\"]([^'\"]+)['\"]", msg_str)
+            if id_match:
+                tool_id = id_match.group(1)
+
         # Always set tool name (default to "Unknown" if all else fails)
         event["tool"] = tool_name if tool_name else "Unknown"
-        event["parameters"] = tool_input
+        event["parameters"] = tool_input if tool_input else {}
         if tool_id:
             event["tool_use_id"] = tool_id
 
@@ -374,6 +545,245 @@ class AgentExecutionTracer:
             # Override type to ERROR for better visibility
             event["type"] = "ERROR"
 
+    def _process_content_block(self, block: Any) -> dict[str, Any] | None:
+        """Process a single content block from a message.
+
+        Parameters
+        ----------
+        block : Any
+            Content block (TextBlock, ToolUseBlock, or ToolResultBlock).
+
+        Returns
+        -------
+        dict[str, Any] or None
+            Event dictionary or None if block should be skipped.
+
+        """
+        block_class = block.__class__.__name__
+
+        # Extract displayable content based on block type
+        display_content = self._extract_display_content(block, block_class)
+
+        # Determine event type
+        event_type = self._determine_event_type(block, block_class, display_content)
+
+        if not display_content:
+            return None
+
+        event: dict[str, Any] = {
+            "seq": 0,  # Will be set by caller
+            "timestamp": datetime.now(UTC).isoformat(),
+            "type": event_type,
+            "content": display_content,
+        }
+
+        # Extract tool info based on block class
+        if block_class.endswith("ToolUseBlock") or event_type == "TOOL_CALL":
+            self._process_tool_use_block(block, event)
+        elif (
+            block_class.endswith("ToolResultBlock")
+            or event_type == "TOOL_RESULT"
+            or (event_type == "ERROR" and "ToolResultBlock" in str(block))
+        ):
+            self._process_tool_result_block(block, event)
+
+        return event
+
+    def _extract_scalar_fields_from_result(self, msg_str: str) -> dict[str, Any]:
+        """Extract scalar fields from ResultMessage string.
+
+        Parameters
+        ----------
+        msg_str : str
+            String representation of ResultMessage.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary of extracted scalar fields.
+
+        """
+        metrics: dict[str, Any] = {}
+        for field in [
+            "subtype",
+            "duration_ms",
+            "duration_api_ms",
+            "is_error",
+            "num_turns",
+            "session_id",
+            "total_cost_usd",
+        ]:
+            pattern = rf"{field}=([^,\)]+)"
+            match = re.search(pattern, msg_str)
+            if match:
+                value_str = match.group(1).strip("'\"")
+                # Convert to appropriate type
+                if field in ["duration_ms", "duration_api_ms", "num_turns"]:
+                    metrics[field] = int(value_str) if value_str.isdigit() else None
+                elif field == "total_cost_usd":
+                    try:
+                        metrics[field] = float(value_str)
+                    except ValueError:
+                        metrics[field] = None
+                elif field == "is_error":
+                    metrics[field] = value_str == "True"
+                else:
+                    metrics[field] = value_str
+        return metrics
+
+    def _extract_usage_from_result(self, msg_str: str) -> dict[str, Any]:
+        """Extract usage dict (tokens) from ResultMessage string.
+
+        Parameters
+        ----------
+        msg_str : str
+            String representation of ResultMessage.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing token usage metrics.
+
+        """
+        usage_start = msg_str.find("usage={")
+        if usage_start == -1:
+            return {}
+
+        # Extract content with balanced braces
+        brace_count = 0
+        start_pos = usage_start + 6  # Skip "usage="
+        usage_str = None
+        for i in range(start_pos, len(msg_str)):
+            if msg_str[i] == "{":
+                brace_count += 1
+            elif msg_str[i] == "}":
+                brace_count -= 1
+                if brace_count == 0:
+                    usage_str = msg_str[start_pos : i + 1]
+                    break
+
+        if not usage_str:
+            return {}
+
+        try:
+            # Use ast.literal_eval for safe Python dict evaluation
+            return ast.literal_eval(usage_str)
+        except (ValueError, SyntaxError):
+            # Fallback: try to extract just the key metrics manually
+            usage = {}
+            for token_field in [
+                "input_tokens",
+                "output_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+            ]:
+                token_match = re.search(rf"'{token_field}':\s*(\d+)", usage_str)
+                if token_match:
+                    usage[token_field] = int(token_match.group(1))
+            return usage
+
+    def _extract_result_text(self, msg_str: str) -> str:
+        """Extract result text from ResultMessage string.
+
+        Parameters
+        ----------
+        msg_str : str
+            String representation of ResultMessage.
+
+        Returns
+        -------
+        str
+            Extracted and unescaped result text.
+
+        """
+        result_match = re.search(r"result='([^']*(?:''[^']*)*)'", msg_str, re.DOTALL)
+        if not result_match:
+            result_match = re.search(
+                r'result="([^"]*(?:""[^"]*)*)"', msg_str, re.DOTALL
+            )
+
+        if not result_match:
+            return ""
+
+        result_text = result_match.group(1)
+        # Unescape escaped quotes and newlines
+        result_text = result_text.replace("\\'", "'").replace('\\"', '"')
+        return result_text.replace("\\n", "\n")
+
+    def _format_result_metrics(self, metrics: dict[str, Any], result_text: str) -> str:
+        """Format result metrics into human-readable content.
+
+        Parameters
+        ----------
+        metrics : dict[str, Any]
+            Extracted metrics dictionary.
+        result_text : str
+            Result text to append.
+
+        Returns
+        -------
+        str
+            Formatted content string.
+
+        """
+        status_emoji = "✓" if metrics.get("subtype") == "success" else "✗"
+        formatted_parts = [
+            f"{status_emoji} Agent Execution Complete",
+            f"Duration: {metrics.get('duration_ms', 0) / 1000:.1f}s",
+            f"API Time: {metrics.get('duration_api_ms', 0) / 1000:.1f}s",
+            f"Turns: {metrics.get('num_turns', 0)}",
+            f"Cost: ${metrics.get('total_cost_usd', 0):.4f}",
+        ]
+
+        # Add token usage summary if available
+        usage = metrics.get("usage", {})
+        if usage:
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            cache_read = usage.get("cache_read_input_tokens", 0)
+            formatted_parts.append(
+                f"Tokens: {input_tokens:,} in / {output_tokens:,} out / {cache_read:,} cached"
+            )
+
+        formatted_content = "\n".join(formatted_parts)
+
+        # Add result summary if available and not too long
+        if result_text:
+            truncated_text = (
+                f"{result_text[:500]}..." if len(result_text) > 500 else result_text
+            )
+            formatted_content += f"\n\nResult: {truncated_text}"
+
+        return formatted_content
+
+    def _parse_result_message(self, message: Any) -> tuple[str, dict[str, Any] | None]:
+        """Parse ResultMessage and extract execution metrics.
+
+        Parameters
+        ----------
+        message : Any
+            ResultMessage from Agent SDK.
+
+        Returns
+        -------
+        tuple[str, dict[str, Any] | None]
+            Tuple of (formatted_content, metrics_dict).
+            formatted_content is human-readable summary.
+            metrics_dict contains extracted performance metrics.
+
+        """
+        msg_str = str(message)
+
+        # Extract structured fields from ResultMessage string representation
+        metrics = self._extract_scalar_fields_from_result(msg_str)
+        metrics["usage"] = self._extract_usage_from_result(msg_str)
+        result_text = self._extract_result_text(msg_str)
+
+        # Create formatted content for display
+        formatted_content = self._format_result_metrics(metrics, result_text)
+
+        return formatted_content, metrics if metrics else None
+
     async def capture_agent_stream(
         self, agent_stream: AsyncIterator[Any]
     ) -> AsyncIterator[Any]:
@@ -392,40 +802,68 @@ class AgentExecutionTracer:
         """
         async for message in agent_stream:
             msg_class = message.__class__.__name__
-            content = self._extract_message_content(message)
-            event_type = self._determine_event_type(message, msg_class, content)
 
-            if content or str(message):
-                self.event_sequence += 1
+            # Check if message has content blocks (AssistantMessage, UserMessage)
+            if hasattr(message, "content") and isinstance(message.content, list):
+                # Process each block in the content list
+                for block in message.content:
+                    event = self._process_content_block(block)
+                    if event:
+                        self.event_sequence += 1
+                        event["seq"] = self.event_sequence
+                        self.trace["events"].append(event)
 
-                event: dict[str, Any] = {
-                    "seq": self.event_sequence,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "type": event_type,
-                    "content": content if content else str(message),
-                }
+                        # Print for workflow logs - only show first 200 chars
+                        log_content = event["content"]
+                        truncated = (
+                            log_content[:200] + "..."
+                            if len(log_content) > 200
+                            else log_content
+                        )
+                        print(f"[Agent][{event['type']}] {truncated}")
+            else:
+                # Fallback for messages without content blocks (SystemMessage, etc.)
+                content = self._extract_message_content(message)
+                event_type = self._determine_event_type(message, msg_class, content)
 
-                # Extract tool info based on message class
-                if msg_class == "ToolUseBlock":
-                    self._process_tool_use_block(message, event)
-                elif msg_class == "ToolResultBlock":
-                    self._process_tool_result_block(message, event)
-                elif event_type == "TOOL_CALL":
-                    # Fallback: try to extract from content string
-                    tool_info = self.extract_tool_info(
-                        content if content else str(message), event_type
+                # Special handling for ResultMessage
+                if msg_class == "ResultMessage":
+                    formatted_content, metrics = self._parse_result_message(message)
+                    if metrics:
+                        # Store metrics in trace execution section
+                        self.trace["execution"]["metrics"] = metrics
+                    content = formatted_content
+
+                if content or str(message):
+                    self.event_sequence += 1
+
+                    msg_event: dict[str, Any] = {
+                        "seq": self.event_sequence,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "type": event_type,
+                        "content": content if content else str(message),
+                    }
+
+                    # Extract tool info based on message class or event type
+                    if msg_class.endswith("ToolUseBlock") or event_type == "TOOL_CALL":
+                        self._process_tool_use_block(message, msg_event)
+                    elif (
+                        msg_class.endswith("ToolResultBlock")
+                        or event_type == "TOOL_RESULT"
+                        or (event_type == "ERROR" and "ToolResultBlock" in str(message))
+                    ):
+                        self._process_tool_result_block(message, msg_event)
+
+                    self.trace["events"].append(msg_event)
+
+                    # Print for workflow logs - only show first 200 chars
+                    log_content = content if content else str(message)
+                    truncated = (
+                        log_content[:200] + "..."
+                        if len(log_content) > 200
+                        else log_content
                     )
-                    if tool_info:
-                        event.update(tool_info)
-
-                self.trace["events"].append(event)
-
-                # Print for workflow logs - only show first 200 chars
-                log_content = content if content else str(message)
-                truncated = (
-                    log_content[:200] + "..." if len(log_content) > 200 else log_content
-                )
-                print(f"[Agent][{event_type}] {truncated}")
+                    print(f"[Agent][{event_type}] {truncated}")
 
             # Pass through original message
             yield message
