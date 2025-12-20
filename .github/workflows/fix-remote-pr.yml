@@ -309,10 +309,14 @@ jobs:
           PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_AUTHOR\}\}/$PR_AUTHOR}"
           PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILED_CHECK_NAME\}\}/$FAILED_NAMES}"
 
-          # Add failure logs
+          # Copy failure logs to target-repo so agent can read it
+          # Instead of embedding logs in prompt (causes "Argument list too long" error)
           if [ -f /tmp/failure-logs.txt ]; then
-            LOGS_CONTENT=$(cat /tmp/failure-logs.txt)
-            PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/$LOGS_CONTENT}"
+            cp /tmp/failure-logs.txt ../target-repo/.failure-logs.txt
+            LOGS_REFERENCE="The failure logs have been saved to .failure-logs.txt in the repository root. Please read this file to understand the errors."
+            PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/$LOGS_REFERENCE}"
+          else
+            PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/No failure logs available}"
           fi
 
           # Save final prompt
@@ -569,6 +573,9 @@ jobs:
         id: push-fixes
         working-directory: target-repo
         run: |
+          # Remove failure logs file (don't commit it to the repo)
+          rm -f .failure-logs.txt
+
           # Check if Agent SDK created a commit (check if HEAD differs from remote)
           git fetch origin ${{ steps.pr-details.outputs.head-ref }}
 
