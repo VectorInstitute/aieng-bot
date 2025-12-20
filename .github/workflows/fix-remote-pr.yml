@@ -31,9 +31,9 @@ jobs:
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
 
-          # Get PR information
+          # Get PR information including mergeable status
           PR_INFO=$(gh pr view $PR_NUMBER --repo "$REPO" --json \
-            title,author,headRefName,headRepository,headRepositoryOwner,statusCheckRollup,baseRefName)
+            title,author,headRefName,headRepository,headRepositoryOwner,statusCheckRollup,baseRefName,mergeable)
 
           echo "PR Info:"
           echo "$PR_INFO" | jq '.'
@@ -43,11 +43,13 @@ jobs:
           BASE_REF=$(echo "$PR_INFO" | jq -r '.baseRefName')
           PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
           PR_AUTHOR=$(echo "$PR_INFO" | jq -r '.author.login')
+          MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
 
           echo "head-ref=$HEAD_REF" >> $GITHUB_OUTPUT
           echo "base-ref=$BASE_REF" >> $GITHUB_OUTPUT
           echo "pr-title=$PR_TITLE" >> $GITHUB_OUTPUT
           echo "pr-author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+          echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
 
           # Get failed checks
           FAILED_CHECKS=$(echo "$PR_INFO" | jq -c '[.statusCheckRollup[] | select(.conclusion == "FAILURE")]')
@@ -55,6 +57,7 @@ jobs:
 
           FAILED_COUNT=$(echo "$FAILED_CHECKS" | jq 'length')
           echo "Found $FAILED_COUNT failed checks"
+          echo "PR mergeable status: $MERGEABLE"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
@@ -72,6 +75,38 @@ jobs:
         run: |
           git config user.name "aieng-bot-maintain[bot]"
           git config user.email "aieng-bot@vectorinstitute.ai"
+
+      - name: Attempt merge to expose conflicts
+        id: merge-attempt
+        working-directory: target-repo
+        run: |
+          MERGEABLE='${{ steps.pr-details.outputs.mergeable }}'
+          BASE_REF="${{ steps.pr-details.outputs.base-ref }}"
+
+          # If PR has merge conflicts, attempt merge to create conflict markers
+          if [ "$MERGEABLE" = "CONFLICTING" ]; then
+            echo "PR has merge conflicts - attempting merge to expose conflict markers"
+
+            # Fetch the base branch
+            git fetch origin "$BASE_REF"
+
+            # Attempt to merge (this will fail and create conflict markers)
+            if ! git merge "origin/$BASE_REF" --no-edit; then
+              echo "✓ Merge failed as expected - conflict markers are now in files"
+              echo "conflicts-exposed=true" >> $GITHUB_OUTPUT
+
+              # Show which files have conflicts
+              echo "Files with conflicts:"
+              git diff --name-only --diff-filter=U
+            else
+              echo "⚠️  Merge succeeded unexpectedly - PR may no longer have conflicts"
+              echo "conflicts-exposed=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "PR is mergeable - no conflict exposure needed"
+            echo "conflicts-exposed=false" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
 
       - name: Get failure logs
         id: get-logs
@@ -148,17 +183,28 @@ jobs:
         working-directory: target-repo
         run: |
           FAILED_CHECKS='${{ steps.pr-details.outputs.failed-checks }}'
+          MERGEABLE='${{ steps.pr-details.outputs.mergeable }}'
 
           echo "Analyzing failures with Claude-based classifier..."
           echo "$FAILED_CHECKS" | jq -r '.[] | "\(.name): \(.conclusion)"'
 
-          # Check for merge conflicts first (quick local check)
+          # Check for merge conflicts first via PR mergeable status
+          if [ "$MERGEABLE" = "CONFLICTING" ]; then
+            echo "failure-type=merge_conflict" >> $GITHUB_OUTPUT
+            echo "failed-check-names=merge-conflict" >> $GITHUB_OUTPUT
+            echo "confidence=1.0" >> $GITHUB_OUTPUT
+            echo "reasoning=PR has merge conflicts with base branch (mergeable=CONFLICTING)" >> $GITHUB_OUTPUT
+            echo "✓ Detected merge conflicts via PR mergeable status"
+            exit 0
+          fi
+
+          # Also check git status as fallback
           if git status | grep -q "Unmerged paths\|merge conflict"; then
             echo "failure-type=merge_conflict" >> $GITHUB_OUTPUT
             echo "failed-check-names=merge-conflict" >> $GITHUB_OUTPUT
             echo "confidence=1.0" >> $GITHUB_OUTPUT
             echo "reasoning=Git merge conflicts detected in working tree" >> $GITHUB_OUTPUT
-            echo "Detected merge conflicts via git status"
+            echo "✓ Detected merge conflicts via git status"
             exit 0
           fi
 
