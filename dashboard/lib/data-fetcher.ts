@@ -133,17 +133,22 @@ export async function fetchPRTrace(repo: string, prNumber: number): Promise<Agen
  */
 export function activityLogToPRSummaries(log: BotActivityLog): PRSummary[] {
   return log.activities.map(activity => ({
+    type: activity.type,
     repo: activity.repo,
     pr_number: activity.pr_number,
     title: activity.pr_title,
     author: activity.pr_author,
-    failure_type: activity.failure_type || (activity.type === 'auto_merge' ? 'auto_merge' : 'unknown'),
     status: activity.status,
-    fix_time_hours: activity.fix_time_hours || null,
     timestamp: activity.timestamp,
-    trace_path: activity.trace_path || '',
     pr_url: activity.pr_url,
     workflow_run_url: activity.github_run_url,
+    // Bot fix specific fields
+    failure_type: activity.failure_type,
+    fix_time_hours: activity.fix_time_hours || null,
+    trace_path: activity.trace_path || '',
+    // Auto-merge specific fields
+    was_rebased: activity.was_rebased,
+    rebase_time_seconds: activity.rebase_time_seconds || null,
   }))
 }
 
@@ -155,7 +160,7 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
   const enriched = await Promise.all(
     summaries.map(async (summary) => {
       // Skip auto-merges and entries without trace paths
-      if (summary.failure_type === 'auto_merge' || !summary.trace_path) {
+      if (summary.type === 'auto_merge' || !summary.trace_path) {
         return summary
       }
 
@@ -189,8 +194,8 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
 
   // Calculate stats - differentiate between auto-merge and bot fixes
   const totalPRs = prSummaries.length
-  const autoMergedPRs = prSummaries.filter(pr => pr.failure_type === 'auto_merge' && pr.status === 'SUCCESS').length
-  const botFixedPRs = prSummaries.filter(pr => pr.failure_type !== 'auto_merge' && pr.status === 'SUCCESS').length
+  const autoMergedPRs = prSummaries.filter(pr => pr.type === 'auto_merge' && pr.status === 'SUCCESS').length
+  const botFixedPRs = prSummaries.filter(pr => pr.type === 'bot_fix' && pr.status === 'SUCCESS').length
   const failedFixes = prSummaries.filter(pr => pr.status === 'FAILED').length
   // Note: PARTIAL is also treated as a failure - bot couldn't fully fix the PR
 
@@ -205,31 +210,28 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
     ? fixTimes.reduce((a, b) => a + b, 0) / fixTimes.length
     : 0
 
-  // Group by failure type (auto_merge is tracked separately, not as "fixed")
+  // Group by failure type (bot fixes only, auto-merges tracked separately)
   const byFailureType: Record<string, { count: number; fixed: number; failed: number; success_rate: number }> = {}
   prSummaries.forEach(pr => {
-    const type = pr.failure_type || 'unknown'
-    if (!byFailureType[type]) {
-      byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0 }
-    }
-    byFailureType[type].count++
-    // Only count as "fixed" if it's not an auto_merge
-    if (pr.status === 'SUCCESS' && type !== 'auto_merge') {
-      byFailureType[type].fixed++
-    }
-    if (pr.status === 'FAILED') {
-      byFailureType[type].failed++
+    if (pr.type === 'bot_fix' && pr.failure_type) {
+      const type = pr.failure_type
+      if (!byFailureType[type]) {
+        byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0 }
+      }
+      byFailureType[type].count++
+      if (pr.status === 'SUCCESS') {
+        byFailureType[type].fixed++
+      }
+      if (pr.status === 'FAILED') {
+        byFailureType[type].failed++
+      }
     }
   })
 
-  // Calculate success rates per failure type (auto_merge always has 100% success)
+  // Calculate success rates per failure type
   Object.keys(byFailureType).forEach(type => {
     const data = byFailureType[type]
-    if (type === 'auto_merge') {
-      data.success_rate = 1.0 // Auto-merges by definition succeeded
-    } else {
-      data.success_rate = data.count > 0 ? data.fixed / data.count : 0
-    }
+    data.success_rate = data.count > 0 ? data.fixed / data.count : 0
   })
 
   // Group by repo
@@ -239,9 +241,9 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0 }
     }
     byRepo[pr.repo].total_prs++
-    if (pr.failure_type === 'auto_merge' && pr.status === 'SUCCESS') {
+    if (pr.type === 'auto_merge' && pr.status === 'SUCCESS') {
       byRepo[pr.repo].auto_merged++
-    } else if (pr.status === 'SUCCESS') {
+    } else if (pr.type === 'bot_fix' && pr.status === 'SUCCESS') {
       byRepo[pr.repo].bot_fixed++
     }
     if (pr.status === 'FAILED') byRepo[pr.repo].failed++

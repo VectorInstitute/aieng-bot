@@ -41,6 +41,62 @@ class TestWorkflowClient:
         assert client.bot_repo == "VectorInstitute/bot"
 
     @patch("subprocess.run")
+    def test_check_latest_comment_success(self, mock_run, workflow_client, sample_pr):
+        """Test checking latest comment from dependabot."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="Looks like this PR is already up-to-date with main!\n",
+        )
+
+        result = workflow_client.check_latest_comment(sample_pr)
+
+        assert "already up-to-date" in result
+        mock_run.assert_called_once()
+        # Verify the gh command structure
+        call_args = mock_run.call_args[0][0]
+        assert call_args[0] == "gh"
+        assert call_args[1] == "pr"
+        assert call_args[2] == "view"
+        assert str(sample_pr.pr_number) in call_args
+        assert "--json" in call_args
+        assert "comments" in call_args
+
+    @patch("subprocess.run")
+    def test_check_latest_comment_no_comments(
+        self, mock_run, workflow_client, sample_pr
+    ):
+        """Test checking comments when none exist."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="")
+
+        result = workflow_client.check_latest_comment(sample_pr)
+
+        assert result == ""
+
+    @patch("subprocess.run")
+    def test_check_latest_comment_failure(self, mock_run, workflow_client, sample_pr):
+        """Test checking comments when command fails."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, ["gh"])
+
+        result = workflow_client.check_latest_comment(sample_pr)
+
+        assert result == ""
+
+    @patch("subprocess.run")
+    def test_check_latest_comment_custom_author(
+        self, mock_run, workflow_client, sample_pr
+    ):
+        """Test checking latest comment from custom author."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="Some comment\n")
+
+        result = workflow_client.check_latest_comment(sample_pr, author="custom-bot")
+
+        assert result == "Some comment"
+        # Verify custom author was used in jq filter
+        call_args = mock_run.call_args[0][0]
+        jq_filter = call_args[-1]
+        assert "custom-bot" in jq_filter
+
+    @patch("subprocess.run")
     def test_trigger_rebase_success(self, mock_run, workflow_client, sample_pr):
         """Test successful rebase triggering."""
         mock_run.return_value = MagicMock(returncode=0, stdout="")

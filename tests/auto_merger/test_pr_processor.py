@@ -58,6 +58,8 @@ class TestPRProcessor:
             "MERGEABLE",
         )
         pr_processor.workflow_client.trigger_rebase.return_value = True
+        # Mock check_latest_comment to return empty string (no up-to-date message)
+        pr_processor.workflow_client.check_latest_comment.return_value = ""
 
         result = pr_processor._trigger_rebase(sample_pr)
 
@@ -66,7 +68,13 @@ class TestPRProcessor:
         assert sample_pr.rebase_started_at is not None
         pr_processor.status_poller.check_pr_status.assert_called_once_with(sample_pr)
         pr_processor.workflow_client.trigger_rebase.assert_called_once_with(sample_pr)
-        mock_sleep.assert_called_once_with(60)
+        pr_processor.workflow_client.check_latest_comment.assert_called_once_with(
+            sample_pr
+        )
+        # Should call sleep(10) first, then sleep(50) for total of 60s
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_any_call(10)
+        mock_sleep.assert_any_call(50)
 
     @patch("time.sleep")
     def test_trigger_rebase_failure(self, mock_sleep, pr_processor, sample_pr):
@@ -84,6 +92,33 @@ class TestPRProcessor:
         assert result is True  # True means move to next PR
         assert sample_pr.status == PRStatus.FAILED
         assert sample_pr.error_message == "Failed to trigger rebase"
+
+    @patch("time.sleep")
+    def test_trigger_rebase_already_up_to_date(
+        self, mock_sleep, pr_processor, sample_pr
+    ):
+        """Test that we proceed immediately when dependabot says already up-to-date."""
+        # Mock status check to show no conflicts
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "MERGEABLE",
+        )
+        pr_processor.workflow_client.trigger_rebase.return_value = True
+        # Mock check_latest_comment to return up-to-date message
+        pr_processor.workflow_client.check_latest_comment.return_value = (
+            "Looks like this PR is already up-to-date with main!"
+        )
+
+        result = pr_processor._trigger_rebase(sample_pr)
+
+        assert result is False  # False means continue processing
+        assert sample_pr.status == PRStatus.REBASING
+        pr_processor.workflow_client.check_latest_comment.assert_called_once_with(
+            sample_pr
+        )
+        # Should only call sleep(10), not sleep(50) when already up-to-date
+        mock_sleep.assert_called_once_with(10)
 
     def test_trigger_rebase_skips_if_conflict(self, pr_processor, sample_pr):
         """Test that rebase is skipped if conflict detected early."""

@@ -89,9 +89,13 @@ export interface BotActivity {
   workflow_run_id: string
   github_run_url: string
   status: 'SUCCESS' | 'FAILED' | 'PARTIAL'
+  // Bot fix fields
   failure_type?: string
   trace_path?: string
   fix_time_hours?: number
+  // Auto-merge fields
+  was_rebased?: boolean
+  rebase_time_seconds?: number
 }
 
 export interface BotActivityLog {
@@ -106,17 +110,22 @@ export interface BotMetricsHistory {
 
 // PR summary for overview table
 export interface PRSummary extends Record<string, unknown> {
+  type: 'auto_merge' | 'bot_fix'
   repo: string
   pr_number: number
   title: string
   author: string
-  failure_type: string
   status: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'IN_PROGRESS'
-  fix_time_hours: number | null
   timestamp: string
-  trace_path: string
   pr_url: string
   workflow_run_url: string
+  // Bot fix specific
+  failure_type?: string
+  fix_time_hours?: number | null
+  trace_path?: string
+  // Auto-merge specific
+  was_rebased?: boolean
+  rebase_time_seconds?: number | null
 }
 
 // Authentication types

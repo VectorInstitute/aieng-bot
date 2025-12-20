@@ -160,10 +160,22 @@ class PRProcessor:
         pr.status = PRStatus.REBASING
         pr.rebase_started_at = datetime.now(UTC).isoformat()
         pr.last_updated = datetime.now(UTC).isoformat()
-        log_info("Waiting for rebase to complete...")
 
-        # Give rebase time to complete (Dependabot is usually fast)
-        time.sleep(60)
+        # Wait briefly for dependabot to respond
+        log_info("Waiting for dependabot response...")
+        time.sleep(10)
+
+        # Check if dependabot said PR is already up-to-date
+        latest_comment = self.workflow_client.check_latest_comment(pr)
+        if "already up-to-date" in latest_comment.lower():
+            log_success(
+                "PR already up-to-date with base branch, proceeding immediately"
+            )
+            return False
+
+        # Otherwise wait for rebase to complete (Dependabot is usually fast)
+        log_info("Waiting for rebase to complete...")
+        time.sleep(50)  # Already waited 10s, wait 50s more for total of 60s
         return False
 
     def _wait_for_checks(self, pr: PRQueueItem) -> bool:

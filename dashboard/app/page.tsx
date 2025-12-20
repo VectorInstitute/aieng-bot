@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { isAuthenticated, getCurrentUser } from '@/lib/session'
 import { fetchBotActivityLog, activityLogToPRSummaries, enrichPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
 import OverviewTable from '@/components/overview-table'
+import AutoMergeTable from '@/components/auto-merge-table'
 import PRVelocityChart from '@/components/pr-velocity-chart'
 import PerformanceMetrics from '@/components/performance-metrics'
 import type { PRSummary, BotMetrics } from '@/lib/types'
@@ -149,18 +150,37 @@ export default async function DashboardPage() {
       {/* PR Velocity Chart */}
       <PRVelocityChart prSummaries={prSummaries} />
 
-      {/* Recent PRs Table */}
+      {/* Auto-Merged PRs Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          Recent PR Fixes
+          Recent PR Merges
         </h3>
-        {prSummaries.length === 0 ? (
+        {prSummaries.filter(pr => pr.type === 'auto_merge').length === 0 ? (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full mb-3">
               <Activity className="w-6 h-6 text-slate-400" />
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              No PR fixes recorded yet. The table will populate as the bot processes PRs.
+              No auto-merged PRs recorded yet. The table will populate as PRs are automatically merged.
+            </p>
+          </div>
+        ) : (
+          <AutoMergeTable prSummaries={prSummaries} />
+        )}
+      </div>
+
+      {/* Bot Fixed PRs Table */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+          Recent PR Fixes
+        </h3>
+        {prSummaries.filter(pr => pr.type === 'bot_fix').length === 0 ? (
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full mb-3">
+              <Activity className="w-6 h-6 text-slate-400" />
+            </div>
+            <p className="text-slate-600 dark:text-slate-400 text-sm">
+              No PR fixes recorded yet. The table will populate as the bot fixes PRs.
             </p>
           </div>
         ) : (

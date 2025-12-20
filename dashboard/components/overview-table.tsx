@@ -15,8 +15,8 @@ interface OverviewTableProps {
 type SortField = 'timestamp' | 'repo' | 'status' | 'failure_type' | 'fix_time_hours'
 
 export default function OverviewTable({ prSummaries }: OverviewTableProps) {
-  // Filter out auto-merge entries since they don't involve agent fixes
-  const botFixesOnly = prSummaries.filter(pr => pr.failure_type !== 'auto_merge')
+  // Filter to bot fix entries only
+  const botFixesOnly = prSummaries.filter(pr => pr.type === 'bot_fix')
 
   const {
     data: processedData,

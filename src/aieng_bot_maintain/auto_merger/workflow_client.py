@@ -73,6 +73,40 @@ class WorkflowClient:
         )
         return result.stdout.strip()
 
+    def check_latest_comment(self, pr: PRQueueItem, author: str = "dependabot") -> str:
+        """Get the latest comment from a specific author.
+
+        Parameters
+        ----------
+        pr : PRQueueItem
+            PR to check comments for.
+        author : str, optional
+            Comment author to filter by (default="dependabot").
+
+        Returns
+        -------
+        str
+            Latest comment body from author, or empty string if none found.
+
+        """
+        try:
+            return self._run_gh_command(
+                [
+                    "gh",
+                    "pr",
+                    "view",
+                    str(pr.pr_number),
+                    "--repo",
+                    pr.repo,
+                    "--json",
+                    "comments",
+                    "--jq",
+                    f'.comments | map(select(.author.login == "{author}")) | .[-1].body // ""',
+                ]
+            )
+        except subprocess.CalledProcessError:
+            return ""
+
     def trigger_rebase(self, pr: PRQueueItem) -> bool:
         """Trigger @dependabot rebase comment.
 

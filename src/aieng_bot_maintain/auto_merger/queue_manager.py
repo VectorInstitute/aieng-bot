@@ -2,7 +2,9 @@
 
 from datetime import UTC, datetime
 
-from .models import QueueState
+from ..utils.logging import log_success
+from .activity_logger import ActivityLogger
+from .models import PRQueueItem, PRStatus, QueueState
 from .pr_processor import PRProcessor
 from .state_manager import StateManager
 from .status_poller import StatusPoller
@@ -32,6 +34,8 @@ class QueueManager:
         Client for status polling.
     pr_processor : PRProcessor
         Processor for individual PRs.
+    activity_logger : ActivityLogger
+        Logger for auto-merge and bot-fix activities.
 
     """
 
@@ -57,6 +61,7 @@ class QueueManager:
             workflow_client=self.workflow_client,
             status_poller=self.status_poller,
         )
+        self.activity_logger = ActivityLogger(bucket=gcs_bucket)
 
     def is_timeout_approaching(self, state: QueueState) -> bool:
         """Check if we're within 10 minutes of timeout.
@@ -122,6 +127,10 @@ class QueueManager:
             # Process PR
             should_advance = self.pr_processor.process_pr(pr)
 
+            # Log activity if PR was merged
+            if pr.status == PRStatus.MERGED:
+                self._log_auto_merge_activity(pr, state)
+
             # Save state after each PR
             self.state_manager.save_state(state)
 
@@ -136,3 +145,53 @@ class QueueManager:
         print(f"\n✓ Completed all PRs in {repo}")
         state.completed_repos.append(repo)
         return True
+
+    def _log_auto_merge_activity(self, pr: PRQueueItem, state: QueueState) -> None:
+        """Log auto-merge activity to GCS.
+
+        Parameters
+        ----------
+        pr : PRQueueItem
+            The PR that was auto-merged.
+        state : QueueState
+            Current queue state containing workflow metadata.
+
+        """
+        # Calculate rebase time if PR was rebased
+        was_rebased = pr.rebase_started_at is not None
+        rebase_time_seconds = None
+
+        if was_rebased and pr.rebase_started_at:
+            try:
+                rebase_start = datetime.fromisoformat(pr.rebase_started_at)
+                # Use queued_at as fallback if last_updated isn't set
+                rebase_end_str = pr.last_updated or datetime.now(UTC).isoformat()
+                rebase_end = datetime.fromisoformat(rebase_end_str)
+                rebase_time_seconds = (rebase_end - rebase_start).total_seconds()
+            except (ValueError, TypeError):
+                # If timestamp parsing fails, continue without rebase time
+                pass
+
+        # Build GitHub run URL
+        github_run_url = (
+            f"https://github.com/VectorInstitute/aieng-bot-maintain/"
+            f"actions/runs/{state.workflow_run_id}"
+        )
+
+        # Log the activity
+        self.activity_logger.log_auto_merge(
+            repo=pr.repo,
+            pr_number=pr.pr_number,
+            pr_title=pr.pr_title,
+            pr_author=pr.pr_author,
+            pr_url=pr.pr_url,
+            workflow_run_id=state.workflow_run_id,
+            github_run_url=github_run_url,
+            was_rebased=was_rebased,
+            rebase_time_seconds=rebase_time_seconds,
+        )
+
+        log_success(
+            f"✓ Auto-merge activity logged for {pr.repo}#{pr.pr_number} "
+            f"(rebased: {was_rebased})"
+        )
