@@ -75,6 +75,36 @@ class PRProcessor:
         print(f"Current status: {pr.status.value}")
         print(f"{'=' * 60}\n")
 
+        # Process PR through multiple steps in single run
+        max_iterations = 10
+        for _iteration in range(max_iterations):
+            # Handle terminal states
+            if pr.status in [PRStatus.MERGED, PRStatus.FAILED, PRStatus.SKIPPED]:
+                return True
+
+            # Process current status
+            should_continue = self._process_current_status(pr)
+            if should_continue:
+                return True  # Done with this PR
+
+        # Should not reach here, but return False to retry later if we do
+        print(f"⚠ Max iterations reached for PR {pr.repo}#{pr.pr_number}")
+        return False
+
+    def _process_current_status(self, pr: PRQueueItem) -> bool:
+        """Process PR based on current status.
+
+        Parameters
+        ----------
+        pr : PRQueueItem
+            PR to process.
+
+        Returns
+        -------
+        bool
+            True if PR is done (move to next), False to continue processing.
+
+        """
         if pr.status == PRStatus.PENDING:
             return self._trigger_rebase(pr)
 
@@ -90,6 +120,7 @@ class PRProcessor:
         if pr.status == PRStatus.FIXING:
             return self._wait_for_fix_completion(pr)
 
+        # Unknown status, retry later
         return False
 
     def _trigger_rebase(self, pr: PRQueueItem) -> bool:
@@ -140,6 +171,14 @@ class PRProcessor:
         pr.status = PRStatus.WAITING_CHECKS
         pr.last_updated = datetime.now(UTC).isoformat()
 
+        # Check for merge conflicts early before waiting for checks
+        _, _, mergeable = self.status_poller.check_pr_status(pr)
+        if mergeable == "CONFLICTING":
+            print("  ⚠ Merge conflict detected, routing to fix workflow")
+            pr.status = PRStatus.CHECKS_FAILED
+            pr.last_updated = datetime.now(UTC).isoformat()
+            return False
+
         check_status = self.status_poller.wait_for_checks_completion(
             pr, timeout_minutes=30
         )
@@ -186,7 +225,8 @@ class PRProcessor:
             return True
 
         print(f"  ⚠ PR not mergeable (mergeable={mergeable}, all_passed={all_passed})")
-        if has_failures:
+        if has_failures or mergeable == "CONFLICTING":
+            # Treat merge conflicts like check failures - they can be fixed
             pr.status = PRStatus.CHECKS_FAILED
             pr.last_updated = datetime.now(UTC).isoformat()
             return False
