@@ -110,16 +110,38 @@ class StatusPoller:
 
             status_data = json.loads(status_json)
 
-            # Check if all checks passed
+            # Check if all checks passed - handle both CheckRun and StatusContext
             rollup = status_data.get("statusCheckRollup") or []
-            all_passed = all(
-                check.get("conclusion") in ["SUCCESS", "NEUTRAL", "SKIPPED", None]
-                for check in rollup
-                if check.get("name") != "Monitor Organization Bot PRs"
-            )
 
-            # Check if any checks failed
-            has_failures = any(check.get("conclusion") == "FAILURE" for check in rollup)
+            def is_check_passed(check: dict) -> bool:
+                """Check if a check has passed or is neutral."""
+                # Skip our own monitoring check
+                if check.get("name") == "Monitor Organization Bot PRs":
+                    return True
+
+                typename = check.get("__typename")
+                if typename == "StatusContext":
+                    # StatusContext uses 'state' field
+                    state = check.get("state")
+                    return state in ["SUCCESS"]
+                # CheckRun uses 'conclusion' field
+                conclusion = check.get("conclusion")
+                return conclusion in ["SUCCESS", "NEUTRAL", "SKIPPED"]
+
+            def is_check_failed(check: dict) -> bool:
+                """Check if a check has failed."""
+                # Skip our own monitoring check
+                if check.get("name") == "Monitor Organization Bot PRs":
+                    return False
+
+                typename = check.get("__typename")
+                if typename == "StatusContext":
+                    state = check.get("state")
+                    return state in ["FAILURE", "ERROR"]
+                return check.get("conclusion") == "FAILURE"
+
+            all_passed = all(is_check_passed(check) for check in rollup)
+            has_failures = any(is_check_failed(check) for check in rollup)
 
             mergeable = status_data.get("mergeable", "UNKNOWN")
 
@@ -193,14 +215,33 @@ class StatusPoller:
                 time.sleep(check_interval)
                 continue
 
-            # Check status
-            any_running = any(
-                check.get("conclusion") is None
-                or check.get("status") in ["IN_PROGRESS", "QUEUED", "PENDING"]
-                for check in rollup
-            )
+            # Check status - handle both CheckRun and StatusContext types
+            def is_check_running(check: dict) -> bool:
+                """Check if a check is still running."""
+                typename = check.get("__typename")
+                if typename == "StatusContext":
+                    # StatusContext uses 'state' field
+                    state = check.get("state")
+                    return state in ["PENDING", "EXPECTED"]
+                # CheckRun uses 'conclusion' and 'status' fields
+                return check.get("conclusion") is None and check.get("status") in [
+                    "IN_PROGRESS",
+                    "QUEUED",
+                    "PENDING",
+                ]
 
-            any_failed = any(check.get("conclusion") == "FAILURE" for check in rollup)
+            def is_check_failed(check: dict) -> bool:
+                """Check if a check has failed."""
+                typename = check.get("__typename")
+                if typename == "StatusContext":
+                    # StatusContext uses 'state' field
+                    state = check.get("state")
+                    return state in ["FAILURE", "ERROR"]
+                # CheckRun uses 'conclusion' field
+                return check.get("conclusion") == "FAILURE"
+
+            any_running = any(is_check_running(check) for check in rollup)
+            any_failed = any(is_check_failed(check) for check in rollup)
 
             if not any_running:
                 if any_failed:
