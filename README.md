@@ -2,6 +2,7 @@
 
 ----------------------------------------------------------------------------------------
 
+[![PyPI](https://img.shields.io/pypi/v/aieng-bot-maintain)](https://pypi.org/project/aieng-bot-maintain)
 [![code checks](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/code_checks.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/code_checks.yml)
 [![unit tests](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/unit_tests.yml)
 [![docs](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/docs.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/docs.yml)
