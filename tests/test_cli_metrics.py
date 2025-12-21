@@ -11,7 +11,7 @@ from aieng_bot_maintain.cli import collect_metrics_cli
 class TestCollectMetricsCLI:
     """Test suite for collect_metrics_cli function."""
 
-    @patch("aieng_bot_maintain.cli.MetricsCollector")
+    @patch("aieng_bot_maintain._cli.commands.collect_metrics.MetricsCollector")
     @patch.object(sys, "argv", ["collect-bot-metrics", "--days", "7"])
     def test_collect_metrics_cli_basic(self, mock_collector_class):
         """Test basic CLI execution."""
@@ -35,7 +35,7 @@ class TestCollectMetricsCLI:
         mock_collector.query_bot_prs.assert_called_once()
         mock_collector.aggregate_metrics.assert_called_once()
 
-    @patch("aieng_bot_maintain.cli.MetricsCollector")
+    @patch("aieng_bot_maintain._cli.commands.collect_metrics.MetricsCollector")
     @patch.object(
         sys,
         "argv",
@@ -68,7 +68,7 @@ class TestCollectMetricsCLI:
 
         mock_collector.upload_to_gcs.assert_called()
 
-    @patch("aieng_bot_maintain.cli.MetricsCollector")
+    @patch("aieng_bot_maintain._cli.commands.collect_metrics.MetricsCollector")
     @patch.object(sys, "argv", ["collect-bot-metrics"])
     def test_collect_metrics_cli_error(self, mock_collector_class):
         """Test CLI with error."""

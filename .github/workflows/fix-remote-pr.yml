@@ -255,17 +255,12 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Load and customize prompt
+      - name: Select prompt template
         id: prepare-prompt
         run: |
           FAILURE_TYPE="${{ steps.analyze.outputs.failure-type }}"
           CONFIDENCE="${{ steps.analyze.outputs.confidence }}"
           REASONING="${{ steps.analyze.outputs.reasoning }}"
-          REPO="${{ github.event.inputs.target_repo }}"
-          PR_NUMBER="${{ github.event.inputs.pr_number }}"
-          PR_TITLE="${{ steps.pr-details.outputs.pr-title }}"
-          PR_AUTHOR="${{ steps.pr-details.outputs.pr-author }}"
-          FAILED_NAMES="${{ steps.analyze.outputs.failed-check-names }}"
 
           echo "Classification: $FAILURE_TYPE (confidence: $CONFIDENCE)"
           echo "Reasoning: $REASONING"
@@ -280,11 +275,11 @@ jobs:
 
           # Select appropriate prompt template
           case "$FAILURE_TYPE" in
-            merge_conflict) PROMPT_FILE="bot-repo/.github/prompts/fix-merge-conflicts.md" ;;
-            test) PROMPT_FILE="bot-repo/.github/prompts/fix-test-failures.md" ;;
-            lint) PROMPT_FILE="bot-repo/.github/prompts/fix-lint-failures.md" ;;
-            security) PROMPT_FILE="bot-repo/.github/prompts/fix-security-audit.md" ;;
-            build) PROMPT_FILE="bot-repo/.github/prompts/fix-build-failures.md" ;;
+            merge_conflict) PROMPT_FILE=".github/prompts/fix-merge-conflicts.md" ;;
+            test) PROMPT_FILE=".github/prompts/fix-test-failures.md" ;;
+            lint) PROMPT_FILE=".github/prompts/fix-lint-failures.md" ;;
+            security) PROMPT_FILE=".github/prompts/fix-security-audit.md" ;;
+            build) PROMPT_FILE=".github/prompts/fix-build-failures.md" ;;
             *)
               echo "Unsupported failure type: $FAILURE_TYPE - skipping"
               echo "should-skip=true" >> $GITHUB_OUTPUT
@@ -292,36 +287,25 @@ jobs:
               ;;
           esac
 
-          echo "should-skip=false" >> $GITHUB_OUTPUT
-
-          if [ -f "$PROMPT_FILE" ]; then
-            PROMPT_CONTENT=$(cat "$PROMPT_FILE")
-          else
-            echo "Prompt file not found: $PROMPT_FILE - skipping"
+          # Check if prompt file exists in bot-repo
+          FULL_PROMPT_PATH="bot-repo/$PROMPT_FILE"
+          if [ ! -f "$FULL_PROMPT_PATH" ]; then
+            echo "Prompt file not found: $FULL_PROMPT_PATH - skipping"
             echo "should-skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Replace placeholders
-          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{REPO_NAME\}\}/$REPO}"
-          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_NUMBER\}\}/$PR_NUMBER}"
-          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_TITLE\}\}/$PR_TITLE}"
-          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{PR_AUTHOR\}\}/$PR_AUTHOR}"
-          PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILED_CHECK_NAME\}\}/$FAILED_NAMES}"
-
           # Copy failure logs to target-repo so agent can read it
-          # Instead of embedding logs in prompt (causes "Argument list too long" error)
           if [ -f /tmp/failure-logs.txt ]; then
             cp /tmp/failure-logs.txt target-repo/.failure-logs.txt
-            LOGS_REFERENCE="The failure logs have been saved to .failure-logs.txt in the repository root. Please read this file to understand the errors."
-            PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/$LOGS_REFERENCE}"
+            echo "Copied failure logs to target-repo/.failure-logs.txt"
           else
-            PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/No failure logs available}"
+            echo "Warning: No failure logs found at /tmp/failure-logs.txt"
           fi
 
-          # Save final prompt
-          echo "$PROMPT_CONTENT" > /tmp/gemini-prompt.txt
-          echo "Prompt prepared for $FAILURE_TYPE failures"
+          echo "should-skip=false" >> $GITHUB_OUTPUT
+          echo "prompt-file=$PROMPT_FILE" >> $GITHUB_OUTPUT
+          echo "Selected prompt template: $PROMPT_FILE"
 
       - name: Install Claude Code CLI
         if: steps.prepare-prompt.outputs.should-skip != 'true'
@@ -354,91 +338,30 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
         continue-on-error: true
 
-      - name: Install Claude Agent SDK
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
-        run: |
-          pip install claude-agent-sdk
-
       - name: Apply AI fixes using Claude Agent SDK
         if: steps.prepare-prompt.outputs.should-skip != 'true'
         id: claude-fix
         working-directory: target-repo
         run: |
-          cat > /tmp/fix_with_agent.py << 'PYTHON_SCRIPT_EOF'
-          import asyncio
-          import os
-          import sys
-          from datetime import datetime
+          # Construct prompt file path relative to bot-repo
+          PROMPT_FILE="../bot-repo/${{ steps.prepare-prompt.outputs.prompt-file }}"
 
-          from aieng_bot_maintain.observability import create_tracer_from_env
-          from claude_agent_sdk import query, ClaudeAgentOptions
-
-          async def main():
-              # Read the prepared prompt
-              with open('/tmp/gemini-prompt.txt', 'r') as f:
-                  prompt_content = f.read()
-
-              prompt = f"""{prompt_content}
-
-          ## Your Task
-          Analyze the failures and fix the code directly. Make minimal, targeted changes to resolve the issues.
-
-          Important:
-          - Read all relevant files first
-          - Apply fixes directly to the code
-          - Don't skip tests or add ignore comments
-          - Follow existing code patterns
-          - Make changes that will make the tests pass"""
-
-              print(" Starting automated code fixes with Claude Agent...")
-
-              # Initialize tracer
-              tracer = create_tracer_from_env()
-
-              options = ClaudeAgentOptions(
-                  allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep"],
-                  permission_mode="acceptEdits",
-                  cwd=os.getcwd()
-              )
-
-              # Wrap agent stream with tracer
-              agent_stream = query(prompt=prompt, options=options)
-              traced_stream = tracer.capture_agent_stream(agent_stream)
-
-              # Consume the traced stream
-              async for message in traced_stream:
-                  pass  # Tracer handles logging
-
-              print(" Agent completed fixes")
-
-              # Finalize trace (will update with commit info later)
-              tracer.finalize(status="SUCCESS")
-
-              # Save trace locally
-              trace_file = "/tmp/agent-execution-trace.json"
-              tracer.save_trace(trace_file)
-
-              # Save summary for PR comment
-              with open('/tmp/fix-summary.txt', 'w') as f:
-                  f.write(tracer.get_summary())
-
-          asyncio.run(main())
-          PYTHON_SCRIPT_EOF
-
-          python /tmp/fix_with_agent.py
+          # Use the clean CLI command to apply fixes
+          apply-agent-fix \
+            --repo "${{ github.event.inputs.target_repo }}" \
+            --pr-number "${{ github.event.inputs.pr_number }}" \
+            --pr-title "${{ steps.pr-details.outputs.pr-title }}" \
+            --pr-author "${{ steps.pr-details.outputs.pr-author }}" \
+            --pr-url "https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}" \
+            --failure-type "${{ steps.analyze.outputs.failure-type }}" \
+            --failed-check-names "${{ steps.analyze.outputs.failed-check-names }}" \
+            --prompt-file "$PROMPT_FILE" \
+            --failure-logs-file ".failure-logs.txt" \
+            --workflow-run-id "${{ github.run_id }}" \
+            --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --cwd "$(pwd)"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          TARGET_REPO: ${{ github.event.inputs.target_repo }}
-          PR_NUMBER: ${{ github.event.inputs.pr_number }}
-          PR_TITLE: ${{ steps.pr-details.outputs.pr-title }}
-          PR_AUTHOR: ${{ steps.pr-details.outputs.pr-author }}
-          PR_URL: https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}
-          FAILURE_TYPE: ${{ steps.analyze.outputs.failure-type }}
-          FAILED_CHECK_NAMES: ${{ steps.analyze.outputs.failed-check-names }}
-          FAILURE_LOGS: ${{ steps.get-logs.outputs.logs }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         continue-on-error: false
 
       - name: Upload trace to GCS

@@ -2,7 +2,7 @@
 
 import sys
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,7 +11,7 @@ from aieng_bot_maintain.cli import get_version
 
 def test_get_version_installed():
     """Test get_version returns version string when package is installed."""
-    with patch("aieng_bot_maintain.cli.version") as mock_version:
+    with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
         mock_version.return_value = "0.2.0"
         result = get_version()
         assert result == "0.2.0"
@@ -20,7 +20,7 @@ def test_get_version_installed():
 
 def test_get_version_not_installed():
     """Test get_version returns 'unknown' when package is not installed."""
-    with patch("aieng_bot_maintain.cli.version") as mock_version:
+    with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
         from importlib.metadata import PackageNotFoundError
 
         mock_version.side_effect = PackageNotFoundError()
@@ -76,7 +76,7 @@ def test_cli_version_output_format():
 
 def test_version_with_development_install():
     """Test version handling for development (editable) installs."""
-    with patch("aieng_bot_maintain.cli.version") as mock_version:
+    with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
         mock_version.return_value = "0.2.0.dev"
         result = get_version()
         assert result == "0.2.0.dev"
@@ -84,7 +84,7 @@ def test_version_with_development_install():
 
 def test_version_function_exception_handling():
     """Test that get_version handles unexpected exceptions gracefully."""
-    with patch("aieng_bot_maintain.cli.version") as mock_version:
+    with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
         # Only PackageNotFoundError should return "unknown"
         from importlib.metadata import PackageNotFoundError
 
@@ -119,3 +119,247 @@ def test_cli_help_includes_version():
 
     # Help should exit with code 0
     assert exc_info.value.code == 0
+
+
+class TestApplyAgentFixCLI:
+    """Test apply-agent-fix CLI command."""
+
+    @pytest.fixture
+    def mock_env(self):
+        """Set up environment variables for tests."""
+        return {"ANTHROPIC_API_KEY": "test-api-key"}
+
+    @pytest.fixture
+    def cli_args(self, tmp_path):
+        """Create valid CLI arguments for testing."""
+        prompt_file = tmp_path / "prompt.md"
+        prompt_file.write_text("Test prompt {{REPO_NAME}} {{FAILURE_DETAILS}}")
+
+        logs_file = tmp_path / ".failure-logs.txt"
+        logs_file.write_text("Test logs")
+
+        return [
+            "apply-agent-fix",
+            "--repo",
+            "VectorInstitute/test-repo",
+            "--pr-number",
+            "123",
+            "--pr-title",
+            "Bump pytest",
+            "--pr-author",
+            "app/dependabot",
+            "--pr-url",
+            "https://github.com/VectorInstitute/test-repo/pull/123",
+            "--failure-type",
+            "test",
+            "--failed-check-names",
+            "Run Tests",
+            "--prompt-file",
+            str(prompt_file),
+            "--failure-logs-file",
+            str(logs_file),
+            "--workflow-run-id",
+            "1234567890",
+            "--github-run-url",
+            "https://github.com/runs/123",
+            "--cwd",
+            str(tmp_path),
+        ]
+
+    def test_cli_version_flag(self, mock_env):
+        """Test --version flag for apply-agent-fix command."""
+        test_args = ["apply-agent-fix", "--version"]
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", test_args),
+            patch("aieng_bot_maintain.cli.get_version") as mock_get_version,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            mock_get_version.return_value = "0.2.0"
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            captured_output = StringIO()
+            with patch("sys.stdout", captured_output):
+                apply_agent_fix_cli()
+
+        assert exc_info.value.code == 0
+
+    def test_cli_help_flag(self, mock_env):
+        """Test --help flag for apply-agent-fix command."""
+        test_args = ["apply-agent-fix", "--help"]
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", test_args),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            captured_output = StringIO()
+            with patch("sys.stdout", captured_output):
+                apply_agent_fix_cli()
+
+            output = captured_output.getvalue()
+            assert "Apply automated fixes" in output
+            assert "--repo" in output
+            assert "--failure-type" in output
+
+        assert exc_info.value.code == 0
+
+    def test_cli_success(self, cli_args, mock_env):
+        """Test successful execution of apply-agent-fix CLI."""
+        from aieng_bot_maintain.agent_fixer import AgentFixResult
+
+        mock_result = AgentFixResult(
+            status="SUCCESS",
+            trace_file="/tmp/trace.json",
+            summary_file="/tmp/summary.txt",
+        )
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", cli_args),
+            patch(
+                "aieng_bot_maintain._cli.commands.apply_fix.AgentFixer"
+            ) as mock_fixer_class,
+            patch(
+                "aieng_bot_maintain._cli.commands.apply_fix.asyncio.run"
+            ) as mock_asyncio_run,
+        ):
+            mock_fixer = MagicMock()
+            mock_fixer_class.return_value = mock_fixer
+            mock_asyncio_run.return_value = mock_result
+
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            with pytest.raises(SystemExit) as exc_info:
+                apply_agent_fix_cli()
+
+            assert exc_info.value.code == 0
+            mock_fixer_class.assert_called_once()
+            mock_asyncio_run.assert_called_once()
+
+    def test_cli_failure(self, cli_args, mock_env):
+        """Test failed execution of apply-agent-fix CLI."""
+        from aieng_bot_maintain.agent_fixer import AgentFixResult
+
+        mock_result = AgentFixResult(
+            status="FAILED",
+            trace_file="",
+            summary_file="",
+            error_message="Agent execution failed",
+        )
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", cli_args),
+            patch(
+                "aieng_bot_maintain._cli.commands.apply_fix.AgentFixer"
+            ) as mock_fixer_class,
+            patch(
+                "aieng_bot_maintain._cli.commands.apply_fix.asyncio.run"
+            ) as mock_asyncio_run,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            mock_fixer = MagicMock()
+            mock_fixer_class.return_value = mock_fixer
+            mock_asyncio_run.return_value = mock_result
+
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            apply_agent_fix_cli()
+
+        assert exc_info.value.code == 1
+
+    def test_cli_missing_required_args(self, mock_env):
+        """Test CLI with missing required arguments."""
+        test_args = [
+            "apply-agent-fix",
+            "--repo",
+            "VectorInstitute/test-repo",
+            # Missing other required args
+        ]
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", test_args),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            apply_agent_fix_cli()
+
+        # Should exit with error code
+        assert exc_info.value.code != 0
+
+    def test_cli_invalid_failure_type(self, cli_args, mock_env):
+        """Test CLI with invalid failure type."""
+        # Modify args to have invalid failure type
+        failure_type_idx = cli_args.index("--failure-type")
+        cli_args[failure_type_idx + 1] = "invalid_type"
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", cli_args),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            apply_agent_fix_cli()
+
+        # Should exit with error code due to invalid choice
+        assert exc_info.value.code != 0
+
+    def test_cli_no_api_key(self, cli_args):
+        """Test CLI without ANTHROPIC_API_KEY set."""
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(sys, "argv", cli_args),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            apply_agent_fix_cli()
+
+        # Should exit with error code
+        assert exc_info.value.code == 1
+
+    def test_cli_prompt_file_not_found(self, cli_args, mock_env):
+        """Test CLI when prompt file doesn't exist."""
+        # Modify args to point to non-existent file
+        prompt_idx = cli_args.index("--prompt-file")
+        cli_args[prompt_idx + 1] = "/nonexistent/prompt.md"
+
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", cli_args),
+            patch("aieng_bot_maintain.cli.AgentFixer") as mock_fixer_class,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            mock_fixer = MagicMock()
+            mock_fixer_class.return_value = mock_fixer
+
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            apply_agent_fix_cli()
+
+        # Should exit with error code
+        assert exc_info.value.code == 1
+
+    def test_cli_exception_handling(self, cli_args, mock_env):
+        """Test CLI handles unexpected exceptions gracefully."""
+        with (
+            patch.dict("os.environ", mock_env),
+            patch.object(sys, "argv", cli_args),
+            patch(
+                "aieng_bot_maintain.cli.AgentFixer",
+                side_effect=RuntimeError("Unexpected error"),
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from aieng_bot_maintain.cli import apply_agent_fix_cli
+
+            apply_agent_fix_cli()
+
+        assert exc_info.value.code == 1
