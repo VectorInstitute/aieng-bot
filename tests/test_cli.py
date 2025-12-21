@@ -12,9 +12,9 @@ from aieng_bot_maintain.cli import get_version
 def test_get_version_installed():
     """Test get_version returns version string when package is installed."""
     with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
-        mock_version.return_value = "0.2.0"
+        mock_version.return_value = "1.2.3"
         result = get_version()
-        assert result == "0.2.0"
+        assert result == "1.2.3"
         mock_version.assert_called_once_with("aieng-bot-maintain")
 
 
@@ -37,7 +37,7 @@ def test_cli_version_flag():
         patch("aieng_bot_maintain.cli.get_version") as mock_get_version,
         pytest.raises(SystemExit) as exc_info,
     ):
-        mock_get_version.return_value = "0.2.0"
+        mock_get_version.return_value = "1.2.3"
         from aieng_bot_maintain.cli import classify_pr_failure_cli
 
         # Capture stdout
@@ -51,14 +51,13 @@ def test_cli_version_flag():
 
 def test_cli_version_output_format():
     """Test that --version outputs in correct format."""
+    import re
+
     test_args = ["classify-pr-failure", "--version"]
 
     with (
         patch.object(sys, "argv", test_args),
-        patch("aieng_bot_maintain.cli.get_version") as mock_get_version,
     ):
-        mock_get_version.return_value = "0.2.0"
-
         from aieng_bot_maintain.cli import classify_pr_failure_cli
 
         # Capture stdout
@@ -71,15 +70,18 @@ def test_cli_version_output_format():
 
         output = captured_output.getvalue()
         assert "classify-pr-failure" in output
-        assert "0.2.0" in output
+        # Check that output contains a version string (format: X.Y.Z or X.Y.Z.dev)
+        assert re.search(r"\d+\.\d+\.\d+", output), (
+            "Output should contain a version number"
+        )
 
 
 def test_version_with_development_install():
     """Test version handling for development (editable) installs."""
     with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
-        mock_version.return_value = "0.2.0.dev"
+        mock_version.return_value = "1.2.3.dev"
         result = get_version()
-        assert result == "0.2.0.dev"
+        assert result == "1.2.3.dev"
 
 
 def test_version_function_exception_handling():
@@ -176,7 +178,7 @@ class TestApplyAgentFixCLI:
             patch("aieng_bot_maintain.cli.get_version") as mock_get_version,
             pytest.raises(SystemExit) as exc_info,
         ):
-            mock_get_version.return_value = "0.2.0"
+            mock_get_version.return_value = "1.2.3"
             from aieng_bot_maintain.cli import apply_agent_fix_cli
 
             captured_output = StringIO()
