@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aieng-bot-maintain"
-version = "0.2.0"
+version = "0.3.0"
 description = "Vector Institute AI Engineering Bot for Maintenance Tasks"
 readme = "README.md"
 authors = [{name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
