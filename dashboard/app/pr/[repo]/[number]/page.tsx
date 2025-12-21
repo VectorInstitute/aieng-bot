@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import AgentTimeline from '@/components/agent-timeline'
 import FailureAnalysis from '@/components/failure-analysis'
 import ExecutionMetrics from '@/components/execution-metrics'
+import SkillsUsage from '@/components/skills-usage'
 import { Clock, GitBranch, User, ExternalLink } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -167,6 +168,9 @@ export default async function PRPage({ params }: PRPageProps) {
 
       {/* Failure Analysis - only show for agent fixes */}
       {trace.metadata.failure && <FailureAnalysis failure={trace.metadata.failure} />}
+
+      {/* Skills Usage - show discovered and used skills */}
+      <SkillsUsage events={trace.events} />
 
       {/* Execution Metrics - show if metrics are available */}
       {trace.execution.metrics && (

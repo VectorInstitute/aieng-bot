@@ -721,3 +721,60 @@ class TestToolExtractionImprovements:
         # Should default to "Unknown" when name can't be extracted
         assert len(events) == 1
         assert events[0]["tool"] == "Unknown"
+
+    @pytest.mark.asyncio
+    async def test_skill_tool_capture(self, tracer):
+        """Test that Skill tool calls are properly captured."""
+        skill_call = MockToolUseBlock(
+            "Skill", {"skill": "fix-security-audit"}, "tool_789"
+        )
+        skill_result = MockToolResultBlock("tool_789", is_error=False)
+
+        async def mock_stream():
+            yield skill_call
+            yield skill_result
+
+        async for _ in tracer.capture_agent_stream(mock_stream()):
+            pass
+
+        events = tracer.trace["events"]
+
+        assert len(events) == 2
+        # First event is TOOL_CALL with tool name = Skill
+        assert events[0]["type"] == "TOOL_CALL"
+        assert events[0]["tool"] == "Skill"
+        assert events[0]["parameters"]["skill"] == "fix-security-audit"
+        assert events[0]["tool_use_id"] == "tool_789"
+        # Second event is TOOL_RESULT linked to the Skill call
+        assert events[1]["type"] == "TOOL_RESULT"
+        assert events[1]["tool"] == "Skill"
+        assert events[1]["tool_use_id"] == "tool_789"
+
+    def test_tools_allowed_includes_skill(self, tracer):
+        """Test that tools_allowed list includes Skill tool."""
+        tools_allowed = tracer.trace["execution"]["tools_allowed"]
+        assert "Skill" in tools_allowed
+        assert "Read" in tools_allowed
+        assert "Edit" in tools_allowed
+        assert "Bash" in tools_allowed
+        assert "Glob" in tools_allowed
+        assert "Grep" in tools_allowed
+
+    def test_classify_message_skill_tool_call(self, tracer):
+        """Test message classification for skill invocations."""
+        assert (
+            tracer.classify_message("Launching skill: fix-security-audit")
+            == "TOOL_CALL"
+        )
+        assert (
+            tracer.classify_message("Invoking skill: fix-test-failures") == "TOOL_CALL"
+        )
+
+    def test_extract_tool_info_skill(self, tracer):
+        """Test tool info extraction for Skill tool."""
+        info = tracer.extract_tool_info(
+            "Launching skill: fix-security-audit", "TOOL_CALL"
+        )
+        assert info is not None
+        assert info["tool"] == "Skill"
+        assert "fix-security-audit" in info["parameters"]["target"]

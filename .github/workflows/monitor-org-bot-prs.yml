@@ -64,7 +64,7 @@ jobs:
               REPO_PRS=$(gh pr list --repo "$REPO" \
                 --author "$BOT_AUTHOR" \
                 --state open \
-                --json number,title,url,headRefName,statusCheckRollup 2>/dev/null || echo "[]")
+                --json number,title,url,headRefName,statusCheckRollup,author 2>/dev/null || echo "[]")
 
               if [ "$REPO_PRS" != "[]" ] && [ -n "$REPO_PRS" ]; then
                 # Add repo name to each PR object in the array

@@ -131,12 +131,14 @@ class TestApplyAgentFixCLI:
 
     @pytest.fixture
     def cli_args(self, tmp_path):
-        """Create valid CLI arguments for testing."""
-        prompt_file = tmp_path / "prompt.md"
-        prompt_file.write_text("Test prompt {{REPO_NAME}} {{FAILURE_DETAILS}}")
-
+        """Create valid CLI arguments for testing (skills-based)."""
         logs_file = tmp_path / ".failure-logs.txt"
         logs_file.write_text("Test logs")
+
+        # Create skills directory for agent to use
+        skills_dir = tmp_path / ".claude" / "skills" / "fix-test-failures"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "SKILL.md").write_text("Test skill")
 
         return [
             "apply-agent-fix",
@@ -154,8 +156,6 @@ class TestApplyAgentFixCLI:
             "test",
             "--failed-check-names",
             "Run Tests",
-            "--prompt-file",
-            str(prompt_file),
             "--failure-logs-file",
             str(logs_file),
             "--workflow-run-id",
@@ -318,28 +318,6 @@ class TestApplyAgentFixCLI:
             patch.object(sys, "argv", cli_args),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
-
-            apply_agent_fix_cli()
-
-        # Should exit with error code
-        assert exc_info.value.code == 1
-
-    def test_cli_prompt_file_not_found(self, cli_args, mock_env):
-        """Test CLI when prompt file doesn't exist."""
-        # Modify args to point to non-existent file
-        prompt_idx = cli_args.index("--prompt-file")
-        cli_args[prompt_idx + 1] = "/nonexistent/prompt.md"
-
-        with (
-            patch.dict("os.environ", mock_env),
-            patch.object(sys, "argv", cli_args),
-            patch("aieng_bot_maintain.cli.AgentFixer") as mock_fixer_class,
-            pytest.raises(SystemExit) as exc_info,
-        ):
-            mock_fixer = MagicMock()
-            mock_fixer_class.return_value = mock_fixer
-
             from aieng_bot_maintain.cli import apply_agent_fix_cli
 
             apply_agent_fix_cli()

@@ -1,7 +1,7 @@
 """Tests for agent fixer module."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -21,7 +21,6 @@ class TestAgentFixRequest:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             failure_type="test",
             failed_check_names="Run Tests,Lint",
-            prompt_file=".github/prompts/fix-test-failures.md",
             failure_logs_file=".failure-logs.txt",
             workflow_run_id="1234567890",
             github_run_url="https://github.com/runs/123",
@@ -43,7 +42,6 @@ class TestAgentFixRequest:
             pr_url="https://github.com/test/repo/pull/456",
             failure_type="lint",
             failed_check_names="ESLint",
-            prompt_file="prompts/lint.md",
             failure_logs_file="logs.txt",
             workflow_run_id="999",
             github_run_url="https://url",
@@ -101,15 +99,6 @@ class TestAgentFixer:
     @pytest.fixture
     def fix_request(self, tmp_path):
         """Create a test fix request."""
-        prompt_file = tmp_path / "prompt.md"
-        prompt_file.write_text(
-            "Fix {{REPO_NAME}} PR #{{PR_NUMBER}}\n"
-            "Title: {{PR_TITLE}}\n"
-            "Author: {{PR_AUTHOR}}\n"
-            "Failed: {{FAILED_CHECK_NAME}}\n"
-            "Details: {{FAILURE_DETAILS}}"
-        )
-
         logs_file = tmp_path / ".failure-logs.txt"
         logs_file.write_text("Error: test failed\nAssertion error at line 42")
 
@@ -121,7 +110,6 @@ class TestAgentFixer:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             failure_type="test",
             failed_check_names="Run Tests",
-            prompt_file=str(prompt_file),
             failure_logs_file=str(logs_file),
             workflow_run_id="1234567890",
             github_run_url="https://github.com/runs/123",
@@ -142,52 +130,49 @@ class TestAgentFixer:
             fixer = AgentFixer()
             assert fixer.api_key == "test-key"
 
-    def test_load_prompt_template(self, fix_request):
-        """Test loading and populating prompt template."""
+    def test_write_pr_context(self, fix_request, tmp_path):
+        """Test writing PR context to JSON file."""
+        import json
+
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             fixer = AgentFixer()
-            prompt = fixer._load_prompt_template(fix_request)
+            fixer._write_pr_context(fix_request)
 
-            assert "VectorInstitute/test-repo" in prompt
-            assert "123" in prompt
-            assert "Bump pytest" in prompt
-            assert "app/dependabot" in prompt
-            assert "Run Tests" in prompt
-            assert ".failure-logs.txt" in prompt
+            context_file = tmp_path / ".pr-context.json"
+            assert context_file.exists()
 
-    def test_load_prompt_template_missing_file(self, fix_request):
-        """Test loading prompt template when file doesn't exist."""
-        fix_request.prompt_file = "/nonexistent/prompt.md"
+            with open(context_file) as f:
+                context = json.load(f)
 
-        with (
-            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            pytest.raises(FileNotFoundError, match="Prompt template not found"),
-        ):
+            assert context["repo"] == "VectorInstitute/test-repo"
+            assert context["pr_number"] == 123
+            assert context["pr_title"] == "Bump pytest"
+            assert context["pr_author"] == "app/dependabot"
+            assert context["failure_type"] == "test"
+            assert context["failed_checks"] == ["Run Tests"]
+
+    def test_build_prompt(self, fix_request):
+        """Test building simple prompt for skills."""
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             fixer = AgentFixer()
-            fixer._load_prompt_template(fix_request)
+            prompt = fixer._build_prompt(fix_request)
 
-    def test_load_prompt_template_missing_logs(self, fix_request, tmp_path):
-        """Test loading prompt template when logs file doesn't exist."""
+            assert "AI Engineering Maintenance Bot" in prompt
+            assert "test check failures" in prompt
+            assert ".pr-context.json" in prompt
+            assert ".failure-logs.txt" in prompt
+            assert "fix-test-failures skill" in prompt
+            assert "minimal, targeted changes" in prompt
+
+    def test_build_prompt_missing_logs(self, fix_request, tmp_path):
+        """Test building prompt when logs file doesn't exist."""
         fix_request.failure_logs_file = str(tmp_path / "missing-logs.txt")
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             fixer = AgentFixer()
-            prompt = fixer._load_prompt_template(fix_request)
+            prompt = fixer._build_prompt(fix_request)
 
-            assert "No failure logs available" in prompt
-
-    def test_build_final_prompt(self):
-        """Test building final prompt with task instructions."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            base_prompt = "Fix the test failures"
-            final_prompt = fixer._build_final_prompt(base_prompt)
-
-            assert "Fix the test failures" in final_prompt
-            assert "## Your Task" in final_prompt
-            assert "Analyze the failures" in final_prompt
-            assert "Make minimal, targeted changes" in final_prompt
-            assert "Don't skip tests" in final_prompt
+            assert "no failure logs (file not found)" in prompt
 
     def test_create_tracer(self, fix_request):
         """Test creating an execution tracer."""
@@ -218,11 +203,13 @@ class TestAgentFixer:
         mock_tracer.get_summary.return_value = "Fixed 1 test"
         mock_tracer.save_trace = MagicMock()
 
-        mock_query = AsyncMock(return_value=mock_stream())
+        # Create a regular mock function that returns the async generator
+        def mock_query(*args, **kwargs):
+            return mock_stream()
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot_maintain.agent_fixer.fixer.query", mock_query),
+            patch("aieng_bot_maintain.agent_fixer.fixer.query", side_effect=mock_query),
             patch.object(AgentFixer, "_create_tracer", return_value=mock_tracer),
             patch("builtins.open", mock_open()),
         ):
@@ -256,22 +243,10 @@ class TestAgentFixer:
             assert result.summary_file == ""
 
     @pytest.mark.asyncio
-    async def test_apply_fixes_prompt_not_found(self, fix_request):
-        """Test handling when prompt file not found."""
-        fix_request.prompt_file = "/nonexistent/prompt.md"
-
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            result = await fixer.apply_fixes(fix_request)
-
-            assert result.status == "FAILED"
-            assert "Prompt template not found" in result.error_message
-
-    @pytest.mark.asyncio
     async def test_apply_fixes_calls_agent_with_correct_options(
         self, fix_request, tmp_path
     ):
-        """Test that agent is called with correct options."""
+        """Test that agent is called with correct options including skills."""
 
         async def mock_stream():
             yield MagicMock()
@@ -286,11 +261,12 @@ class TestAgentFixer:
         mock_tracer.get_summary.return_value = "Summary"
         mock_tracer.save_trace = MagicMock()
 
-        mock_query = AsyncMock(return_value=mock_stream())
+        # Create a regular mock function that returns the async generator
+        mock_query_func = MagicMock(side_effect=lambda *args, **kwargs: mock_stream())
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot_maintain.agent_fixer.fixer.query", mock_query),
+            patch("aieng_bot_maintain.agent_fixer.fixer.query", mock_query_func),
             patch.object(AgentFixer, "_create_tracer", return_value=mock_tracer),
             patch("builtins.open", mock_open()),
         ):
@@ -298,15 +274,77 @@ class TestAgentFixer:
             await fixer.apply_fixes(fix_request)
 
             # Verify query was called
-            mock_query.assert_called_once()
-            call_args = mock_query.call_args
+            mock_query_func.assert_called_once()
+            call_args = mock_query_func.call_args
 
             # Check prompt argument
-            assert "VectorInstitute/test-repo" in call_args.kwargs["prompt"]
-            assert "## Your Task" in call_args.kwargs["prompt"]
+            assert "AI Engineering Maintenance Bot" in call_args.kwargs["prompt"]
+            assert "fix-test-failures skill" in call_args.kwargs["prompt"]
+            assert ".pr-context.json" in call_args.kwargs["prompt"]
 
             # Check options
             options = call_args.kwargs["options"]
-            assert options.allowed_tools == ["Read", "Edit", "Bash", "Glob", "Grep"]
+            assert options.allowed_tools == [
+                "Read",
+                "Edit",
+                "Bash",
+                "Glob",
+                "Grep",
+                "Skill",
+            ]
             assert options.permission_mode == "acceptEdits"
             assert options.cwd == str(tmp_path)
+            assert options.setting_sources == ["project"]  # Skills enabled!
+
+    def test_pr_context_file_structure(self, fix_request, tmp_path):
+        """Test that PR context file has all required fields."""
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            fixer._write_pr_context(fix_request)
+
+            import json
+
+            context_file = tmp_path / ".pr-context.json"
+            with open(context_file) as f:
+                context = json.load(f)
+
+            # Verify all required fields are present
+            assert "repo" in context
+            assert "pr_number" in context
+            assert "pr_title" in context
+            assert "pr_author" in context
+            assert "pr_url" in context
+            assert "failure_type" in context
+            assert "failed_checks" in context
+            assert "failure_logs_file" in context
+
+            # Verify types
+            assert isinstance(context["pr_number"], int)
+            assert isinstance(context["failed_checks"], list)
+
+    def test_build_prompt_references_context_file(self, fix_request):
+        """Test that prompt tells agent to read context file."""
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            prompt = fixer._build_prompt(fix_request)
+
+            # Should mention the context file location
+            assert ".pr-context.json" in prompt
+            assert "PR metadata" in prompt or "context" in prompt.lower()
+
+    def test_build_prompt_references_correct_skill(self, fix_request):
+        """Test that prompt mentions the correct skill for failure type."""
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+
+            # Test different failure types
+            failure_types = ["test", "lint", "security", "build", "merge_conflict"]
+            for failure_type in failure_types:
+                fix_request.failure_type = failure_type
+                prompt = fixer._build_prompt(fix_request)
+
+                # Should reference the specific skill
+                expected_skill = f"fix-{failure_type}-failures"
+                assert expected_skill in prompt, (
+                    f"Prompt should mention {expected_skill} skill"
+                )

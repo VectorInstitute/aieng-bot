@@ -234,6 +234,49 @@ class TestStateManager:
         assert queue.prs[1].pr_number == 124
         assert queue.prs[2].pr_number == 125
 
+    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    def test_create_initial_state_missing_author(self, mock_datetime, state_manager):
+        """Test creating initial state when author field is missing.
+
+        This regression test ensures the bot handles PRs from workflows that
+        don't fetch the author field (e.g., gh pr list without --json author).
+        """
+        mock_now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        mock_datetime.now.return_value = mock_now
+        mock_datetime.fromisoformat = datetime.fromisoformat
+
+        prs = [
+            {
+                "repo": "VectorInstitute/test-repo",
+                "number": 100,
+                "title": "PR without author",
+                "url": "https://github.com/VectorInstitute/test-repo/pull/100",
+                # author field intentionally missing
+            },
+            {
+                "repo": "VectorInstitute/test-repo",
+                "number": 101,
+                "title": "PR with partial author",
+                "url": "https://github.com/VectorInstitute/test-repo/pull/101",
+                "author": {},  # Empty author dict
+            },
+        ]
+
+        state = state_manager.create_initial_state("123", prs)
+
+        queue = state.repo_queues["VectorInstitute/test-repo"]
+        assert len(queue.prs) == 2
+
+        # Both PRs should default to "unknown" author
+        assert queue.prs[0].pr_author == "unknown"
+        assert queue.prs[1].pr_author == "unknown"
+
+        # Other fields should still be populated correctly
+        assert queue.prs[0].pr_number == 100
+        assert queue.prs[0].pr_title == "PR without author"
+        assert queue.prs[1].pr_number == 101
+        assert queue.prs[1].pr_title == "PR with partial author"
+
     @patch("subprocess.run")
     def test_clear_state_success(self, mock_run, state_manager, capsys):
         """Test successful state clearing."""

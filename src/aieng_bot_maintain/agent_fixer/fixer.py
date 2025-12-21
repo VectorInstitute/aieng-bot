@@ -1,5 +1,6 @@
-"""Agent fixer implementation using Claude Agent SDK."""
+"""Agent fixer implementation using Claude Agent SDK with Skills."""
 
+import json
 import os
 from pathlib import Path
 
@@ -25,7 +26,7 @@ class AgentFixer:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
 
     async def apply_fixes(self, request: AgentFixRequest) -> AgentFixResult:
-        """Apply fixes to a PR using the Claude Agent SDK.
+        """Apply fixes to a PR using Claude Agent SDK with Skills.
 
         Parameters
         ----------
@@ -39,8 +40,6 @@ class AgentFixer:
 
         Raises
         ------
-        FileNotFoundError
-            If prompt template or failure logs file not found.
         RuntimeError
             If agent execution fails.
 
@@ -51,25 +50,26 @@ class AgentFixer:
         )
 
         try:
-            # Load prompt template
-            prompt_content = self._load_prompt_template(request)
+            # Write PR context to file for skills to read
+            self._write_pr_context(request)
 
-            # Build final prompt with task instructions
-            full_prompt = self._build_final_prompt(prompt_content)
+            # Build simple prompt that directs Claude to use skills
+            prompt = self._build_prompt(request)
 
-            log_info("Starting Claude Agent SDK...")
-            # Initialize tracer with environment variables
+            log_info("Starting Claude Agent SDK with skills...")
+            # Initialize tracer
             tracer = self._create_tracer(request)
 
-            # Configure agent options
+            # Configure agent options with skills support
             options = ClaudeAgentOptions(
-                allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep"],
+                allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Skill"],
                 permission_mode="acceptEdits",
                 cwd=request.cwd,
+                setting_sources=["project"],  # Load .claude/skills/
             )
 
             # Run agent with tracing
-            agent_stream = query(prompt=full_prompt, options=options)
+            agent_stream = query(prompt=prompt, options=options)
             traced_stream = tracer.capture_agent_stream(agent_stream)
 
             # Consume the traced stream
@@ -108,85 +108,67 @@ class AgentFixer:
                 error_message=str(e),
             )
 
-    def _load_prompt_template(self, request: AgentFixRequest) -> str:
-        """Load and populate prompt template.
+    def _write_pr_context(self, request: AgentFixRequest) -> None:
+        """Write PR context to file for skills to read.
 
         Parameters
         ----------
         request : AgentFixRequest
-            The fix request containing template substitution values.
-
-        Returns
-        -------
-        str
-            Populated prompt content.
-
-        Raises
-        ------
-        FileNotFoundError
-            If prompt template file not found.
+            The fix request containing PR metadata.
 
         """
-        prompt_path = Path(request.prompt_file)
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"Prompt template not found: {request.prompt_file}")
+        context_file = Path(request.cwd) / ".pr-context.json"
 
-        log_info(f"Loading prompt template: {request.prompt_file}")
-        template_content = prompt_path.read_text()
+        context = {
+            "repo": request.repo,
+            "pr_number": request.pr_number,
+            "pr_title": request.pr_title,
+            "pr_author": request.pr_author,
+            "pr_url": request.pr_url,
+            "failure_type": request.failure_type,
+            "failed_checks": request.failed_check_names.split(","),
+            "failure_logs_file": request.failure_logs_file,
+        }
 
-        # Replace placeholders
-        prompt_content = template_content.replace("{{REPO_NAME}}", request.repo)
-        prompt_content = prompt_content.replace("{{PR_NUMBER}}", str(request.pr_number))
-        prompt_content = prompt_content.replace("{{PR_TITLE}}", request.pr_title)
-        prompt_content = prompt_content.replace("{{PR_AUTHOR}}", request.pr_author)
-        prompt_content = prompt_content.replace(
-            "{{FAILED_CHECK_NAME}}", request.failed_check_names
-        )
+        log_info(f"Writing PR context to {context_file}")
+        with open(context_file, "w") as f:
+            json.dump(context, f, indent=2)
 
-        # Add failure logs reference
-        if Path(request.failure_logs_file).exists():
-            logs_reference = (
-                f"The failure logs have been saved to {request.failure_logs_file} "
-                f"in the repository root. Please read this file to understand the errors."
-            )
-            prompt_content = prompt_content.replace(
-                "{{FAILURE_DETAILS}}", logs_reference
-            )
-        else:
-            log_error(f"Failure logs file not found: {request.failure_logs_file}")
-            prompt_content = prompt_content.replace(
-                "{{FAILURE_DETAILS}}", "No failure logs available"
-            )
-
-        return prompt_content
-
-    def _build_final_prompt(self, prompt_content: str) -> str:
-        """Add task instructions to the prompt.
+    def _build_prompt(self, request: AgentFixRequest) -> str:
+        """Build a simple prompt that directs Claude to use skills.
 
         Parameters
         ----------
-        prompt_content : str
-            The base prompt content.
+        request : AgentFixRequest
+            The fix request containing failure information.
 
         Returns
         -------
         str
-            Final prompt with task instructions appended.
+            Prompt for Claude Agent SDK.
 
         """
-        task_instructions = """
+        # Verify failure logs exist
+        logs_info = "detailed error logs"
+        if not Path(request.failure_logs_file).exists():
+            log_error(f"Failure logs file not found: {request.failure_logs_file}")
+            logs_info = "no failure logs (file not found)"
+
+        return f"""You are the AI Engineering Maintenance Bot for Vector Institute.
+
+A Dependabot or pre-commit-ci PR has {request.failure_type} check failures.
+
+## Context Files
+- `.pr-context.json` - PR metadata (repo, number, title, etc.)
+- `{request.failure_logs_file}` - {logs_info}
 
 ## Your Task
-Analyze the failures and fix the code directly. Make minimal, targeted changes to resolve the issues.
+Fix this PR's {request.failure_type} failures using the appropriate skill.
 
-Important:
-- Read all relevant files first
-- Apply fixes directly to the code
-- Don't skip tests or add ignore comments
-- Follow existing code patterns
-- Make changes that will make the tests pass"""
+Read the context and failure logs, then apply the fix-{request.failure_type}-failures skill to resolve the issues.
 
-        return prompt_content + task_instructions
+Make minimal, targeted changes following the skill's guidance.
+"""
 
     def _create_tracer(self, request: AgentFixRequest) -> AgentExecutionTracer:
         """Create and configure an execution tracer.

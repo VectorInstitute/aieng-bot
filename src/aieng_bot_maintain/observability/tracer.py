@@ -98,7 +98,7 @@ class AgentExecutionTracer:
                 "end_time": None,
                 "duration_seconds": None,
                 "model": "claude-sonnet-4.5",
-                "tools_allowed": ["Read", "Edit", "Bash", "Glob", "Grep"],
+                "tools_allowed": ["Read", "Edit", "Bash", "Glob", "Grep", "Skill"],
                 "metrics": None,  # Will be populated from ResultMessage
             },
             "events": [],
@@ -121,6 +121,7 @@ class AgentExecutionTracer:
             "Bash": r"(?:Running|Execute|Executing)\s+[`'\"]?(.+?)[`'\"]?",
             "Glob": r"(?:Searching|Search|Finding|Glob)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
             "Grep": r"(?:Grepping|Grep|Searching)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
+            "Skill": r"(?:Launching\s+skill|Skill):\s+([a-zA-Z0-9_-]+)",
         }
 
     def classify_message(self, content: str) -> str:
@@ -167,6 +168,8 @@ class AgentExecutionTracer:
             "grep",
             "finding",
             "glob",
+            "launching skill",
+            "invoking skill",
         ]
         if any(keyword in content_lower for keyword in tool_keywords) and any(
             tool.lower() in content_lower for tool in self.tool_patterns

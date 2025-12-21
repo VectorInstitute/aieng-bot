@@ -255,8 +255,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Select prompt template
-        id: prepare-prompt
+      - name: Prepare for agent execution
+        id: prepare
         run: |
           FAILURE_TYPE="${{ steps.analyze.outputs.failure-type }}"
           CONFIDENCE="${{ steps.analyze.outputs.confidence }}"
@@ -265,7 +265,7 @@ jobs:
           echo "Classification: $FAILURE_TYPE (confidence: $CONFIDENCE)"
           echo "Reasoning: $REASONING"
 
-          # Skip unknown failure types or low confidence
+          # Skip unknown failure types
           if [ "$FAILURE_TYPE" = "unknown" ]; then
             echo "Failure type is unknown - skipping automated fix attempt"
             echo "Reasoning: $REASONING"
@@ -273,13 +273,11 @@ jobs:
             exit 0
           fi
 
-          # Select appropriate prompt template
+          # Verify failure type is supported
           case "$FAILURE_TYPE" in
-            merge_conflict) PROMPT_FILE=".github/prompts/fix-merge-conflicts.md" ;;
-            test) PROMPT_FILE=".github/prompts/fix-test-failures.md" ;;
-            lint) PROMPT_FILE=".github/prompts/fix-lint-failures.md" ;;
-            security) PROMPT_FILE=".github/prompts/fix-security-audit.md" ;;
-            build) PROMPT_FILE=".github/prompts/fix-build-failures.md" ;;
+            merge_conflict|test|lint|security|build)
+              echo "✓ Failure type '$FAILURE_TYPE' is supported"
+              ;;
             *)
               echo "Unsupported failure type: $FAILURE_TYPE - skipping"
               echo "should-skip=true" >> $GITHUB_OUTPUT
@@ -287,46 +285,42 @@ jobs:
               ;;
           esac
 
-          # Check if prompt file exists in bot-repo
-          FULL_PROMPT_PATH="bot-repo/$PROMPT_FILE"
-          if [ ! -f "$FULL_PROMPT_PATH" ]; then
-            echo "Prompt file not found: $FULL_PROMPT_PATH - skipping"
-            echo "should-skip=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          # Copy skills to target-repo so agent can use them
+          echo "Copying Claude Code skills to target repository..."
+          cp -r bot-repo/.claude target-repo/.claude
+          echo "✓ Skills copied to target-repo/.claude/"
 
           # Copy failure logs to target-repo so agent can read it
           if [ -f /tmp/failure-logs.txt ]; then
             cp /tmp/failure-logs.txt target-repo/.failure-logs.txt
-            echo "Copied failure logs to target-repo/.failure-logs.txt"
+            echo "✓ Failure logs copied to target-repo/.failure-logs.txt"
           else
-            echo "Warning: No failure logs found at /tmp/failure-logs.txt"
+            echo "⚠️  Warning: No failure logs found at /tmp/failure-logs.txt"
           fi
 
           echo "should-skip=false" >> $GITHUB_OUTPUT
-          echo "prompt-file=$PROMPT_FILE" >> $GITHUB_OUTPUT
-          echo "Selected prompt template: $PROMPT_FILE"
+          echo "Ready to apply fixes using skills"
 
       - name: Install Claude Code CLI
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+        if: steps.prepare.outputs.should-skip != 'true'
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Setup Python for Agent SDK
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+        if: steps.prepare.outputs.should-skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version-file: bot-repo/.python-version
 
       - name: Install uv (Python package manager)
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+        if: steps.prepare.outputs.should-skip != 'true'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Authenticate to Google Cloud
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+        if: steps.prepare.outputs.should-skip != 'true'
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -334,19 +328,16 @@ jobs:
         continue-on-error: true
 
       - name: Set up Cloud SDK
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+        if: steps.prepare.outputs.should-skip != 'true'
         uses: google-github-actions/setup-gcloud@v3
         continue-on-error: true
 
-      - name: Apply AI fixes using Claude Agent SDK
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+      - name: Apply AI fixes using Claude Agent SDK with Skills
+        if: steps.prepare.outputs.should-skip != 'true'
         id: claude-fix
         working-directory: target-repo
         run: |
-          # Construct prompt file path relative to bot-repo
-          PROMPT_FILE="../bot-repo/${{ steps.prepare-prompt.outputs.prompt-file }}"
-
-          # Use the clean CLI command to apply fixes
+          # Apply fixes using skills from .claude/skills/
           apply-agent-fix \
             --repo "${{ github.event.inputs.target_repo }}" \
             --pr-number "${{ github.event.inputs.pr_number }}" \
@@ -355,7 +346,6 @@ jobs:
             --pr-url "https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}" \
             --failure-type "${{ steps.analyze.outputs.failure-type }}" \
             --failed-check-names "${{ steps.analyze.outputs.failed-check-names }}" \
-            --prompt-file "$PROMPT_FILE" \
             --failure-logs-file ".failure-logs.txt" \
             --workflow-run-id "${{ github.run_id }}" \
             --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \

@@ -23,8 +23,6 @@ class AgentFixRequest:
         Type of failure (test, lint, security, build, merge_conflict).
     failed_check_names : str
         Comma-separated list of failed check names.
-    prompt_file : str
-        Path to the prompt template file.
     failure_logs_file : str
         Path to file containing failure logs.
     workflow_run_id : str
@@ -43,7 +41,6 @@ class AgentFixRequest:
     pr_url: str
     failure_type: str
     failed_check_names: str
-    prompt_file: str
     failure_logs_file: str
     workflow_run_id: str
     github_run_url: str

@@ -13,17 +13,16 @@ from ..utils import get_version
 def apply_agent_fix_cli() -> None:
     """CLI entry point for applying agent fixes to PR failures.
 
-    Loads prompt template, invokes Claude Agent SDK to apply fixes,
-    and saves execution trace and summary.
+    Uses Claude Agent SDK with Skills to apply fixes automatically.
 
     """
     parser = argparse.ArgumentParser(
         prog="apply-agent-fix",
-        description="Apply automated fixes to PR failures using Claude Agent SDK",
+        description="Apply automated fixes to PR failures using Claude Agent SDK with Skills",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Apply fixes for a test failure
+  # Apply fixes for a test failure (skills must be in .claude/skills/)
   apply-agent-fix \\
     --repo VectorInstitute/repo-name \\
     --pr-number 123 \\
@@ -32,7 +31,6 @@ Examples:
     --pr-url "https://github.com/..." \\
     --failure-type test \\
     --failed-check-names "Run Tests" \\
-    --prompt-file .github/prompts/fix-test-failures.md \\
     --failure-logs-file .failure-logs.txt \\
     --workflow-run-id 1234567890 \\
     --github-run-url "https://github.com/.../runs/..." \\
@@ -64,9 +62,6 @@ Examples:
         help="Comma-separated list of failed check names",
     )
     parser.add_argument(
-        "--prompt-file", required=True, help="Path to prompt template file"
-    )
-    parser.add_argument(
         "--failure-logs-file",
         required=True,
         help="Path to file containing failure logs",
@@ -91,7 +86,6 @@ Examples:
             pr_url=args.pr_url,
             failure_type=args.failure_type,
             failed_check_names=args.failed_check_names,
-            prompt_file=args.prompt_file,
             failure_logs_file=args.failure_logs_file,
             workflow_run_id=args.workflow_run_id,
             github_run_url=args.github_run_url,
