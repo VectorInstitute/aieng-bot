@@ -245,6 +245,7 @@ class TestLogAutoMerge:
             assert activity["pr_title"] == "Bump dependency"
             assert activity["pr_author"] == "app/dependabot"
             assert activity["workflow_run_id"] == "123456789"
+            assert activity["status"] == "SUCCESS"
             assert activity["was_rebased"] is False
             assert "rebase_time_seconds" not in activity
 
@@ -279,6 +280,7 @@ class TestLogAutoMerge:
             saved_data = mock_save.call_args[0][0]
             activity = saved_data["activities"][0]
 
+            assert activity["status"] == "SUCCESS"
             assert activity["was_rebased"] is True
             assert activity["rebase_time_seconds"] == 300.5
 

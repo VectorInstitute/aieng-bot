@@ -177,6 +177,7 @@ class ActivityLogger:
             "timestamp": datetime.now(UTC).isoformat(),
             "workflow_run_id": workflow_run_id,
             "github_run_url": github_run_url,
+            "status": "SUCCESS",
             "was_rebased": was_rebased,
         }
 
