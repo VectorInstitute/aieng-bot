@@ -312,7 +312,7 @@ jobs:
           # Copy failure logs to target-repo so agent can read it
           # Instead of embedding logs in prompt (causes "Argument list too long" error)
           if [ -f /tmp/failure-logs.txt ]; then
-            cp /tmp/failure-logs.txt ../target-repo/.failure-logs.txt
+            cp /tmp/failure-logs.txt target-repo/.failure-logs.txt
             LOGS_REFERENCE="The failure logs have been saved to .failure-logs.txt in the repository root. Please read this file to understand the errors."
             PROMPT_CONTENT="${PROMPT_CONTENT//\{\{FAILURE_DETAILS\}\}/$LOGS_REFERENCE}"
           else
