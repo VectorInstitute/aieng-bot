@@ -243,12 +243,41 @@ class StatusPoller:
             any_running = any(is_check_running(check) for check in rollup)
             any_failed = any(is_check_failed(check) for check in rollup)
 
-            if not any_running:
+            # Ensure all checks have finalized conclusions before marking as complete
+            def has_finalized_conclusion(check: dict) -> bool:
+                """Check if a check has a finalized conclusion.
+
+                GitHub may update the status field before the conclusion field,
+                causing a race condition where checks appear "done" but don't
+                have a final pass/fail state yet.
+                """
+                # Skip our own monitoring check
+                if check.get("name") == "Monitor Organization Bot PRs":
+                    return True
+
+                typename = check.get("__typename")
+                if typename == "StatusContext":
+                    # StatusContext uses 'state' field - valid states are final
+                    state = check.get("state")
+                    return state in ["SUCCESS", "FAILURE", "ERROR"]
+                # CheckRun uses 'conclusion' field - must not be None
+                return check.get("conclusion") is not None
+
+            all_finalized = all(has_finalized_conclusion(check) for check in rollup)
+
+            if not any_running and all_finalized:
                 if any_failed:
                     print("  ✗ Checks failed")
                     return "FAILED"
                 print("  ✓ Checks completed successfully")
                 return "COMPLETED"
+
+            # Debug: Show why we're still waiting
+            if not any_running and not all_finalized:
+                print(
+                    "    ⏳ Checks appear done but conclusions not finalized yet, "
+                    "waiting..."
+                )
 
             if attempt < max_attempts:
                 time.sleep(check_interval)
