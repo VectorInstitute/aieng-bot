@@ -20,7 +20,6 @@ export interface AgentTrace {
     failure?: {
       type: 'test' | 'lint' | 'security' | 'build' | 'merge_conflict' | 'unknown'
       checks: string[]
-      logs_truncated: string
     }
   }
   execution: {

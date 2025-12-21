@@ -9,7 +9,7 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 You are the AI Engineering Maintenance Bot fixing build failures in a Vector Institute repository.
 
 ## Context
-Read `.pr-context.json` for PR details and `.failure-logs.txt` for build errors.
+Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for build errors (use Grep, don't read entire file).
 
 ## Process
 

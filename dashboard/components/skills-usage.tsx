@@ -1,6 +1,7 @@
 'use client'
 
 import { Sparkles, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { format } from 'date-fns'
 
 interface SkillCall {
   skill: string
@@ -61,10 +62,6 @@ export default function SkillsUsage({ events }: SkillsUsageProps) {
         <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Skills Discovered & Used</h2>
       </div>
-
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        The agent autonomously discovered and invoked Claude Code skills to fix this PR.
-      </p>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -128,7 +125,7 @@ export default function SkillsUsage({ events }: SkillsUsageProps) {
               <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                 <Clock className="w-3 h-3" />
                 <time dateTime={call.timestamp}>
-                  {new Date(call.timestamp).toLocaleTimeString()} (step {call.seq})
+                  {format(new Date(call.timestamp), 'h:mm:ss a')} (step {call.seq})
                 </time>
               </div>
               {call.success && (
@@ -142,16 +139,6 @@ export default function SkillsUsage({ events }: SkillsUsageProps) {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Info box */}
-      <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-        <p className="text-xs text-blue-800 dark:text-blue-200">
-          <span className="font-semibold">💡 About Skills:</span> Skills are specialized capabilities
-          that guide the agent to fix specific types of issues. They&apos;re automatically discovered from
-          the <code className="text-xs bg-blue-100 dark:bg-blue-900/40 px-1 py-0.5 rounded">.claude/skills/</code>{' '}
-          directory.
-        </p>
       </div>
     </div>
   )

@@ -157,10 +157,8 @@ jobs:
             fi
           fi
 
-          # Final truncation to ensure we don't exceed size limits (keep last 5000 lines)
+          # Log the size of extracted logs
           if [ -f /tmp/failure-logs.txt ] && [ -s /tmp/failure-logs.txt ]; then
-            tail -5000 /tmp/failure-logs.txt > /tmp/failure-logs-truncated.txt
-            mv /tmp/failure-logs-truncated.txt /tmp/failure-logs.txt
             echo "Extracted $(wc -l < /tmp/failure-logs.txt) lines of failure logs"
           else
             echo "No failure logs could be extracted" > /tmp/failure-logs.txt

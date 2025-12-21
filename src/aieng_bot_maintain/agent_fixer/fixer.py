@@ -9,6 +9,7 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 from ..observability import AgentExecutionTracer
 from ..utils.logging import log_error, log_info, log_success
 from .models import AgentFixRequest, AgentFixResult
+from .prompts import AGENT_FIX_PROMPT
 
 
 class AgentFixer:
@@ -135,7 +136,7 @@ class AgentFixer:
             json.dump(context, f, indent=2)
 
     def _build_prompt(self, request: AgentFixRequest) -> str:
-        """Build a simple prompt that directs Claude to use skills.
+        """Build a prompt that directs Claude to use skills for fixing failures.
 
         Parameters
         ----------
@@ -154,21 +155,11 @@ class AgentFixer:
             log_error(f"Failure logs file not found: {request.failure_logs_file}")
             logs_info = "no failure logs (file not found)"
 
-        return f"""You are the AI Engineering Maintenance Bot for Vector Institute.
-
-A Dependabot or pre-commit-ci PR has {request.failure_type} check failures.
-
-## Context Files
-- `.pr-context.json` - PR metadata (repo, number, title, etc.)
-- `{request.failure_logs_file}` - {logs_info}
-
-## Your Task
-Fix this PR's {request.failure_type} failures using the appropriate skill.
-
-Read the context and failure logs, then apply the fix-{request.failure_type}-failures skill to resolve the issues.
-
-Make minimal, targeted changes following the skill's guidance.
-"""
+        return AGENT_FIX_PROMPT.format(
+            failure_type=request.failure_type,
+            failure_logs_file=request.failure_logs_file,
+            logs_info=logs_info,
+        )
 
     def _create_tracer(self, request: AgentFixRequest) -> AgentExecutionTracer:
         """Create and configure an execution tracer.
@@ -195,7 +186,6 @@ Make minimal, targeted changes following the skill's guidance.
         failure_info = {
             "type": request.failure_type,
             "checks": request.failed_check_names.split(","),
-            "logs_truncated": "",  # Logs are read from file, not embedded
         }
 
         return AgentExecutionTracer(

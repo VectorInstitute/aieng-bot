@@ -7,13 +7,11 @@ interface FailureAnalysisProps {
   failure: {
     type: 'test' | 'lint' | 'security' | 'build' | 'merge_conflict' | 'unknown'
     checks: string[]
-    logs_truncated: string
   }
 }
 
 export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
   const [isExpanded, setIsExpanded] = useState(true)
-  const [showFullLogs, setShowFullLogs] = useState(false)
 
   const getFailureIcon = (type: string) => {
     switch (type) {
@@ -65,12 +63,6 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return 'Unclassified failure detected. The bot attempted to diagnose and resolve the issue.'
     }
   }
-
-  // Process logs for better display
-  const processedLogs = failure.logs_truncated
-  const logLines = processedLogs.split('\n')
-  const displayLogs = showFullLogs ? processedLogs : logLines.slice(0, 50).join('\n')
-  const hasMoreLogs = logLines.length > 50
 
   return (
     <div className={`border rounded-lg overflow-hidden ${getFailureColor(failure.type)}`}>
@@ -126,35 +118,6 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
               ))}
             </div>
           </div>
-
-          {/* Failure Logs */}
-          {processedLogs && processedLogs.trim() && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Failure Logs
-                </h4>
-                {hasMoreLogs && (
-                  <button
-                    onClick={() => setShowFullLogs(!showFullLogs)}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    {showFullLogs ? 'Show Less' : `Show All (${logLines.length} lines)`}
-                  </button>
-                )}
-              </div>
-              <div className="bg-gray-900 dark:bg-black rounded-lg p-4 overflow-x-auto max-h-[400px] overflow-y-auto">
-                <pre className="text-xs text-gray-100 font-mono whitespace-pre-wrap break-words">
-                  {displayLogs}
-                </pre>
-              </div>
-              {!showFullLogs && hasMoreLogs && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Showing first 50 lines. Click &quot;Show All&quot; to see complete logs.
-                </p>
-              )}
-            </div>
-          )}
 
           {/* Insights */}
           <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4">

@@ -11,6 +11,7 @@ from aieng_bot_maintain.observability import (
     AgentExecutionTracer,
     create_tracer_from_env,
 )
+from aieng_bot_maintain.observability.parsers import ResultMessageParser
 
 
 class MockMessage:
@@ -121,7 +122,6 @@ def tracer():
     failure_info = {
         "type": "test",
         "checks": ["pytest"],
-        "logs_truncated": "Test failed on line 42",
     }
     return AgentExecutionTracer(
         pr_info=pr_info,
@@ -145,35 +145,52 @@ class TestAgentExecutionTracer:
 
     def test_classify_message_error(self, tracer):
         """Test message classification for errors."""
-        assert tracer.classify_message("Error: test failed") == "ERROR"
-        assert tracer.classify_message("Failed to process") == "ERROR"
-        assert tracer.classify_message("Exception occurred") == "ERROR"
+        assert tracer.classifier.classify_by_content("Error: test failed") == "ERROR"
+        assert tracer.classifier.classify_by_content("Failed to process") == "ERROR"
+        assert tracer.classifier.classify_by_content("Exception occurred") == "ERROR"
 
     def test_classify_message_tool_call(self, tracer):
         """Test message classification for tool calls."""
-        assert tracer.classify_message("Reading file test.py") == "TOOL_CALL"
-        assert tracer.classify_message("Editing src/main.py") == "TOOL_CALL"
-        assert tracer.classify_message("Running bash command") == "TOOL_CALL"
+        assert (
+            tracer.classifier.classify_by_content("Reading file test.py") == "TOOL_CALL"
+        )
+        assert (
+            tracer.classifier.classify_by_content("Editing src/main.py") == "TOOL_CALL"
+        )
+        assert (
+            tracer.classifier.classify_by_content("Running bash command") == "TOOL_CALL"
+        )
 
     def test_classify_message_reasoning(self, tracer):
         """Test message classification for reasoning."""
-        assert tracer.classify_message("Analyzing the test failure") == "REASONING"
-        assert tracer.classify_message("Checking the configuration") == "REASONING"
-        assert tracer.classify_message("Found an issue in the code") == "REASONING"
+        assert (
+            tracer.classifier.classify_by_content("Analyzing the test failure")
+            == "REASONING"
+        )
+        assert (
+            tracer.classifier.classify_by_content("Checking the configuration")
+            == "REASONING"
+        )
+        assert (
+            tracer.classifier.classify_by_content("Found an issue in the code")
+            == "REASONING"
+        )
 
     def test_classify_message_action(self, tracer):
         """Test message classification for actions."""
-        assert tracer.classify_message("Applying the fix") == "ACTION"
-        assert tracer.classify_message("Fixing the test") == "ACTION"
-        assert tracer.classify_message("Updating the code") == "ACTION"
+        assert tracer.classifier.classify_by_content("Applying the fix") == "ACTION"
+        assert tracer.classifier.classify_by_content("Fixing the test") == "ACTION"
+        assert tracer.classifier.classify_by_content("Updating the code") == "ACTION"
 
     def test_classify_message_info(self, tracer):
         """Test message classification for info."""
-        assert tracer.classify_message("Processing complete") == "INFO"
+        assert tracer.classifier.classify_by_content("Processing complete") == "INFO"
 
     def test_extract_tool_info_read(self, tracer):
         """Test tool info extraction for Read tool."""
-        info = tracer.extract_tool_info("Reading file src/test.py", "TOOL_CALL")
+        info = tracer.tool_extractor.extract_from_content(
+            "Reading file src/test.py", "TOOL_CALL"
+        )
         assert info is not None
         assert info["tool"] == "Read"
         # Basic extraction works (exact format depends on regex)
@@ -181,7 +198,7 @@ class TestAgentExecutionTracer:
 
     def test_extract_tool_info_not_tool_call(self, tracer):
         """Test tool info extraction for non-tool-call."""
-        info = tracer.extract_tool_info("Some message", "INFO")
+        info = tracer.tool_extractor.extract_from_content("Some message", "INFO")
         assert info is None
 
     @pytest.mark.asyncio
@@ -363,7 +380,7 @@ class TestRefactoredHelperMethods:
                 "author": "bot",
                 "url": "https://test",
             },
-            failure_info={"type": "test", "checks": [], "logs_truncated": ""},
+            failure_info={"type": "test", "checks": []},
             workflow_run_id="12345",
             github_run_url="https://test/run/12345",
         )
@@ -371,49 +388,49 @@ class TestRefactoredHelperMethods:
     def test_determine_event_type_from_string_tool_result_success(self, tracer):
         """Test event type determination from string for successful tool result."""
         msg_str = "ToolResultBlock(tool_use_id='tool_123', is_error=False)"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "TOOL_RESULT"
 
     def test_determine_event_type_from_string_tool_result_error(self, tracer):
         """Test event type determination from string for error tool result."""
         msg_str = "ToolResultBlock(tool_use_id='tool_123', is_error=True)"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "ERROR"
 
     def test_determine_event_type_from_string_tool_use_block(self, tracer):
         """Test event type determination from string for tool use."""
         msg_str = "ToolUseBlock(name='Read', input={'file_path': 'test.py'})"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "TOOL_CALL"
 
     def test_determine_event_type_from_string_text_block(self, tracer):
         """Test event type determination from string for text block."""
         msg_str = "TextBlock(text='Analyzing the code')"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "REASONING"
 
     def test_determine_event_type_from_string_system_message(self, tracer):
         """Test event type determination from string for system message."""
         msg_str = "SystemMessage(content='System info')"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "INFO"
 
     def test_determine_event_type_from_string_result_message_success(self, tracer):
         """Test event type determination from string for successful result message."""
         msg_str = "ResultMessage(result='Success', is_error=False, subtype='success')"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "INFO"
 
     def test_determine_event_type_from_string_result_message_error(self, tracer):
         """Test event type determination from string for error result message."""
         msg_str = "ResultMessage(result='Failed', is_error=True)"
-        result = tracer._determine_event_type_from_string(msg_str, "")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "")
         assert result == "ERROR"
 
     def test_determine_event_type_from_string_fallback_to_classification(self, tracer):
         """Test event type determination falls back to content classification."""
         msg_str = "UnknownMessage(content='Error occurred')"
-        result = tracer._determine_event_type_from_string(msg_str, "Error occurred")
+        result = tracer.classifier._classify_by_string_repr(msg_str, "Error occurred")
         assert result == "ERROR"
 
     def test_extract_scalar_fields_from_result(self, tracer):
@@ -423,7 +440,7 @@ class TestRefactoredHelperMethods:
             "duration_api_ms=1200, is_error=False, num_turns=3, "
             "session_id='abc123', total_cost_usd=0.0042)"
         )
-        metrics = tracer._extract_scalar_fields_from_result(msg_str)
+        metrics = ResultMessageParser._extract_scalar_fields(msg_str)
 
         assert metrics["subtype"] == "success"
         assert metrics["duration_ms"] == 1500
@@ -436,7 +453,7 @@ class TestRefactoredHelperMethods:
     def test_extract_scalar_fields_handles_invalid_numbers(self, tracer):
         """Test scalar field extraction handles invalid number formats."""
         msg_str = "ResultMessage(duration_ms='invalid', total_cost_usd='bad')"
-        metrics = tracer._extract_scalar_fields_from_result(msg_str)
+        metrics = ResultMessageParser._extract_scalar_fields(msg_str)
 
         assert metrics["duration_ms"] is None
         assert metrics["total_cost_usd"] is None
@@ -447,7 +464,7 @@ class TestRefactoredHelperMethods:
             "ResultMessage(usage={'input_tokens': 1000, 'output_tokens': 500, "
             "'cache_read_input_tokens': 200, 'cache_creation_input_tokens': 100})"
         )
-        usage = tracer._extract_usage_from_result(msg_str)
+        usage = ResultMessageParser._extract_usage(msg_str)
 
         assert usage["input_tokens"] == 1000
         assert usage["output_tokens"] == 500
@@ -457,14 +474,14 @@ class TestRefactoredHelperMethods:
     def test_extract_usage_from_result_no_usage(self, tracer):
         """Test usage extraction when usage field is missing."""
         msg_str = "ResultMessage(subtype='success', duration_ms=1500)"
-        usage = tracer._extract_usage_from_result(msg_str)
+        usage = ResultMessageParser._extract_usage(msg_str)
 
         assert usage == {}
 
     def test_extract_usage_from_result_malformed_dict(self, tracer):
         """Test usage extraction handles malformed dict gracefully."""
         msg_str = "ResultMessage(usage={'input_tokens': 1000, 'output_tokens': 500})"
-        usage = tracer._extract_usage_from_result(msg_str)
+        usage = ResultMessageParser._extract_usage(msg_str)
 
         # Should still extract available fields
         assert "input_tokens" in usage
@@ -473,21 +490,21 @@ class TestRefactoredHelperMethods:
     def test_extract_result_text_single_quotes(self, tracer):
         """Test result text extraction with single quotes."""
         msg_str = "ResultMessage(result='Successfully fixed the issue')"
-        result_text = tracer._extract_result_text(msg_str)
+        result_text = ResultMessageParser._extract_result_text(msg_str)
 
         assert result_text == "Successfully fixed the issue"
 
     def test_extract_result_text_double_quotes(self, tracer):
         """Test result text extraction with double quotes."""
         msg_str = 'ResultMessage(result="Successfully fixed the issue")'
-        result_text = tracer._extract_result_text(msg_str)
+        result_text = ResultMessageParser._extract_result_text(msg_str)
 
         assert result_text == "Successfully fixed the issue"
 
     def test_extract_result_text_with_escaped_characters(self, tracer):
         """Test result text extraction handles escaped characters."""
         msg_str = "ResultMessage(result='Line 1\\nLine 2 text')"
-        result_text = tracer._extract_result_text(msg_str)
+        result_text = ResultMessageParser._extract_result_text(msg_str)
 
         assert "Line 1\nLine 2" in result_text
         assert "text" in result_text
@@ -495,7 +512,7 @@ class TestRefactoredHelperMethods:
     def test_extract_result_text_empty(self, tracer):
         """Test result text extraction when result is missing."""
         msg_str = "ResultMessage(subtype='success')"
-        result_text = tracer._extract_result_text(msg_str)
+        result_text = ResultMessageParser._extract_result_text(msg_str)
 
         assert result_text == ""
 
@@ -515,7 +532,7 @@ class TestRefactoredHelperMethods:
         }
         result_text = "Fixed the test failures"
 
-        formatted = tracer._format_result_metrics(metrics, result_text)
+        formatted = ResultMessageParser._format_metrics(metrics, result_text)
 
         assert "✓ Agent Execution Complete" in formatted
         assert "Duration: 1.5s" in formatted
@@ -539,7 +556,7 @@ class TestRefactoredHelperMethods:
         }
         result_text = "Could not fix the issue"
 
-        formatted = tracer._format_result_metrics(metrics, result_text)
+        formatted = ResultMessageParser._format_metrics(metrics, result_text)
 
         assert "✗ Agent Execution Complete" in formatted
         assert "Duration: 0.8s" in formatted
@@ -556,7 +573,7 @@ class TestRefactoredHelperMethods:
         }
         result_text = "x" * 600  # Long text
 
-        formatted = tracer._format_result_metrics(metrics, result_text)
+        formatted = ResultMessageParser._format_metrics(metrics, result_text)
 
         assert "..." in formatted
         assert len(formatted.split("Result: ")[1]) < 600
@@ -575,7 +592,7 @@ class TestRefactoredHelperMethods:
                 )
 
         message = MockResultMessage()
-        formatted_content, metrics = tracer._parse_result_message(message)
+        formatted_content, metrics = ResultMessageParser.parse(message)
 
         assert metrics is not None
         assert metrics["subtype"] == "success"
@@ -599,7 +616,7 @@ class TestToolExtractionImprovements:
                 "author": "bot",
                 "url": "https://test",
             },
-            failure_info={"type": "test", "checks": [], "logs_truncated": ""},
+            failure_info={"type": "test", "checks": []},
             workflow_run_id="12345",
             github_run_url="https://test/run/12345",
         )
@@ -763,16 +780,17 @@ class TestToolExtractionImprovements:
     def test_classify_message_skill_tool_call(self, tracer):
         """Test message classification for skill invocations."""
         assert (
-            tracer.classify_message("Launching skill: fix-security-audit")
+            tracer.classifier.classify_by_content("Launching skill: fix-security-audit")
             == "TOOL_CALL"
         )
         assert (
-            tracer.classify_message("Invoking skill: fix-test-failures") == "TOOL_CALL"
+            tracer.classifier.classify_by_content("Invoking skill: fix-test-failures")
+            == "TOOL_CALL"
         )
 
     def test_extract_tool_info_skill(self, tracer):
         """Test tool info extraction for Skill tool."""
-        info = tracer.extract_tool_info(
+        info = tracer.tool_extractor.extract_from_content(
             "Launching skill: fix-security-audit", "TOOL_CALL"
         )
         assert info is not None

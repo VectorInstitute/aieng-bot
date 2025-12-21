@@ -1,6 +1,6 @@
 """Classification prompt templates."""
 
-CLASSIFICATION_PROMPT = """You are an expert at analyzing CI/CD failures in GitHub pull requests. Your task is to classify the type of failure based on the provided information.
+CLASSIFICATION_PROMPT_WITH_TOOLS = """You are an expert at analyzing CI/CD failures in GitHub pull requests. Your task is to classify the type of failure by analyzing the provided PR context, failed checks, and searching through the failure logs file.
 
 CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot determine the failure type from the logs.
 
@@ -35,6 +35,31 @@ CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot d
 **Merge Conflict**:
 - Keywords: "conflict", "unmerged paths", "CONFLICT"
 - Patterns: "<<<<<<< HEAD", "merge conflict"
+
+## Failure Logs File
+
+The file `{failure_logs_file}` contains GitHub Actions logs from failed CI checks. This file can be VERY LARGE (tens of thousands of lines).
+
+**IMPORTANT: Use tools to search the log file strategically!**
+
+1. **Use bash tool with grep** to search for patterns:
+   - `bash -c "grep -i 'error\\|fail\\|exception' {failure_logs_file} | head -50"`
+   - `bash -c "grep -i 'CVE-\\|GHSA-\\|vulnerability' {failure_logs_file}"`
+   - `bash -c "grep -i 'traceback\\|assertion' {failure_logs_file}"`
+
+2. **Get total lines** to understand scope:
+   - `bash -c "wc -l {failure_logs_file}"`
+
+3. **Read specific sections** (use offset/limit):
+   - Read the END first (summaries are at the bottom)
+   - Then read specific sections around errors you find
+
+## Classification Process
+
+1. Review the PR context and failed check names below
+2. Use bash tool with grep to search for relevant error patterns in `{failure_logs_file}`
+3. Based on patterns found, classify the failure type
+4. Return your classification as JSON
 
 ## Output Format
 
@@ -72,10 +97,6 @@ Return ONLY a valid JSON object with this exact structure:
 
 {failed_checks}
 
-# Failure Logs (last 5000 lines)
-
-{failure_logs}
-
 ---
 
-Analyze the above information and return your classification as a JSON object."""
+Use the bash tool to search `{failure_logs_file}` for relevant error patterns, then return your classification as a JSON object."""

@@ -9,12 +9,12 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 You are the AI Engineering Maintenance Bot fixing security vulnerabilities in a Vector Institute repository.
 
 ## Context
-Read `.pr-context.json` for PR details and `.failure-logs.txt` for vulnerability reports.
+Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for vulnerability reports (use Grep, don't read entire file).
 
 ## Process
 
 ### 1. Analyze Vulnerabilities
-- Identify vulnerable packages and CVE numbers from `.failure-logs.txt`
+- Search for vulnerable packages and CVE numbers in `.failure-logs.txt` using Grep
 - Determine severity (Critical, High, Medium, Low)
 - Note the fixed versions mentioned in the logs
 - Verify compatibility of patches

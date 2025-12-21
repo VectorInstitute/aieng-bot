@@ -3,10 +3,62 @@
 import argparse
 import json
 import sys
+import tempfile
 
 from ...classifier import PRFailureClassifier
+from ...classifier.models import ClassificationResult
 from ...utils.logging import get_console, log_error, log_info, log_success
-from ..utils import get_version, parse_pr_inputs, read_failure_logs
+from ..utils import get_version, parse_pr_inputs
+
+
+def _get_failure_logs_file(args: argparse.Namespace) -> str | None:
+    """Get failure logs file path from args, return None on error."""
+    if args.failure_logs_file:
+        return args.failure_logs_file
+
+    if args.failure_logs:
+        # Backward compatibility: write logs to temp file
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt"
+        ) as temp_file:
+            temp_file.write(args.failure_logs)
+            return temp_file.name
+
+    log_error("Either --failure-logs or --failure-logs-file must be provided")
+    return None
+
+
+def _output_results(
+    result: ClassificationResult, output_format: str, console: object
+) -> None:
+    """Output classification results in the specified format."""
+    if output_format == "json":
+        output = {
+            "failure_type": result.failure_type.value,
+            "confidence": result.confidence,
+            "reasoning": result.reasoning,
+            "failed_check_names": result.failed_check_names,
+            "recommended_action": result.recommended_action,
+        }
+        console.print_json(data=output)  # type: ignore[attr-defined]
+    else:  # github format - output for GITHUB_OUTPUT
+        print(f"failure-type={result.failure_type.value}")
+        print(f"confidence={result.confidence}")
+        print(f"reasoning={result.reasoning}")
+        print(f"failed-check-names={','.join(result.failed_check_names)}")
+        print(f"recommended-action={result.recommended_action}")
+
+
+def _log_summary(result: ClassificationResult) -> None:
+    """Log summary of classification result."""
+    if result.failure_type.value != "unknown":
+        log_success(
+            f"Classified as [bold]{result.failure_type.value}[/bold] "
+            f"(confidence: {result.confidence:.2f})"
+        )
+    else:
+        log_error("Unable to classify failure (unknown type)")
+        sys.exit(1)
 
 
 def classify_pr_failure_cli() -> None:
@@ -62,46 +114,30 @@ Examples:
     try:
         # Parse inputs
         pr_context, failed_checks = parse_pr_inputs(args)
-        failure_logs = read_failure_logs(args)
+
+        # Get failure logs file path
+        failure_logs_file = _get_failure_logs_file(args)
+        if not failure_logs_file:
+            sys.exit(1)
 
         # Run classification
         log_info(f"Classifying PR {pr_context.repo}#{pr_context.pr_number}")
         log_info(f"Number of failed checks: {len(failed_checks)}")
-        log_info(f"Failure logs length: {len(failure_logs)} characters")
-        if failure_logs:
-            log_info(f"First 200 chars of logs: {failure_logs[:200]}")
+        log_info(f"Failure logs file: {failure_logs_file}")
+
         classifier = PRFailureClassifier()
-        result = classifier.classify(pr_context, failed_checks, failure_logs)
+        result = classifier.classify(pr_context, failed_checks, failure_logs_file)
+
         log_info(
-            f"Classification result: {result.failure_type.value} (confidence: {result.confidence:.2f})"
+            f"Classification result: {result.failure_type.value} "
+            f"(confidence: {result.confidence:.2f})"
         )
 
         # Output results
-        if args.output_format == "json":
-            output = {
-                "failure_type": result.failure_type.value,
-                "confidence": result.confidence,
-                "reasoning": result.reasoning,
-                "failed_check_names": result.failed_check_names,
-                "recommended_action": result.recommended_action,
-            }
-            console.print_json(data=output)
-        else:  # github format - output for GITHUB_OUTPUT
-            print(f"failure-type={result.failure_type.value}")
-            print(f"confidence={result.confidence}")
-            print(f"reasoning={result.reasoning}")
-            print(f"failed-check-names={','.join(result.failed_check_names)}")
-            print(f"recommended-action={result.recommended_action}")
+        _output_results(result, args.output_format, console)
 
         # Log summary
-        if result.failure_type.value != "unknown":
-            log_success(
-                f"Classified as [bold]{result.failure_type.value}[/bold] "
-                f"(confidence: {result.confidence:.2f})"
-            )
-        else:
-            log_error("Unable to classify failure (unknown type)")
-            sys.exit(1)
+        _log_summary(result)
 
     except json.JSONDecodeError as e:
         log_error(f"Invalid JSON input: {e}")

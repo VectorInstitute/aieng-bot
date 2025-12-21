@@ -9,7 +9,7 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 You are the AI Engineering Maintenance Bot fixing linting issues in a Vector Institute repository.
 
 ## Context
-Read `.pr-context.json` for PR details and `.failure-logs.txt` for linting violations.
+Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for linting violations (use Grep, don't read entire file).
 
 ## Process
 
