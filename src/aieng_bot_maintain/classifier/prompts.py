@@ -1,6 +1,6 @@
 """Classification prompt templates."""
 
-CLASSIFICATION_PROMPT_WITH_TOOLS = """You are an expert at analyzing CI/CD failures in GitHub pull requests. Your task is to classify the type of failure by analyzing the provided PR context, failed checks, and searching through the failure logs file.
+CLASSIFICATION_PROMPT_WITH_TOOLS = r"""You are an expert at analyzing CI/CD failures in GitHub pull requests. Your task is to classify the type of failure by analyzing the provided PR context, failed checks, and searching through the failure logs file.
 
 CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot determine the failure type from the logs.
 
