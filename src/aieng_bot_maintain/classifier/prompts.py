@@ -38,28 +38,39 @@ CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot d
 
 ## Failure Logs File
 
-The file `{failure_logs_file}` contains GitHub Actions logs from failed CI checks. This file can be VERY LARGE (tens of thousands of lines).
+The file `{failure_logs_file}` contains GitHub Actions logs from failed CI checks.
 
-**IMPORTANT: Use tools to search the log file strategically!**
+**CRITICAL EFFICIENCY REQUIREMENT:**
+- Use AT MOST 2-3 bash tool searches
+- Return JSON classification IMMEDIATELY after finding key patterns
+- Do NOT exhaustively explore logs - grep ONCE for the most likely pattern based on check name
 
-1. **Use bash tool with grep** to search for patterns:
-   - `bash -c "grep -i 'error\\|fail\\|exception' {failure_logs_file} | head -50"`
-   - `bash -c "grep -i 'CVE-\\|GHSA-\\|vulnerability' {failure_logs_file}"`
-   - `bash -c "grep -i 'traceback\\|assertion' {failure_logs_file}"`
+**Efficient Search Strategy:**
 
-2. **Get total lines** to understand scope:
-   - `bash -c "wc -l {failure_logs_file}"`
+For check named "code-check", "lint", "style", "format" → Search for formatting/lint patterns:
+```bash
+grep -i "formatting\|prettier\|black\|eslint\|ruff\|style" {failure_logs_file} | head -20
+```
 
-3. **Read specific sections** (use offset/limit):
-   - Read the END first (summaries are at the bottom)
-   - Then read specific sections around errors you find
+For check named "test", "unit", "integration" → Search for test failures:
+```bash
+grep -i "FAILED\|test.*failed\|assertion\|expected" {failure_logs_file} | head -20
+```
+
+For check named "security", "audit", "vulnerability" OR any check → Search for security issues FIRST:
+```bash
+grep -i "CVE-\|GHSA-\|vulnerability\|audit.*found" {failure_logs_file} | head -20
+```
+
+**STOP searching after finding clear indicators.** Return JSON immediately.
 
 ## Classification Process
 
-1. Review the PR context and failed check names below
-2. Use bash tool with grep to search for relevant error patterns in `{failure_logs_file}`
-3. Based on patterns found, classify the failure type
-4. Return your classification as JSON
+1. Review check name and PR context
+2. Run ONE targeted grep based on check name pattern
+3. If security keywords found → Return "security" classification
+4. If no match → Run ONE more grep for generic errors
+5. Return JSON classification - DO NOT explore further
 
 ## Output Format
 
