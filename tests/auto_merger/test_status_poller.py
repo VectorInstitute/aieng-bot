@@ -313,3 +313,24 @@ class TestStatusPoller:
             )
 
         assert result == "COMPLETED"
+
+    def test_wait_for_checks_completion_with_phantom_status_context(
+        self, status_poller, sample_pr
+    ):
+        """Test that phantom StatusContext entries with null values are ignored.
+
+        GitHub sometimes returns StatusContext objects with all null values
+        (no name, no state, no conclusion). These should be skipped to avoid
+        waiting indefinitely for them to finalize.
+        """
+        with patch.object(
+            status_poller,
+            "_run_gh_command",
+            return_value='{"statusCheckRollup": [{"__typename": "CheckRun", "name": "run-code-check", "conclusion": "FAILURE", "status": "COMPLETED"}, {"__typename": "CheckRun", "name": "unit-tests", "conclusion": "SUCCESS", "status": "COMPLETED"}, {"__typename": "StatusContext", "name": null, "state": null, "conclusion": null, "status": null}]}',
+        ):
+            result = status_poller.wait_for_checks_completion(
+                sample_pr, timeout_minutes=1
+            )
+
+        # Should detect failure immediately without waiting for phantom StatusContext
+        assert result == "FAILED"

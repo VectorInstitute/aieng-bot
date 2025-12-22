@@ -262,6 +262,10 @@ class StatusPoller:
                 if typename == "StatusContext":
                     # StatusContext uses 'state' field - valid states are final
                     state = check.get("state")
+                    # Skip phantom StatusContext entries with no state or name
+                    # GitHub sometimes returns incomplete StatusContext objects
+                    if state is None and check.get("name") is None:
+                        return True  # Ignore this phantom entry
                     return state in ["SUCCESS", "FAILURE", "ERROR"]
                 # CheckRun uses 'conclusion' field - must not be None
                 return check.get("conclusion") is not None

@@ -135,7 +135,7 @@ class PRFailureClassifier:
         self, messages: list[MessageParam], bash_tool: ToolBash20250124Param
     ) -> str:
         """Run the agentic loop for tool use and return final response text."""
-        max_turns = 5
+        max_turns = 15  # Allow more turns for complex log analysis
         response_text = ""
 
         for turn in range(max_turns):
