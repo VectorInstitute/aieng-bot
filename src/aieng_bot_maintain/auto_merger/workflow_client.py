@@ -157,11 +157,11 @@ class WorkflowClient:
             log_error(f"Failed to get PR head SHA: {e}")
             return None
 
-    def trigger_rebase(self, pr: PRQueueItem) -> bool:
+    def trigger_rebase(self, pr: PRQueueItem) -> tuple[bool, str | None, bool]:
         """Trigger bot-specific rebase command.
 
-        For Dependabot: Post @dependabot rebase comment
-        For pre-commit.ci: Manually rebase via git operations
+        For Dependabot: Post @dependabot rebase comment (async)
+        For pre-commit.ci: Manually rebase via git operations (sync)
 
         Parameters
         ----------
@@ -170,11 +170,14 @@ class WorkflowClient:
 
         Returns
         -------
-        bool
-            True on success, False on failure.
+        tuple[bool, str | None, bool]
+            (success, new_sha, sha_changed) where:
+            - success: True if rebase triggered/succeeded, False on failure
+            - new_sha: New head SHA (only for manual rebases, None for async)
+            - sha_changed: True if SHA changed (only for manual rebases, True for async to trigger polling)
 
         """
-        # Dependabot PRs use comment-based rebase
+        # Dependabot PRs use comment-based rebase (async)
         if pr.pr_author == "app/dependabot":
             try:
                 self._run_gh_command(
@@ -190,21 +193,21 @@ class WorkflowClient:
                     ]
                 )
                 log_success(f"  Rebase triggered for {pr.repo}#{pr.pr_number}")
-                return True
+                return (True, None, True)  # Async, will poll for SHA change
             except subprocess.CalledProcessError as e:
                 log_error(f"  Failed to trigger rebase: {e}")
-                return False
+                return (False, None, False)
 
-        # pre-commit.ci PRs use manual git rebase
+        # pre-commit.ci PRs use manual git rebase (sync)
         if pr.pr_author == "app/pre-commit-ci":
             log_info("  Manually rebasing pre-commit.ci PR via git operations")
             return self._manual_rebase(pr)
 
         # Unknown bot author
         log_error(f"  Unknown bot author: {pr.pr_author}, cannot rebase")
-        return False
+        return (False, None, False)
 
-    def _manual_rebase(self, pr: PRQueueItem) -> bool:
+    def _manual_rebase(self, pr: PRQueueItem) -> tuple[bool, str | None, bool]:
         """Manually rebase a PR branch via git operations.
 
         Clones the repo, checks out PR branch, rebases onto base, and force-pushes.
@@ -216,8 +219,11 @@ class WorkflowClient:
 
         Returns
         -------
-        bool
-            True on success, False on failure.
+        tuple[bool, str | None, bool]
+            (success, new_sha, sha_changed) where:
+            - success: True if rebase succeeded, False on failure
+            - new_sha: New head SHA after rebase (None on failure)
+            - sha_changed: True if rebase created new commits, False if already up-to-date
 
         """
         try:
@@ -313,6 +319,16 @@ class WorkflowClient:
                     capture_output=True,
                 )
 
+                # Get SHA before rebase
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                sha_before = result.stdout.strip()
+
                 # Fetch latest base branch
                 subprocess.run(
                     ["git", "fetch", "origin", base_ref],
@@ -330,7 +346,26 @@ class WorkflowClient:
                     capture_output=True,
                 )
 
-                # Force push to PR branch
+                # Get SHA after rebase
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                sha_after = result.stdout.strip()
+
+                # Check if rebase created new commits
+                sha_changed = sha_after != sha_before
+
+                if not sha_changed:
+                    log_success(
+                        f"  Branch already up-to-date with {base_ref}, no rebase needed"
+                    )
+                    return (True, sha_after, False)
+
+                # Force push to PR branch (only if SHA changed)
                 # Using --force instead of --force-with-lease because the shallow clone
                 # doesn't set up remote tracking properly, causing "stale info" errors.
                 # This is safe because we just fetched and we're the only ones modifying
@@ -344,16 +379,16 @@ class WorkflowClient:
                 )
 
                 log_success(f"  Successfully rebased {pr.repo}#{pr.pr_number}")
-                return True
+                return (True, sha_after, True)
 
         except subprocess.CalledProcessError as e:
             log_error(f"  Failed to manually rebase: {e}")
             if e.stderr:
                 log_error(f"  Error output: {e.stderr.decode()}")
-            return False
+            return (False, None, False)
         except Exception as e:
             log_error(f"  Unexpected error during manual rebase: {e}")
-            return False
+            return (False, None, False)
 
     def trigger_fix_workflow(self, pr: PRQueueItem) -> str | None:
         """Trigger fix-remote-pr.yml workflow.

@@ -67,7 +67,8 @@ class TestPRProcessor:
             initial_sha,  # Initial SHA before rebase
             new_sha,  # New SHA after rebase (first poll)
         ]
-        pr_processor.workflow_client.trigger_rebase.return_value = True
+        # Mock trigger_rebase to return tuple (success, sha, sha_changed) for async rebase
+        pr_processor.workflow_client.trigger_rebase.return_value = (True, None, True)
         # Mock check_latest_comment to return empty string (no messages)
         pr_processor.workflow_client.check_latest_comment.return_value = ""
 
@@ -114,7 +115,7 @@ class TestPRProcessor:
             "MERGEABLE",
         )
         pr_processor.workflow_client.get_pr_head_sha.return_value = "abc123"
-        pr_processor.workflow_client.trigger_rebase.return_value = False
+        pr_processor.workflow_client.trigger_rebase.return_value = (False, None, False)
 
         result = pr_processor._trigger_rebase(sample_pr)
 
@@ -136,7 +137,7 @@ class TestPRProcessor:
             "MERGEABLE",
         )
         pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
-        pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.trigger_rebase.return_value = (True, None, True)
         # Mock check_latest_comment to return up-to-date message
         pr_processor.workflow_client.check_latest_comment.return_value = (
             "Looks like this PR is already up-to-date with main!"
@@ -163,7 +164,7 @@ class TestPRProcessor:
             "MERGEABLE",
         )
         pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
-        pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.trigger_rebase.return_value = (True, None, True)
         # Mock check_latest_comment to return error message
         pr_processor.workflow_client.check_latest_comment.return_value = (
             "Dependabot could not rebase this PR due to conflicts"
@@ -187,7 +188,7 @@ class TestPRProcessor:
         )
         # Mock get_pr_head_sha to always return same SHA (no rebase completion)
         pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
-        pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.trigger_rebase.return_value = (True, None, True)
         # Mock check_latest_comment to return empty (no messages)
         pr_processor.workflow_client.check_latest_comment.return_value = ""
 
@@ -381,7 +382,7 @@ class TestPRProcessor:
             initial_sha,  # Before rebase
             new_sha,  # After rebase
         ]
-        pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.trigger_rebase.return_value = (True, None, True)
         pr_processor.workflow_client.check_latest_comment.return_value = ""
         pr_processor.status_poller.check_pr_status.return_value = (
             True,
@@ -403,7 +404,7 @@ class TestPRProcessor:
 
         # Setup mocks for conflict flow
         pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
-        pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.trigger_rebase.return_value = (True, None, True)
         pr_processor.workflow_client.check_latest_comment.return_value = ""
         # First call: conflict detected, second call: after fix it's mergeable
         pr_processor.status_poller.check_pr_status.side_effect = [

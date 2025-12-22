@@ -131,7 +131,7 @@ class PRProcessor:
         1. Dependabot comments ("already up-to-date", error messages)
         2. PR head SHA changes (indicates successful force-push)
 
-        For pre-commit.ci PRs, skips rebase (not supported) and proceeds directly.
+        For pre-commit.ci PRs, manual rebase is synchronous - no polling needed.
 
         Parameters
         ----------
@@ -156,7 +156,7 @@ class PRProcessor:
             pr.last_updated = datetime.now(UTC).isoformat()
             return False
 
-        # Get current head SHA before triggering rebase
+        # Get current head SHA before triggering rebase (for Dependabot polling)
         initial_head_sha = self.workflow_client.get_pr_head_sha(pr)
         if not initial_head_sha:
             pr.error_message = "Failed to get PR head SHA"
@@ -167,7 +167,9 @@ class PRProcessor:
         log_info(f"Current head SHA: {initial_head_sha[:7]}")
 
         # Trigger bot-specific rebase
-        if not self.workflow_client.trigger_rebase(pr):
+        success, new_sha, sha_changed = self.workflow_client.trigger_rebase(pr)
+
+        if not success:
             pr.error_message = "Failed to trigger rebase"
             pr.status = PRStatus.FAILED
             pr.last_updated = datetime.now(UTC).isoformat()
@@ -177,9 +179,25 @@ class PRProcessor:
         pr.rebase_started_at = datetime.now(UTC).isoformat()
         pr.last_updated = datetime.now(UTC).isoformat()
 
-        # Poll for rebase completion
-        # - Dependabot: polls for comments + SHA changes
-        # - pre-commit.ci: polls for SHA changes (manual rebase via git)
+        # For manual rebases (pre-commit.ci), rebase completed synchronously
+        if new_sha is not None:
+            if sha_changed:
+                log_success(
+                    f"Rebase completed (SHA changed: {initial_head_sha[:7]} → {new_sha[:7]})"
+                )
+                # Wait longer for CI to start checks after new commits
+                log_info("Waiting 45s for CI to trigger checks after rebase...")
+                time.sleep(45)
+            else:
+                log_success(
+                    "Branch already up-to-date with base, proceeding to check monitoring"
+                )
+                # Brief wait for API to update, then check existing checks
+                log_info("Waiting 15s for GitHub API to update...")
+                time.sleep(15)
+            return False  # Proceed to check monitoring
+
+        # For async rebases (Dependabot), poll for completion
         return self._poll_rebase_completion(pr, initial_head_sha)
 
     def _poll_rebase_completion(self, pr: PRQueueItem, initial_head_sha: str) -> bool:

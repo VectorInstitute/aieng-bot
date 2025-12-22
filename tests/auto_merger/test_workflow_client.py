@@ -176,9 +176,11 @@ class TestWorkflowClient:
         """Test successful rebase triggering for Dependabot PR."""
         mock_run.return_value = MagicMock(returncode=0, stdout="")
 
-        result = workflow_client.trigger_rebase(sample_pr)
+        success, new_sha, sha_changed = workflow_client.trigger_rebase(sample_pr)
 
-        assert result is True
+        assert success is True
+        assert new_sha is None  # Async rebase, no immediate SHA
+        assert sha_changed is True  # Will poll for SHA change
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert "gh" in call_args
@@ -193,9 +195,11 @@ class TestWorkflowClient:
         """Test rebase triggering failure for Dependabot PR."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
 
-        result = workflow_client.trigger_rebase(sample_pr)
+        success, new_sha, sha_changed = workflow_client.trigger_rebase(sample_pr)
 
-        assert result is False
+        assert success is False
+        assert new_sha is None
+        assert sha_changed is False
 
     @patch("subprocess.run")
     def test_trigger_rebase_precommit_success(
@@ -223,19 +227,25 @@ class TestWorkflowClient:
             MagicMock(returncode=0, stdout=""),
             # git checkout
             MagicMock(returncode=0, stdout=""),
+            # git rev-parse HEAD (before rebase)
+            MagicMock(returncode=0, stdout="abc123def456\n"),
             # git fetch origin base_ref
             MagicMock(returncode=0, stdout=""),
             # git rebase
             MagicMock(returncode=0, stdout=""),
+            # git rev-parse HEAD (after rebase)
+            MagicMock(returncode=0, stdout="789ghi012jkl\n"),
             # git push --force
             MagicMock(returncode=0, stdout=""),
         ]
 
-        result = workflow_client.trigger_rebase(precommit_pr)
+        success, new_sha, sha_changed = workflow_client.trigger_rebase(precommit_pr)
 
-        assert result is True
+        assert success is True
+        assert new_sha == "789ghi012jkl"
+        assert sha_changed is True
         # Should make multiple git-related calls
-        assert mock_run.call_count == 10
+        assert mock_run.call_count == 12
         # Verify we use --force (not --force-with-lease)
         push_call = mock_run.call_args_list[-1]
         assert "--force" in push_call[0][0]
@@ -264,6 +274,8 @@ class TestWorkflowClient:
             MagicMock(returncode=0, stdout=""),
             # git checkout
             MagicMock(returncode=0, stdout=""),
+            # git rev-parse HEAD (before rebase)
+            MagicMock(returncode=0, stdout="abc123def456\n"),
             # git fetch origin base_ref
             MagicMock(returncode=0, stdout=""),
             # git rebase fails
@@ -272,9 +284,57 @@ class TestWorkflowClient:
             ),
         ]
 
-        result = workflow_client.trigger_rebase(precommit_pr)
+        success, new_sha, sha_changed = workflow_client.trigger_rebase(precommit_pr)
 
-        assert result is False
+        assert success is False
+        assert new_sha is None
+        assert sha_changed is False
+
+    @patch("subprocess.run")
+    def test_trigger_rebase_precommit_already_uptodate(
+        self, mock_run, workflow_client, precommit_pr
+    ):
+        """Test manual rebase when branch is already up-to-date."""
+        # SHA before and after rebase is the same
+        mock_run.side_effect = [
+            # gh pr view for branch names
+            MagicMock(
+                returncode=0,
+                stdout='{"headRefName":"pre-commit-ci-update-config","baseRefName":"main"}',
+            ),
+            # gh repo clone
+            MagicMock(returncode=0, stdout=""),
+            # git config user.name
+            MagicMock(returncode=0, stdout=""),
+            # git config user.email
+            MagicMock(returncode=0, stdout=""),
+            # git remote set-url
+            MagicMock(returncode=0, stdout=""),
+            # git fetch origin head_ref
+            MagicMock(returncode=0, stdout=""),
+            # git checkout
+            MagicMock(returncode=0, stdout=""),
+            # git rev-parse HEAD (before rebase)
+            MagicMock(returncode=0, stdout="abc123def456\n"),
+            # git fetch origin base_ref
+            MagicMock(returncode=0, stdout=""),
+            # git rebase (no-op, already up-to-date)
+            MagicMock(returncode=0, stdout=""),
+            # git rev-parse HEAD (after rebase - same SHA)
+            MagicMock(returncode=0, stdout="abc123def456\n"),
+            # No force push since SHA didn't change
+        ]
+
+        success, new_sha, sha_changed = workflow_client.trigger_rebase(precommit_pr)
+
+        assert success is True
+        assert new_sha == "abc123def456"
+        assert sha_changed is False
+        # Should NOT push since no changes
+        assert mock_run.call_count == 11  # No push call
+        # Verify last call was NOT a push
+        last_call = mock_run.call_args_list[-1]
+        assert "push" not in str(last_call)
 
     @patch("subprocess.run")
     def test_trigger_rebase_unknown_bot(self, mock_run, workflow_client):
@@ -290,9 +350,11 @@ class TestWorkflowClient:
             last_updated="2025-01-15T10:00:00Z",
         )
 
-        result = workflow_client.trigger_rebase(unknown_pr)
+        success, new_sha, sha_changed = workflow_client.trigger_rebase(unknown_pr)
 
-        assert result is False
+        assert success is False
+        assert new_sha is None
+        assert sha_changed is False
         # Should not make any gh CLI calls
         mock_run.assert_not_called()
 

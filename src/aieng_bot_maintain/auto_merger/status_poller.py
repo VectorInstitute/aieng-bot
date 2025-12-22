@@ -286,6 +286,97 @@ class StatusPoller:
         log_warning("  Mergeable status still UNKNOWN after retries")
         return all_passed, has_failures, "UNKNOWN"
 
+    def _handle_no_checks(
+        self, rollup: list[dict], attempt: int, check_interval: int
+    ) -> CheckStatus | None:
+        """Handle case when no checks are found.
+
+        Parameters
+        ----------
+        rollup : list[dict]
+            Raw check rollup from GitHub API.
+        attempt : int
+            Current attempt number.
+        check_interval : int
+            Seconds to wait between checks.
+
+        Returns
+        -------
+        CheckStatus | None
+            "NO_CHECKS" if no checks found after initial attempts, None to continue.
+
+        """
+        if not rollup:
+            if attempt > 2:  # Give checks time to start
+                log_warning("    No checks found")
+                return "NO_CHECKS"
+            time.sleep(check_interval)
+            return None
+
+        # Filter out phantom checks
+        relevant_checks = [c for c in rollup if self._should_check_be_counted(c)]
+        if not relevant_checks:
+            if attempt > 2:
+                log_warning("    No relevant checks found")
+                return "NO_CHECKS"
+            time.sleep(check_interval)
+            return None
+
+        # Continue with relevant checks
+        return None
+
+    def _evaluate_check_status(
+        self,
+        relevant_checks: list[dict],
+        stable_count_duration: int,
+        min_stable_duration: int,
+    ) -> CheckStatus | None:
+        """Evaluate status of relevant checks.
+
+        Parameters
+        ----------
+        relevant_checks : list[dict]
+            Filtered checks to evaluate.
+        stable_count_duration : int
+            How long check count has been stable (seconds).
+        min_stable_duration : int
+            Minimum stability duration before declaring failure (seconds).
+
+        Returns
+        -------
+        CheckStatus | None
+            Final status if determined, None to continue waiting.
+
+        """
+        any_running = any(self._is_check_running(c) for c in relevant_checks)
+        any_failed = any(self._is_check_failed(c) for c in relevant_checks)
+        all_passed = all(self._is_check_passed(c) for c in relevant_checks)
+        all_finalized = all(self._has_finalized_conclusion(c) for c in relevant_checks)
+
+        if not any_running and all_finalized:
+            if any_failed:
+                # Wait for check count to stabilize before declaring failure
+                if stable_count_duration >= min_stable_duration:
+                    log_error("  Checks failed")
+                    return "FAILED"
+                log_info(
+                    f"    ⏳ Some checks failed, but waiting for check count to "
+                    f"stabilize ({stable_count_duration}s/{min_stable_duration}s) "
+                    "to ensure all checks have appeared..."
+                )
+            elif all_passed:
+                log_success("  Checks completed successfully")
+                return "COMPLETED"
+            else:
+                log_info("    ⏳ Checks finalized but not all passed, waiting...")
+        elif not any_running and not all_finalized:
+            log_info(
+                "    ⏳ Checks appear done but conclusions not finalized yet, "
+                "waiting..."
+            )
+
+        return None
+
     def wait_for_checks_completion(
         self,
         pr: PRQueueItem,
@@ -295,6 +386,10 @@ class StatusPoller:
 
         Polls every 30 seconds up to timeout_minutes.
         Similar to fix-remote-pr.yml:603-673.
+
+        To prevent premature failure detection, we track check count stability.
+        We only return "FAILED" after the check count has been stable for 60s,
+        ensuring all checks have appeared in GitHub's API.
 
         Parameters
         ----------
@@ -311,6 +406,11 @@ class StatusPoller:
         """
         check_interval = 30
         max_attempts = (timeout_minutes * 60) // check_interval
+        min_stable_duration = 60
+
+        # Track check count stability to ensure all checks have appeared
+        last_check_count = 0
+        stable_count_duration = 0
 
         log_info(
             f"  ⏳ Waiting up to {timeout_minutes} minutes for checks to complete..."
@@ -335,47 +435,36 @@ class StatusPoller:
             data = json.loads(status_json)
             rollup = data.get("statusCheckRollup") or []
 
-            if not rollup:
-                if attempt > 2:  # Give checks time to start
-                    log_warning("    No checks found")
-                    return "NO_CHECKS"
-                time.sleep(check_interval)
+            # Handle no checks case
+            result = self._handle_no_checks(rollup, attempt, check_interval)
+            if result == "NO_CHECKS":
+                return result
+            if result is None and not rollup:
                 continue
 
-            # Filter out checks that should be ignored (phantom entries)
+            # Get relevant checks (already filtered by _handle_no_checks)
             relevant_checks = [c for c in rollup if self._should_check_be_counted(c)]
-
             if not relevant_checks:
-                if attempt > 2:  # Give checks time to start
-                    log_warning("    No relevant checks found")
-                    return "NO_CHECKS"
-                time.sleep(check_interval)
                 continue
 
-            # Check status of relevant checks
-            any_running = any(self._is_check_running(c) for c in relevant_checks)
-            any_failed = any(self._is_check_failed(c) for c in relevant_checks)
-            all_passed = all(self._is_check_passed(c) for c in relevant_checks)
-            all_finalized = all(
-                self._has_finalized_conclusion(c) for c in relevant_checks
-            )
-
-            if not any_running and all_finalized:
-                if any_failed:
-                    log_error("  Checks failed")
-                    return "FAILED"
-                if all_passed:
-                    log_success("  Checks completed successfully")
-                    return "COMPLETED"
-                # Checks are finalized but not all passed - still waiting
-                log_info("    ⏳ Checks finalized but not all passed, waiting...")
-
-            # Debug: Show why we're still waiting
-            if not any_running and not all_finalized:
+            # Track check count stability
+            current_check_count = len(relevant_checks)
+            if current_check_count == last_check_count:
+                stable_count_duration += check_interval
+            else:
+                stable_count_duration = 0
+                last_check_count = current_check_count
                 log_info(
-                    "    ⏳ Checks appear done but conclusions not finalized yet, "
-                    "waiting..."
+                    f"    Check count changed to {current_check_count}, "
+                    "resetting stability timer"
                 )
+
+            # Evaluate check status
+            status = self._evaluate_check_status(
+                relevant_checks, stable_count_duration, min_stable_duration
+            )
+            if status:
+                return status
 
             if attempt < max_attempts:
                 time.sleep(check_interval)

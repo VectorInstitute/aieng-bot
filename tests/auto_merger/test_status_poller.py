@@ -185,14 +185,19 @@ class TestStatusPoller:
     def test_wait_for_checks_completion_with_statuscontext_failed(
         self, status_poller, sample_pr
     ):
-        """Test wait_for_checks_completion with StatusContext that fails."""
+        """Test wait_for_checks_completion with StatusContext that fails.
+
+        Returns same failed check repeatedly to demonstrate stability,
+        then returns FAILED after 60s stability threshold.
+        """
         with patch.object(
             status_poller,
             "_run_gh_command",
             return_value='{"statusCheckRollup": [{"__typename": "StatusContext", "context": "pre-commit.ci", "state": "FAILURE"}]}',
         ):
             result = status_poller.wait_for_checks_completion(
-                sample_pr, timeout_minutes=1
+                sample_pr,
+                timeout_minutes=2,  # Need at least 2 minutes to reach 60s stability
             )
 
         assert result == "FAILED"
@@ -314,8 +319,9 @@ class TestStatusPoller:
             return_value='{"statusCheckRollup": [{"__typename": "CheckRun", "name": "run-code-check", "conclusion": "FAILURE", "status": "COMPLETED"}, {"__typename": "CheckRun", "name": "unit-tests", "conclusion": "SUCCESS", "status": "COMPLETED"}, {"__typename": "StatusContext", "name": null, "state": null, "conclusion": null, "status": null}]}',
         ):
             result = status_poller.wait_for_checks_completion(
-                sample_pr, timeout_minutes=1
+                sample_pr,
+                timeout_minutes=2,  # Need at least 2 minutes to reach 60s stability
             )
 
-        # Should detect failure immediately without waiting for phantom StatusContext
+        # Should detect failure after stability threshold without waiting for phantom StatusContext
         assert result == "FAILED"
