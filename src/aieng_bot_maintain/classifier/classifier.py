@@ -123,10 +123,15 @@ class PRFailureClassifier:
             }
 
     def _parse_json_response(self, response_text: str) -> dict[str, Any]:
-        """Parse JSON response, handling markdown code blocks."""
-        # Try to parse JSON (handle markdown code blocks if present)
-        if response_text.startswith("```"):
-            # Extract JSON from markdown code block
+        """Parse JSON response, handling markdown code blocks and embedded JSON."""
+        # Strategy 1: Try direct parse (pure JSON response)
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 2: Extract from markdown code block
+        if "```" in response_text:
             lines = response_text.split("\n")
             json_lines = []
             in_code_block = False
@@ -136,9 +141,31 @@ class PRFailureClassifier:
                     continue
                 if in_code_block:
                     json_lines.append(line)
-            response_text = "\n".join(json_lines)
 
-        return json.loads(response_text)
+            if json_lines:
+                try:
+                    return json.loads("\n".join(json_lines))
+                except json.JSONDecodeError:
+                    pass
+
+        # Strategy 3: Find JSON object in text (look for { ... })
+        # Claude might return explanatory text followed by JSON
+        start_idx = response_text.find("{")
+        end_idx = response_text.rfind("}")
+
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            potential_json = response_text[start_idx : end_idx + 1]
+            try:
+                return json.loads(potential_json)
+            except json.JSONDecodeError:
+                pass
+
+        # All strategies failed
+        log_error(f"Failed to parse JSON from response (length: {len(response_text)})")
+        log_error(f"Response preview: {response_text[:500]}")
+        raise json.JSONDecodeError(
+            "Could not extract valid JSON from Claude's response", response_text, 0
+        )
 
     def _run_agentic_loop(
         self, messages: list[MessageParam], bash_tool: ToolBash20250124Param
@@ -152,7 +179,6 @@ class PRFailureClassifier:
                 model="claude-haiku-4-5",
                 max_tokens=8192,
                 temperature=0.0,
-                system="You are a CI/CD failure classifier. After analyzing the logs with tools, you MUST respond with ONLY a valid JSON object. Do not include any explanatory text, markdown formatting, or analysis - return ONLY the raw JSON object.",
                 tools=[bash_tool],
                 messages=messages,
             )
