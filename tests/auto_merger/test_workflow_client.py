@@ -217,6 +217,10 @@ class TestWorkflowClient:
             MagicMock(returncode=0, stdout=""),
             # git config user.email
             MagicMock(returncode=0, stdout=""),
+            # git config credential.helper
+            MagicMock(returncode=0, stdout=""),
+            # git remote set-url
+            MagicMock(returncode=0, stdout=""),
             # git fetch origin head_ref
             MagicMock(returncode=0, stdout=""),
             # git checkout
@@ -233,7 +237,7 @@ class TestWorkflowClient:
 
         assert result is True
         # Should make multiple git-related calls
-        assert mock_run.call_count == 9
+        assert mock_run.call_count == 11
 
     @patch("subprocess.run")
     def test_trigger_rebase_precommit_failure(
@@ -252,6 +256,10 @@ class TestWorkflowClient:
             # git config user.name
             MagicMock(returncode=0, stdout=""),
             # git config user.email
+            MagicMock(returncode=0, stdout=""),
+            # git config credential.helper
+            MagicMock(returncode=0, stdout=""),
+            # git remote set-url
             MagicMock(returncode=0, stdout=""),
             # git fetch origin head_ref
             MagicMock(returncode=0, stdout=""),

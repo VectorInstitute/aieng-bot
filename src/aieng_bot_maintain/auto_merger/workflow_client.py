@@ -265,7 +265,7 @@ class WorkflowClient:
                     env=env,
                 )
 
-                # Configure git user for commits
+                # Configure git user and credentials for commits
                 subprocess.run(
                     ["git", "config", "user.name", "aieng-bot-maintain[bot]"],
                     cwd=repo_dir,
@@ -279,6 +279,31 @@ class WorkflowClient:
                         "user.email",
                         "aieng-bot@vectorinstitute.ai",
                     ],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Configure git to use GH_TOKEN for authentication
+                # This sets up credential helper to use the token for HTTPS pushes
+                subprocess.run(
+                    [
+                        "git",
+                        "config",
+                        "credential.helper",
+                        "store --file=/dev/null",  # Don't persist credentials
+                    ],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Set remote URL to include token for authentication
+                remote_url = (
+                    f"https://x-access-token:{self.gh_token}@github.com/{pr.repo}.git"
+                )
+                subprocess.run(
+                    ["git", "remote", "set-url", "origin", remote_url],
                     cwd=repo_dir,
                     check=True,
                     capture_output=True,
