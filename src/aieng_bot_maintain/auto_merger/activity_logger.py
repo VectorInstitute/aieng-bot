@@ -134,6 +134,10 @@ class ActivityLogger:
     ) -> bool:
         """Log a successful auto-merge activity.
 
+        Only logs if the PR was never fixed by the bot. If a bot_fix entry exists
+        for this PR, it means the PR required intervention and should not be
+        counted as an auto-merge.
+
         Parameters
         ----------
         repo : str
@@ -158,13 +162,29 @@ class ActivityLogger:
         Returns
         -------
         bool
-            True on success, False on failure.
+            True on success, False on failure (or skipped due to bot_fix).
 
         """
         log_info(f"Recording auto-merge activity for {repo}#{pr_number}")
 
         # Load existing log
         log_data = self._load_activity_log()
+
+        # Check if this PR already has a bot_fix entry
+        # If it does, skip logging as auto_merge (it wasn't truly auto-merged)
+        has_bot_fix = any(
+            activity["type"] == "bot_fix"
+            and activity["repo"] == repo
+            and activity["pr_number"] == pr_number
+            for activity in log_data["activities"]
+        )
+
+        if has_bot_fix:
+            log_info(
+                f"Skipping auto-merge log for {repo}#{pr_number} - "
+                "PR was previously fixed by bot"
+            )
+            return True  # Return True to indicate no error occurred
 
         # Create activity entry
         activity = {
