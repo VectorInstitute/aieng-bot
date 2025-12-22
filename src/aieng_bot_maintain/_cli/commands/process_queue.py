@@ -77,7 +77,7 @@ Examples:
             log_info("Creating new queue state")
             state = manager.state_manager.create_initial_state(
                 workflow_run_id=args.workflow_run_id,
-                prs=repo_prs,
+                prs=all_prs,
             )
             manager.state_manager.save_state(state)
 
@@ -86,6 +86,9 @@ Examples:
 
         if completed:
             log_success(f"Completed all PRs in {args.repo}")
+
+            # Save state to persist completed_repos update
+            manager.state_manager.save_state(state)
 
             # Clean up state if all repos done
             if len(state.completed_repos) == len(state.repo_queues):
