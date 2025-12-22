@@ -19,6 +19,8 @@ class TestAgentFixRequest:
             pr_title="Bump dependency",
             pr_author="app/dependabot",
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
+            head_ref="dependabot/pytest-8.0.0",
+            base_ref="main",
             failure_type="test",
             failed_check_names="Run Tests,Lint",
             failure_logs_file=".failure-logs.txt",
@@ -40,6 +42,8 @@ class TestAgentFixRequest:
             pr_title="Fix bug",
             pr_author="user",
             pr_url="https://github.com/test/repo/pull/456",
+            head_ref="feature/fix",
+            base_ref="main",
             failure_type="lint",
             failed_check_names="ESLint",
             failure_logs_file="logs.txt",
@@ -108,6 +112,8 @@ class TestAgentFixer:
             pr_title="Bump pytest",
             pr_author="app/dependabot",
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
+            head_ref="dependabot/pytest-8.0.0",
+            base_ref="main",
             failure_type="test",
             failed_check_names="Run Tests",
             failure_logs_file=str(logs_file),
@@ -291,6 +297,7 @@ class TestAgentFixer:
                 "Glob",
                 "Grep",
                 "Skill",
+                "WebSearch",
             ]
             assert options.permission_mode == "acceptEdits"
             assert options.cwd == str(tmp_path)
