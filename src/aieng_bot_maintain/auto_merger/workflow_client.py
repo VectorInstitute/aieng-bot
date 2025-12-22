@@ -108,6 +108,39 @@ class WorkflowClient:
         except subprocess.CalledProcessError:
             return ""
 
+    def get_pr_head_sha(self, pr: PRQueueItem) -> str | None:
+        """Get current head commit SHA of PR.
+
+        Parameters
+        ----------
+        pr : PRQueueItem
+            PR to get head SHA for.
+
+        Returns
+        -------
+        str or None
+            Head commit SHA (40-character hex string), or None if failed to retrieve.
+
+        """
+        try:
+            return self._run_gh_command(
+                [
+                    "gh",
+                    "pr",
+                    "view",
+                    str(pr.pr_number),
+                    "--repo",
+                    pr.repo,
+                    "--json",
+                    "headRefOid",
+                    "--jq",
+                    ".headRefOid",
+                ]
+            )
+        except subprocess.CalledProcessError as e:
+            log_error(f"Failed to get PR head SHA: {e}")
+            return None
+
     def trigger_rebase(self, pr: PRQueueItem) -> bool:
         """Trigger @dependabot rebase comment.
 

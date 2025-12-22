@@ -49,16 +49,26 @@ class TestPRProcessor:
         assert processor.status_poller == mock_poller
 
     @patch("time.sleep")
-    def test_trigger_rebase_success(self, mock_sleep, pr_processor, sample_pr):
-        """Test successful rebase triggering."""
+    def test_trigger_rebase_success_sha_change(
+        self, mock_sleep, pr_processor, sample_pr
+    ):
+        """Test successful rebase triggering with SHA change detection."""
+        initial_sha = "abc123def456abc123def456abc123def456abc1"
+        new_sha = "def789ghi012def789ghi012def789ghi012def7"
+
         # Mock status check to show no conflicts
         pr_processor.status_poller.check_pr_status.return_value = (
             True,
             False,
             "MERGEABLE",
         )
+        # Mock get_pr_head_sha to return initial SHA, then new SHA (simulating rebase)
+        pr_processor.workflow_client.get_pr_head_sha.side_effect = [
+            initial_sha,  # Initial SHA before rebase
+            new_sha,  # New SHA after rebase (first poll)
+        ]
         pr_processor.workflow_client.trigger_rebase.return_value = True
-        # Mock check_latest_comment to return empty string (no up-to-date message)
+        # Mock check_latest_comment to return empty string (no messages)
         pr_processor.workflow_client.check_latest_comment.return_value = ""
 
         result = pr_processor._trigger_rebase(sample_pr)
@@ -68,23 +78,42 @@ class TestPRProcessor:
         assert sample_pr.rebase_started_at is not None
         pr_processor.status_poller.check_pr_status.assert_called_once_with(sample_pr)
         pr_processor.workflow_client.trigger_rebase.assert_called_once_with(sample_pr)
-        pr_processor.workflow_client.check_latest_comment.assert_called_once_with(
-            sample_pr
-        )
-        # Should call sleep(10) first, then sleep(50) for total of 60s
+        # Should poll twice: initial check + one poll that detects SHA change
+        assert pr_processor.workflow_client.get_pr_head_sha.call_count == 2
+        # Should sleep 10s for polling interval, then 10s for CI to start
         assert mock_sleep.call_count == 2
-        mock_sleep.assert_any_call(10)
-        mock_sleep.assert_any_call(50)
+        mock_sleep.assert_any_call(10)  # Polling interval
 
     @patch("time.sleep")
-    def test_trigger_rebase_failure(self, mock_sleep, pr_processor, sample_pr):
-        """Test rebase triggering failure."""
+    def test_trigger_rebase_failure_no_sha(self, mock_sleep, pr_processor, sample_pr):
+        """Test rebase triggering failure when SHA cannot be retrieved."""
         # Mock status check to show no conflicts
         pr_processor.status_poller.check_pr_status.return_value = (
             True,
             False,
             "MERGEABLE",
         )
+        # Mock get_pr_head_sha to fail
+        pr_processor.workflow_client.get_pr_head_sha.return_value = None
+
+        result = pr_processor._trigger_rebase(sample_pr)
+
+        assert result is True  # True means move to next PR
+        assert sample_pr.status == PRStatus.FAILED
+        assert sample_pr.error_message == "Failed to get PR head SHA"
+
+    @patch("time.sleep")
+    def test_trigger_rebase_failure_comment_failed(
+        self, mock_sleep, pr_processor, sample_pr
+    ):
+        """Test rebase triggering failure when posting comment fails."""
+        # Mock status check to show no conflicts
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "MERGEABLE",
+        )
+        pr_processor.workflow_client.get_pr_head_sha.return_value = "abc123"
         pr_processor.workflow_client.trigger_rebase.return_value = False
 
         result = pr_processor._trigger_rebase(sample_pr)
@@ -98,12 +127,15 @@ class TestPRProcessor:
         self, mock_sleep, pr_processor, sample_pr
     ):
         """Test that we proceed immediately when dependabot says already up-to-date."""
+        initial_sha = "abc123def456abc123def456abc123def456abc1"
+
         # Mock status check to show no conflicts
         pr_processor.status_poller.check_pr_status.return_value = (
             True,
             False,
             "MERGEABLE",
         )
+        pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
         pr_processor.workflow_client.trigger_rebase.return_value = True
         # Mock check_latest_comment to return up-to-date message
         pr_processor.workflow_client.check_latest_comment.return_value = (
@@ -117,8 +149,54 @@ class TestPRProcessor:
         pr_processor.workflow_client.check_latest_comment.assert_called_once_with(
             sample_pr
         )
-        # Should only call sleep(10), not sleep(50) when already up-to-date
+        # Should only call sleep(10) once for polling interval
         mock_sleep.assert_called_once_with(10)
+
+    @patch("time.sleep")
+    def test_trigger_rebase_error_detected(self, mock_sleep, pr_processor, sample_pr):
+        """Test rebase error detection from Dependabot comment."""
+        initial_sha = "abc123def456abc123def456abc123def456abc1"
+
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "MERGEABLE",
+        )
+        pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
+        pr_processor.workflow_client.trigger_rebase.return_value = True
+        # Mock check_latest_comment to return error message
+        pr_processor.workflow_client.check_latest_comment.return_value = (
+            "Dependabot could not rebase this PR due to conflicts"
+        )
+
+        result = pr_processor._trigger_rebase(sample_pr)
+
+        assert result is False  # Route to fix workflow
+        assert sample_pr.status == PRStatus.CHECKS_FAILED
+        mock_sleep.assert_called_once_with(10)
+
+    @patch("time.sleep")
+    def test_trigger_rebase_timeout(self, mock_sleep, pr_processor, sample_pr):
+        """Test rebase timeout when it takes too long."""
+        initial_sha = "abc123def456abc123def456abc123def456abc1"
+
+        pr_processor.status_poller.check_pr_status.return_value = (
+            True,
+            False,
+            "MERGEABLE",
+        )
+        # Mock get_pr_head_sha to always return same SHA (no rebase completion)
+        pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
+        pr_processor.workflow_client.trigger_rebase.return_value = True
+        # Mock check_latest_comment to return empty (no messages)
+        pr_processor.workflow_client.check_latest_comment.return_value = ""
+
+        result = pr_processor._trigger_rebase(sample_pr)
+
+        assert result is True  # Move to next PR, will retry later
+        assert sample_pr.status == PRStatus.REBASING
+        # Should poll 18 times (180s timeout / 10s interval)
+        assert mock_sleep.call_count == 18
 
     def test_trigger_rebase_skips_if_conflict(self, pr_processor, sample_pr):
         """Test that rebase is skipped if conflict detected early."""
@@ -295,8 +373,16 @@ class TestPRProcessor:
     @patch("time.sleep")
     def test_process_pr_full_flow_success(self, mock_sleep, pr_processor, sample_pr):
         """Test full PR processing flow from pending to merged."""
+        initial_sha = "abc123def456abc123def456abc123def456abc1"
+        new_sha = "def789ghi012def789ghi012def789ghi012def7"
+
         # Setup mocks for successful flow
+        pr_processor.workflow_client.get_pr_head_sha.side_effect = [
+            initial_sha,  # Before rebase
+            new_sha,  # After rebase
+        ]
         pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.check_latest_comment.return_value = ""
         pr_processor.status_poller.check_pr_status.return_value = (
             True,
             False,
@@ -313,11 +399,15 @@ class TestPRProcessor:
     @patch("time.sleep")
     def test_process_pr_with_merge_conflict(self, mock_sleep, pr_processor, sample_pr):
         """Test PR processing when merge conflict is detected."""
+        initial_sha = "abc123def456abc123def456abc123def456abc1"
+
         # Setup mocks for conflict flow
+        pr_processor.workflow_client.get_pr_head_sha.return_value = initial_sha
         pr_processor.workflow_client.trigger_rebase.return_value = True
+        pr_processor.workflow_client.check_latest_comment.return_value = ""
         # First call: conflict detected, second call: after fix it's mergeable
         pr_processor.status_poller.check_pr_status.side_effect = [
-            (True, False, "CONFLICTING"),  # Initial check after rebase
+            (True, False, "CONFLICTING"),  # Initial check before rebase
             (True, False, "MERGEABLE"),  # After fix workflow completes
         ]
         pr_processor.workflow_client.trigger_fix_workflow.return_value = "789"

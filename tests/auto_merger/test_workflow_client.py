@@ -97,6 +97,34 @@ class TestWorkflowClient:
         assert "custom-bot" in jq_filter
 
     @patch("subprocess.run")
+    def test_get_pr_head_sha_success(self, mock_run, workflow_client, sample_pr):
+        """Test getting PR head SHA successfully."""
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="abc123def456abc123def456abc123def456abc1\n"
+        )
+
+        result = workflow_client.get_pr_head_sha(sample_pr)
+
+        assert result == "abc123def456abc123def456abc123def456abc1"
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0][0]
+        assert call_args[0] == "gh"
+        assert call_args[1] == "pr"
+        assert call_args[2] == "view"
+        assert str(sample_pr.pr_number) in call_args
+        assert "--json" in call_args
+        assert "headRefOid" in call_args
+
+    @patch("subprocess.run")
+    def test_get_pr_head_sha_failure(self, mock_run, workflow_client, sample_pr):
+        """Test getting PR head SHA when command fails."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, ["gh"])
+
+        result = workflow_client.get_pr_head_sha(sample_pr)
+
+        assert result is None
+
+    @patch("subprocess.run")
     def test_trigger_rebase_success(self, mock_run, workflow_client, sample_pr):
         """Test successful rebase triggering."""
         mock_run.return_value = MagicMock(returncode=0, stdout="")

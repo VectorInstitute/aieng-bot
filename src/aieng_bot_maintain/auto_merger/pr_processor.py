@@ -125,7 +125,11 @@ class PRProcessor:
         return False
 
     def _trigger_rebase(self, pr: PRQueueItem) -> bool:
-        """Trigger rebase for a pending PR.
+        """Trigger rebase for a pending PR and wait for completion.
+
+        Polls for rebase completion by monitoring:
+        1. Dependabot comments ("already up-to-date", error messages)
+        2. PR head SHA changes (indicates successful force-push)
 
         Parameters
         ----------
@@ -135,10 +139,10 @@ class PRProcessor:
         Returns
         -------
         bool
-            True to move to next PR, False to retry later.
+            True to move to next PR, False to continue processing.
 
         """
-        log_info("→ Step 1: Checking PR status before rebase")
+        log_info("→ Step 1: Triggering rebase and waiting for completion")
 
         # Check for merge conflicts first - no point rebasing if already conflicted
         _, _, mergeable = self.status_poller.check_pr_status(pr)
@@ -150,7 +154,17 @@ class PRProcessor:
             pr.last_updated = datetime.now(UTC).isoformat()
             return False
 
-        log_info("Triggering rebase")
+        # Get current head SHA before triggering rebase
+        initial_head_sha = self.workflow_client.get_pr_head_sha(pr)
+        if not initial_head_sha:
+            pr.error_message = "Failed to get PR head SHA"
+            pr.status = PRStatus.FAILED
+            pr.last_updated = datetime.now(UTC).isoformat()
+            return True
+
+        log_info(f"Current head SHA: {initial_head_sha[:7]}")
+
+        # Trigger rebase via @dependabot rebase comment
         if not self.workflow_client.trigger_rebase(pr):
             pr.error_message = "Failed to trigger rebase"
             pr.status = PRStatus.FAILED
@@ -161,22 +175,81 @@ class PRProcessor:
         pr.rebase_started_at = datetime.now(UTC).isoformat()
         pr.last_updated = datetime.now(UTC).isoformat()
 
-        # Wait briefly for dependabot to respond
-        log_info("Waiting for dependabot response...")
-        time.sleep(10)
+        # Poll for rebase completion
+        return self._poll_rebase_completion(pr, initial_head_sha)
 
-        # Check if dependabot said PR is already up-to-date
-        latest_comment = self.workflow_client.check_latest_comment(pr)
-        if "already up-to-date" in latest_comment.lower():
-            log_success(
-                "PR already up-to-date with base branch, proceeding immediately"
-            )
-            return False
+    def _poll_rebase_completion(self, pr: PRQueueItem, initial_head_sha: str) -> bool:
+        """Poll for rebase completion by checking comments and head SHA.
 
-        # Otherwise wait for rebase to complete (Dependabot is usually fast)
-        log_info("Waiting for rebase to complete...")
-        time.sleep(50)  # Already waited 10s, wait 50s more for total of 60s
-        return False
+        Parameters
+        ----------
+        pr : PRQueueItem
+            PR being rebased.
+        initial_head_sha : str
+            Head SHA before rebase was triggered.
+
+        Returns
+        -------
+        bool
+            True to move to next PR, False to continue processing.
+
+        """
+        # Dependabot is usually fast (seconds to ~1 min), but can take longer if busy
+        timeout_seconds = 180  # 3 minutes
+        poll_interval = 10
+        elapsed = 0
+
+        log_info("Polling for rebase completion...")
+
+        while elapsed < timeout_seconds:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+            # Check for Dependabot response comments
+            latest_comment = self.workflow_client.check_latest_comment(pr)
+
+            # Case 1: Already up-to-date - no rebase needed
+            if "already up-to-date" in latest_comment.lower():
+                log_success(
+                    "PR already up-to-date with base branch, proceeding immediately"
+                )
+                return False  # Proceed to check monitoring
+
+            # Case 2: Rebase failed - route to fix workflow
+            rebase_error_phrases = [
+                "could not rebase",
+                "merge conflict",
+                "unable to rebase",
+                "rebase failed",
+                "failed to rebase",
+            ]
+            if any(phrase in latest_comment.lower() for phrase in rebase_error_phrases):
+                log_warning(f"Rebase failed: {latest_comment[:100]}...")
+                pr.status = PRStatus.CHECKS_FAILED
+                pr.last_updated = datetime.now(UTC).isoformat()
+                return False  # Route to fix workflow
+
+            # Case 3: Head SHA changed - rebase completed successfully
+            current_head_sha = self.workflow_client.get_pr_head_sha(pr)
+            if current_head_sha and current_head_sha != initial_head_sha:
+                log_success(
+                    f"Rebase completed (SHA changed: {initial_head_sha[:7]} → "
+                    f"{current_head_sha[:7]})"
+                )
+                # Brief wait for CI to start triggering checks
+                log_info("Waiting 10s for CI to trigger...")
+                time.sleep(10)
+                return False  # Proceed to check monitoring
+
+            log_info(f"  Still waiting for rebase... ({elapsed}s/{timeout_seconds}s)")
+
+        # Timeout - rebase taking too long or stuck
+        log_warning(
+            f"Rebase did not complete within {timeout_seconds}s. "
+            "Will retry on next workflow run."
+        )
+        # Keep status as REBASING - next run will check if it completed
+        return True  # Move to next PR, will retry on next cron run
 
     def _wait_for_checks(self, pr: PRQueueItem) -> bool:
         """Wait for checks to complete after rebase.
