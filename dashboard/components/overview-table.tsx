@@ -1,7 +1,8 @@
 'use client'
 
+import { useState, useMemo, useEffect } from 'react'
 import type { PRSummary } from '@/lib/types'
-import { ArrowUpDown, ExternalLink, Clock } from 'lucide-react'
+import { ArrowUpDown, ExternalLink, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { Input, Select, StatusBadge, FailureTypeBadge } from './ui'
 import { useTableData } from '@/lib/hooks'
@@ -36,6 +37,27 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
     searchFields: ['repo', 'title', 'author'],
     filterFields: ['status', 'failure_type'],
   })
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+
+  // Calculate paginated data
+  const { paginatedData, totalPages } = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    const paginated = processedData.slice(startIndex, endIndex)
+
+    return {
+      paginatedData: paginated,
+      totalPages: Math.ceil(processedData.length / pageSize),
+    }
+  }, [processedData, currentPage, pageSize])
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filters, sortField, sortDirection, pageSize])
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
@@ -95,11 +117,29 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
             ))}
           </Select>
         </div>
+
+        <div className="flex flex-col gap-1.5 min-w-[120px]">
+          <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide px-1">
+            Per page
+          </label>
+          <Select
+            value={pageSize.toString()}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="w-full"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </Select>
+        </div>
       </div>
 
       {/* Results count */}
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Showing {filteredCount} of {totalCount} PRs
+        Showing {filteredCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
+        {Math.min(currentPage * pageSize, filteredCount)} of {filteredCount} PRs
+        {filteredCount < totalCount && ` (filtered from ${totalCount})`}
       </p>
 
       {/* Table */}
@@ -161,16 +201,16 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {processedData.length === 0 ? (
+            {paginatedData.length === 0 ? (
               <tr>
                 <td colSpan={7} className={`${CLASSES.tableCell} py-12 text-center text-gray-500 dark:text-gray-400`}>
                   No PRs found matching your filters
                 </td>
               </tr>
             ) : (
-              processedData.map((pr) => (
+              paginatedData.map((pr) => (
                 <tr
-                  key={`${pr.repo}-${pr.pr_number}`}
+                  key={`${pr.repo}-${pr.pr_number}-${pr.timestamp}`}
                   className={CLASSES.hoverRow}
                 >
                   <td className={CLASSES.tableCell}>
@@ -225,6 +265,65 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Page {currentPage} of {totalPages}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all flex items-center gap-1"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all flex items-center gap-1"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all"
+            >
+              Last
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <span>Jump to:</span>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={currentPage}
+              onChange={(e) => {
+                const page = Number(e.target.value)
+                if (page >= 1 && page <= totalPages) {
+                  setCurrentPage(page)
+                }
+              }}
+              className="w-16 px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-vector-violet"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

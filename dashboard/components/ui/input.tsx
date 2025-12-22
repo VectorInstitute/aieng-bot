@@ -36,9 +36,9 @@ interface SelectProps extends InputHTMLAttributes<HTMLSelectElement> {
 
 export function Select({ className, children, ...props }: SelectProps) {
   return (
-    <div className="relative inline-block w-full">
+    <div className={cn("relative inline-block", className)}>
       <select
-        className={cn(CLASSES.select, 'appearance-none pr-10 w-full', className)}
+        className={cn(CLASSES.select, 'appearance-none pr-10 w-full')}
         style={{
           backgroundImage: 'none',
           WebkitAppearance: 'none',

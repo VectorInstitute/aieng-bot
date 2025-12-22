@@ -30,10 +30,16 @@ export default async function DashboardPage() {
       // Convert activities to PR summaries
       const summaries = activityLogToPRSummaries(activityLog)
 
-      // Limit to most recent 100 activities for performance
-      const recentSummaries = summaries
+      // Filter to last 30 days
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      const last30DaysSummaries = summaries.filter(
+        s => new Date(s.timestamp) >= thirtyDaysAgo
+      )
+
+      // Sort by timestamp (most recent first)
+      const recentSummaries = last30DaysSummaries
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 100)
 
       // Enrich with trace data (only for bot_fix entries, auto_merge already has all data)
       prSummaries = await enrichPRSummaries(recentSummaries)
