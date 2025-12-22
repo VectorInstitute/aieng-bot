@@ -237,7 +237,7 @@ class TestProcessRepoQueue:
 
         # Check warning message
         captured = capsys.readouterr()
-        assert "⚠ No queue found for VectorInstitute/nonexistent-repo" in captured.out
+        assert "⚠ No queue found for VectorInstitute/nonexistent-repo" in captured.err
 
     def test_process_repo_queue_empty_queue(
         self, queue_manager, sample_queue_state, capsys
@@ -287,7 +287,7 @@ class TestProcessRepoQueue:
 
         # Check warning message
         captured = capsys.readouterr()
-        assert "⚠ TIMEOUT APPROACHING" in captured.out
+        assert "⚠ TIMEOUT APPROACHING" in captured.err
 
     def test_process_repo_queue_pr_advances(
         self, queue_manager, sample_pr, sample_queue_state, capsys
@@ -334,7 +334,7 @@ class TestProcessRepoQueue:
 
         # Check output messages
         captured = capsys.readouterr()
-        assert f"✓ Completed all PRs in {repo}" in captured.out
+        assert f"Completed all PRs in {repo}" in captured.err
 
     def test_process_repo_queue_pr_needs_retry(
         self, queue_manager, sample_pr, sample_queue_state, capsys
@@ -368,7 +368,7 @@ class TestProcessRepoQueue:
 
         # Check output message
         captured = capsys.readouterr()
-        assert "PR needs more time, will retry next run" in captured.out
+        assert "PR needs more time, will retry next run" in captured.err
 
     def test_process_repo_queue_merged_pr_logs_activity(
         self, queue_manager, sample_pr, sample_queue_state

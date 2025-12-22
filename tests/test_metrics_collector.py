@@ -135,7 +135,7 @@ class TestMetricsCollector:
 
         assert prs == []
         captured = capsys.readouterr()
-        assert "Error querying GitHub API" in captured.out
+        assert "Error querying GitHub API" in captured.err
 
     @patch("subprocess.run")
     def test_query_bot_prs_json_decode_error(self, mock_run, collector, capsys):
@@ -148,7 +148,7 @@ class TestMetricsCollector:
 
         assert prs == []
         captured = capsys.readouterr()
-        assert "Error parsing GitHub API response" in captured.out
+        assert "Error parsing GitHub API response" in captured.err
 
     def test_classify_pr_status_open(self, collector):
         """Test classification of open PR."""
@@ -321,7 +321,7 @@ class TestMetricsCollector:
         mock_makedirs.assert_called_once()
         mock_file.assert_called()
         captured = capsys.readouterr()
-        assert "Latest metrics saved" in captured.out
+        assert "Latest metrics saved" in captured.err
 
     @patch("builtins.open", new_callable=mock_open)
     @patch("os.makedirs")
@@ -336,8 +336,8 @@ class TestMetricsCollector:
         collector.save_metrics(metrics, "/tmp/latest.json", "/tmp/history.json")
 
         captured = capsys.readouterr()
-        assert "Latest metrics saved" in captured.out
-        assert "History updated" in captured.out
+        assert "Latest metrics saved" in captured.err
+        assert "History updated" in captured.err
 
     @patch("subprocess.run")
     def test_upload_to_gcs_success(self, mock_run, collector, capsys):
@@ -351,7 +351,7 @@ class TestMetricsCollector:
         assert result is True
         mock_run.assert_called_once()
         captured = capsys.readouterr()
-        assert "Uploaded to gs://test-bucket" in captured.out
+        assert "Uploaded to gs://test-bucket" in captured.err
 
     @patch("subprocess.run")
     def test_upload_to_gcs_failure(self, mock_run, collector, capsys):
@@ -366,4 +366,4 @@ class TestMetricsCollector:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "Failed to upload to GCS" in captured.out
+        assert "Failed to upload to GCS" in captured.err

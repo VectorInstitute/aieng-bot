@@ -5,6 +5,7 @@ import subprocess
 import time
 from typing import Literal
 
+from ..utils.logging import log_error, log_info, log_success, log_warning
 from .models import PRQueueItem
 
 WorkflowStatus = Literal["SUCCESS", "FAILURE", "RUNNING", "CANCELLED", "UNKNOWN"]
@@ -134,10 +135,10 @@ class WorkflowClient:
                     "@dependabot rebase",
                 ]
             )
-            print(f"  ✓ Rebase triggered for {pr.repo}#{pr.pr_number}")
+            log_success(f"  Rebase triggered for {pr.repo}#{pr.pr_number}")
             return True
         except subprocess.CalledProcessError as e:
-            print(f"  ✗ Failed to trigger rebase: {e}")
+            log_error(f"  Failed to trigger rebase: {e}")
             return False
 
     def trigger_fix_workflow(self, pr: PRQueueItem) -> str | None:
@@ -171,7 +172,7 @@ class WorkflowClient:
                 ]
             )
 
-            print(f"  ✓ Fix workflow triggered for {pr.repo}#{pr.pr_number}")
+            log_success(f"  Fix workflow triggered for {pr.repo}#{pr.pr_number}")
 
             # Wait a bit for workflow to appear in API
             time.sleep(5)
@@ -196,13 +197,13 @@ class WorkflowClient:
             runs = json.loads(runs_json)
             if runs:
                 run_id = str(runs[0]["databaseId"])
-                print(f"    Workflow run ID: {run_id}")
+                log_info(f"    Workflow run ID: {run_id}")
                 return run_id
 
             return None
 
         except subprocess.CalledProcessError as e:
-            print(f"  ✗ Failed to trigger fix workflow: {e}")
+            log_error(f"  Failed to trigger fix workflow: {e}")
             return None
 
     def poll_workflow_status(
@@ -230,7 +231,7 @@ class WorkflowClient:
         check_interval = 30
         max_attempts = (timeout_minutes * 60) // check_interval
 
-        print(f"  ⏳ Monitoring fix workflow (run {run_id})...")
+        log_info(f"  ⏳ Monitoring fix workflow (run {run_id})...")
 
         for attempt in range(1, max_attempts + 1):
             try:
@@ -255,17 +256,17 @@ class WorkflowClient:
                 # Workflow completed
                 if status == "completed":
                     if conclusion == "success":
-                        print("  ✓ Fix workflow succeeded")
+                        log_success("  Fix workflow succeeded")
                         return "SUCCESS"
                     if conclusion == "failure":
-                        print("  ✗ Fix workflow failed")
+                        log_error("  Fix workflow failed")
                         return "FAILURE"
                     if conclusion == "cancelled":
-                        print("  ⚠ Fix workflow cancelled")
+                        log_warning("  ⚠ Fix workflow cancelled")
                         return "CANCELLED"
 
                 # Still running
-                print(
+                log_info(
                     f"  Fix workflow status: {status} "
                     f"(attempt {attempt}/{max_attempts})"
                 )
@@ -274,10 +275,10 @@ class WorkflowClient:
                     time.sleep(check_interval)
 
             except subprocess.CalledProcessError as e:
-                print(f"  ✗ Error polling workflow: {e}")
+                log_error(f"  Error polling workflow: {e}")
                 return "UNKNOWN"
 
-        print(f"  ⏱ Timeout: Workflow still running after {timeout_minutes} minutes")
+        log_info(f"  ⏱ Timeout: Workflow still running after {timeout_minutes} minutes")
         return "RUNNING"
 
     def auto_merge_pr(self, pr: PRQueueItem) -> bool:
@@ -348,9 +349,9 @@ class WorkflowClient:
                 ]
             )
 
-            print(f"  ✓ Auto-merge enabled for {pr.repo}#{pr.pr_number}")
+            log_success(f"  Auto-merge enabled for {pr.repo}#{pr.pr_number}")
             return True
 
         except subprocess.CalledProcessError as e:
-            print(f"  ✗ Failed to enable auto-merge: {e}")
+            log_error(f"  Failed to enable auto-merge: {e}")
             return False

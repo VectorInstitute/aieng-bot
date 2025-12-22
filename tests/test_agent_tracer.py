@@ -261,7 +261,7 @@ class TestAgentExecutionTracer:
         mock_makedirs.assert_called_once()
         mock_file.assert_called()
         captured = capsys.readouterr()
-        assert "Trace saved" in captured.out
+        assert "Trace saved" in captured.err
 
     @patch("subprocess.run")
     def test_upload_to_gcs_success(self, mock_run, tracer, capsys):
@@ -275,7 +275,7 @@ class TestAgentExecutionTracer:
         assert result is True
         mock_run.assert_called_once()
         captured = capsys.readouterr()
-        assert "Trace uploaded" in captured.out
+        assert "Trace uploaded" in captured.err
 
     @patch("subprocess.run")
     def test_upload_to_gcs_failure(self, mock_run, tracer, capsys):
@@ -290,7 +290,7 @@ class TestAgentExecutionTracer:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "Failed to upload trace to GCS" in captured.out
+        assert "Failed to upload trace to GCS" in captured.err
 
     def test_get_summary_success(self, tracer):
         """Test get_summary for successful execution."""

@@ -5,6 +5,7 @@ import subprocess
 import time
 from typing import Literal
 
+from ..utils.logging import log_error, log_info, log_success, log_warning
 from .models import PRQueueItem
 
 CheckStatus = Literal["COMPLETED", "FAILED", "RUNNING", "NO_CHECKS"]
@@ -86,14 +87,14 @@ class StatusPoller:
 
         """
         # Initial delay for GitHub to compute status
-        print("  ⏳ Waiting 15s for GitHub to compute merge status...")
+        log_info("  ⏳ Waiting 15s for GitHub to compute merge status...")
         time.sleep(15)
 
         max_retries = 5
         retry_delay = 10
 
         for attempt in range(1, max_retries + 1):
-            print(f"  Attempt {attempt}/{max_retries}: Checking PR status...")
+            log_info(f"  Attempt {attempt}/{max_retries}: Checking PR status...")
 
             status_json = self._run_gh_command(
                 [
@@ -145,7 +146,7 @@ class StatusPoller:
 
             mergeable = status_data.get("mergeable", "UNKNOWN")
 
-            print(
+            log_info(
                 f"    Status: all_passed={all_passed}, "
                 f"has_failures={has_failures}, mergeable={mergeable}"
             )
@@ -155,10 +156,10 @@ class StatusPoller:
 
             if attempt < max_retries:
                 wait_time = retry_delay * attempt
-                print(f"    ⏳ Waiting {wait_time}s before retry...")
+                log_info(f"    ⏳ Waiting {wait_time}s before retry...")
                 time.sleep(wait_time)
 
-        print("  ⚠ Mergeable status still UNKNOWN after retries")
+        log_warning("  Mergeable status still UNKNOWN after retries")
         return all_passed, has_failures, "UNKNOWN"
 
     def wait_for_checks_completion(
@@ -187,10 +188,12 @@ class StatusPoller:
         check_interval = 30
         max_attempts = (timeout_minutes * 60) // check_interval
 
-        print(f"  ⏳ Waiting up to {timeout_minutes} minutes for checks to complete...")
+        log_info(
+            f"  ⏳ Waiting up to {timeout_minutes} minutes for checks to complete..."
+        )
 
         for attempt in range(1, max_attempts + 1):
-            print(f"  Check attempt {attempt}/{max_attempts}...")
+            log_info(f"  Check attempt {attempt}/{max_attempts}...")
 
             status_json = self._run_gh_command(
                 [
@@ -210,7 +213,7 @@ class StatusPoller:
 
             if not rollup:
                 if attempt > 2:  # Give checks time to start
-                    print("    ⚠ No checks found")
+                    log_warning("    No checks found")
                     return "NO_CHECKS"
                 time.sleep(check_interval)
                 continue
@@ -267,14 +270,14 @@ class StatusPoller:
 
             if not any_running and all_finalized:
                 if any_failed:
-                    print("  ✗ Checks failed")
+                    log_error("  Checks failed")
                     return "FAILED"
-                print("  ✓ Checks completed successfully")
+                log_success("  Checks completed successfully")
                 return "COMPLETED"
 
             # Debug: Show why we're still waiting
             if not any_running and not all_finalized:
-                print(
+                log_info(
                     "    ⏳ Checks appear done but conclusions not finalized yet, "
                     "waiting..."
                 )
@@ -282,5 +285,5 @@ class StatusPoller:
             if attempt < max_attempts:
                 time.sleep(check_interval)
 
-        print(f"  ⏱ Timeout: Checks still running after {timeout_minutes} minutes")
+        log_info(f"  ⏱ Timeout: Checks still running after {timeout_minutes} minutes")
         return "RUNNING"

@@ -69,11 +69,11 @@ Examples:
     args = parser.parse_args()
 
     try:
-        print("=" * 60)
-        print("Bot Metrics Collection")
-        print("=" * 60)
-        print(f"Looking back: {args.days} days")
-        print("")
+        log_info("=" * 60)
+        log_info("Bot Metrics Collection")
+        log_info("=" * 60)
+        log_info(f"Looking back: {args.days} days")
+        log_info("")
 
         # Initialize collector
         collector = MetricsCollector(days_back=args.days)
@@ -82,27 +82,27 @@ Examples:
         log_info("Querying GitHub for bot PRs...")
         prs = collector.query_bot_prs()
         log_success(f"Found {len(prs)} bot PRs")
-        print("")
+        log_info("")
 
         # Calculate metrics
         log_info("Calculating aggregate metrics...")
         metrics = collector.aggregate_metrics(prs)
         log_success("Metrics calculated")
-        print("")
+        log_info("")
 
         # Print summary
-        print("Summary:")
-        print(f"  Total PRs: {metrics['stats']['total_prs_scanned']}")
-        print(f"  Auto-merged: {metrics['stats']['prs_auto_merged']}")
-        print(f"  Bot-fixed: {metrics['stats']['prs_bot_fixed']}")
-        print(f"  Failed: {metrics['stats']['prs_failed']}")
-        print(f"  Success rate: {metrics['stats']['success_rate']:.1%}")
-        print(f"  Avg fix time: {metrics['stats']['avg_fix_time_hours']:.1f} hours")
-        print("")
+        log_info("Summary:")
+        log_info(f"  Total PRs: {metrics['stats']['total_prs_scanned']}")
+        log_info(f"  Auto-merged: {metrics['stats']['prs_auto_merged']}")
+        log_info(f"  Bot-fixed: {metrics['stats']['prs_bot_fixed']}")
+        log_info(f"  Failed: {metrics['stats']['prs_failed']}")
+        log_info(f"  Success rate: {metrics['stats']['success_rate']:.1%}")
+        log_info(f"  Avg fix time: {metrics['stats']['avg_fix_time_hours']:.1f} hours")
+        log_info("")
 
         # Save locally
         collector.save_metrics(metrics, args.output, args.history)
-        print("")
+        log_info("")
 
         # Upload to GCS if requested
         if args.upload_to_gcs:
@@ -113,7 +113,7 @@ Examples:
             collector.upload_to_gcs(
                 args.history, args.gcs_bucket, "data/bot_metrics_history.json"
             )
-            print("")
+            log_info("")
 
         log_success("Metrics collection complete")
 

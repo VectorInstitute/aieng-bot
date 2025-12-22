@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from ..utils.logging import log_info
 from .classifiers import MessageClassifier
 from .extractors import ContentExtractor, ToolInfoExtractor
 
@@ -166,7 +167,7 @@ class EventLogger:
             if len(log_content) > max_length
             else log_content
         )
-        print(f"[Agent][{event['type']}] {truncated}")
+        log_info(f"[Agent][{event['type']}] {truncated}")
 
 
 class SummaryGenerator:

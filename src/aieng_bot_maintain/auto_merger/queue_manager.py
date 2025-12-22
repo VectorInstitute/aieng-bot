@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from ..utils.logging import log_success
+from ..utils.logging import log_info, log_success, log_warning
 from .activity_logger import ActivityLogger
 from .models import PRQueueItem, PRStatus, QueueState
 from .pr_processor import PRProcessor
@@ -104,19 +104,19 @@ class QueueManager:
         """
         queue = state.repo_queues.get(repo)
         if not queue:
-            print(f"⚠ No queue found for {repo}")
+            log_warning(f"No queue found for {repo}")
             return True
 
-        print(f"\n{'#' * 70}")
-        print(f"# Processing repository: {repo}")
-        print(f"# PRs in queue: {len(queue.prs)}")
-        print(f"# Current position: {queue.current_index + 1}/{len(queue.prs)}")
-        print(f"{'#' * 70}\n")
+        log_info(f"\n{'#' * 70}")
+        log_info(f"# Processing repository: {repo}")
+        log_info(f"# PRs in queue: {len(queue.prs)}")
+        log_info(f"# Current position: {queue.current_index + 1}/{len(queue.prs)}")
+        log_info(f"{'#' * 70}\n")
 
         while not queue.is_complete():
             # Check timeout
             if self.is_timeout_approaching(state):
-                print("\n⚠ TIMEOUT APPROACHING - Saving state and stopping")
+                log_warning("\n⚠ TIMEOUT APPROACHING - Saving state and stopping")
                 self.state_manager.save_state(state)
                 return False
 
@@ -135,14 +135,14 @@ class QueueManager:
             self.state_manager.save_state(state)
 
             if should_advance:
-                print(f"  → Moving to next PR in {repo}")
+                log_info(f"  → Moving to next PR in {repo}")
                 queue.advance()
             else:
-                print("  → PR needs more time, will retry next run")
+                log_info("  → PR needs more time, will retry next run")
                 # Don't advance, will resume on next workflow run
                 return False
 
-        print(f"\n✓ Completed all PRs in {repo}")
+        log_success(f"\nCompleted all PRs in {repo}")
         state.completed_repos.append(repo)
         return True
 

@@ -5,6 +5,7 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ..utils.logging import log_error, log_info, log_success, log_warning
 from .models import PRQueueItem, PRStatus, QueueState, RepoQueue
 
 
@@ -100,17 +101,17 @@ class StateManager:
             age_hours = (datetime.now(UTC) - started_at).total_seconds() / 3600
 
             if age_hours > 24:
-                print(f"⚠ State is stale ({age_hours:.1f}h old), ignoring")
+                log_warning(f"State is stale ({age_hours:.1f}h old), ignoring")
                 return None
 
-            print(f"✓ Loaded state from run {state.workflow_run_id}")
+            log_success(f"Loaded state from run {state.workflow_run_id}")
             return state
 
         except subprocess.CalledProcessError:
-            print("ℹ No existing state found in GCS")
+            log_info("No existing state found in GCS")
             return None
         except (json.JSONDecodeError, KeyError) as e:
-            print(f"✗ Failed to parse state: {e}")
+            log_error(f"Failed to parse state: {e}")
             return None
 
     def save_state(self, state: QueueState) -> bool:
@@ -145,11 +146,11 @@ class StateManager:
                 ]
             )
 
-            print(f"✓ State saved to GCS at {state.last_updated}")
+            log_success(f"State saved to GCS at {state.last_updated}")
             return True
 
         except Exception as e:
-            print(f"✗ Failed to save state: {e}")
+            log_error(f"Failed to save state: {e}")
             return False
 
     def create_initial_state(
@@ -237,8 +238,8 @@ class StateManager:
                     f"gs://{self.bucket}/{self.state_path}",
                 ]
             )
-            print("✓ State cleared from GCS")
+            log_success("State cleared from GCS")
             return True
         except subprocess.CalledProcessError:
-            print("ℹ No state to clear")
+            log_info("No state to clear")
             return False

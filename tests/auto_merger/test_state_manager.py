@@ -78,7 +78,7 @@ class TestStateManager:
 
         assert state is None
         captured = capsys.readouterr()
-        assert "No existing state found" in captured.out
+        assert "No existing state found" in captured.err
 
     @patch("subprocess.run")
     @patch(
@@ -101,7 +101,7 @@ class TestStateManager:
 
         assert state is None
         captured = capsys.readouterr()
-        assert "stale" in captured.out
+        assert "stale" in captured.err
 
     @patch("subprocess.run")
     @patch("builtins.open", new_callable=mock_open, read_data="invalid json")
@@ -113,7 +113,7 @@ class TestStateManager:
 
         assert state is None
         captured = capsys.readouterr()
-        assert "Failed to parse state" in captured.out
+        assert "Failed to parse state" in captured.err
 
     @patch("subprocess.run")
     @patch("builtins.open", new_callable=mock_open)
@@ -132,7 +132,7 @@ class TestStateManager:
         assert result is True
         mock_run.assert_called_once()
         captured = capsys.readouterr()
-        assert "State saved to GCS" in captured.out
+        assert "State saved to GCS" in captured.err
 
     @patch("subprocess.run")
     @patch("builtins.open", new_callable=mock_open)
@@ -146,7 +146,7 @@ class TestStateManager:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "Failed to save state" in captured.out
+        assert "Failed to save state" in captured.err
 
     @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
     def test_create_initial_state(self, mock_datetime, state_manager, sample_prs):
@@ -287,7 +287,7 @@ class TestStateManager:
         assert result is True
         mock_run.assert_called_once()
         captured = capsys.readouterr()
-        assert "State cleared from GCS" in captured.out
+        assert "State cleared from GCS" in captured.err
 
     @patch("subprocess.run")
     def test_clear_state_not_found(self, mock_run, state_manager, capsys):
@@ -298,4 +298,4 @@ class TestStateManager:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "No state to clear" in captured.out
+        assert "No state to clear" in captured.err

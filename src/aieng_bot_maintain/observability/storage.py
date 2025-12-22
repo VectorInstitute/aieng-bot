@@ -11,6 +11,8 @@ import os
 import subprocess
 from typing import Any
 
+from ..utils.logging import log_error, log_success
+
 
 class TraceStorage:
     """Handle trace storage operations (local and cloud)."""
@@ -36,7 +38,7 @@ class TraceStorage:
         with open(filepath, "w") as f:
             json.dump(trace, f, indent=2)
 
-        print(f"✓ Trace saved to {filepath}")
+        log_success(f"Trace saved to {filepath}")
 
     @staticmethod
     def upload_to_gcs(
@@ -76,12 +78,12 @@ class TraceStorage:
 
             subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-            print(f"✓ Trace uploaded to gs://{bucket_name}/{destination_blob_name}")
+            log_success(f"Trace uploaded to gs://{bucket_name}/{destination_blob_name}")
             return True
 
         except subprocess.CalledProcessError as e:
-            print(f"✗ Failed to upload trace to GCS: {e.stderr}")
+            log_error(f"Failed to upload trace to GCS: {e.stderr}")
             return False
         except Exception as e:
-            print(f"✗ Unexpected error uploading to GCS: {e}")
+            log_error(f"Unexpected error uploading to GCS: {e}")
             return False

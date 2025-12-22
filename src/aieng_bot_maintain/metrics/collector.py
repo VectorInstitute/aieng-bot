@@ -7,6 +7,8 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ..utils.logging import log_error, log_success
+
 
 class MetricsCollector:
     """Collects and aggregates metrics about bot PR activity.
@@ -142,10 +144,10 @@ class MetricsCollector:
             data = json.loads(result)
             return [edge["node"] for edge in data["search"]["edges"]]
         except subprocess.CalledProcessError as e:
-            print(f"Error querying GitHub API: {e.stderr}")
+            log_error(f"Error querying GitHub API: {e.stderr}")
             return []
         except json.JSONDecodeError as e:
-            print(f"Error parsing GitHub API response: {e}")
+            log_error(f"Error parsing GitHub API response: {e}")
             return []
 
     def classify_pr_status(self, pr: dict[str, Any]) -> str:
@@ -498,7 +500,7 @@ class MetricsCollector:
         with open(output_file, "w") as f:
             json.dump(metrics, f, indent=2)
 
-        print(f"✓ Latest metrics saved to {output_file}")
+        log_success(f"Latest metrics saved to {output_file}")
 
         # Append to history if specified
         if history_file:
@@ -510,7 +512,7 @@ class MetricsCollector:
             with open(history_file, "w") as f:
                 json.dump(history, f, indent=2)
 
-            print(f"✓ History updated at {history_file}")
+            log_success(f"History updated at {history_file}")
 
     def upload_to_gcs(self, local_file: str, bucket: str, destination: str) -> bool:
         """Upload file to Google Cloud Storage.
@@ -548,8 +550,8 @@ class MetricsCollector:
                 check=True,
                 capture_output=True,
             )
-            print(f"✓ Uploaded to gs://{bucket}/{destination}")
+            log_success(f"Uploaded to gs://{bucket}/{destination}")
             return True
         except subprocess.CalledProcessError as e:
-            print(f"✗ Failed to upload to GCS: {e.stderr.decode()}")
+            log_error(f"Failed to upload to GCS: {e.stderr.decode()}")
             return False
