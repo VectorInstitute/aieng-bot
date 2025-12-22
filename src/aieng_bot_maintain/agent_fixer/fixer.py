@@ -63,7 +63,15 @@ class AgentFixer:
 
             # Configure agent options with skills support
             options = ClaudeAgentOptions(
-                allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Skill"],
+                allowed_tools=[
+                    "Read",
+                    "Edit",
+                    "Bash",
+                    "Glob",
+                    "Grep",
+                    "Skill",
+                    "WebSearch",
+                ],
                 permission_mode="acceptEdits",
                 cwd=request.cwd,
                 setting_sources=["project"],  # Load .claude/skills/
@@ -126,6 +134,8 @@ class AgentFixer:
             "pr_title": request.pr_title,
             "pr_author": request.pr_author,
             "pr_url": request.pr_url,
+            "head_ref": request.head_ref,
+            "base_ref": request.base_ref,
             "failure_type": request.failure_type,
             "failed_checks": request.failed_check_names.split(","),
             "failure_logs_file": request.failure_logs_file,

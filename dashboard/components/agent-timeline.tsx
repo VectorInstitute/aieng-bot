@@ -14,7 +14,8 @@ import {
   Search,
   Terminal,
   CheckCircle,
-  CornerDownRight
+  CornerDownRight,
+  Globe
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -97,6 +98,7 @@ export default function AgentTimeline({ events }: AgentTimelineProps) {
         if (tool === 'Read') return <Search className="w-5 h-5 text-blue-600 dark:text-blue-400" />
         if (tool === 'Edit' || tool === 'Write') return <FileEdit className="w-5 h-5 text-green-600 dark:text-green-400" />
         if (tool === 'Bash') return <Terminal className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+        if (tool === 'WebSearch') return <Globe className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         return <Wrench className="w-5 h-5 text-blue-600 dark:text-blue-400" />
       case 'ACTION':
         return <Activity className="w-5 h-5 text-green-600 dark:text-green-400" />

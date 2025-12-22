@@ -19,6 +19,10 @@ class AgentFixRequest:
         Pull request author username.
     pr_url : str
         Full URL to the pull request.
+    head_ref : str
+        PR source branch name (e.g., dependabot/uv/pytest-cov-7.0.0).
+    base_ref : str
+        PR target branch name (e.g., main).
     failure_type : str
         Type of failure (test, lint, security, build, merge_conflict).
     failed_check_names : str
@@ -39,6 +43,8 @@ class AgentFixRequest:
     pr_title: str
     pr_author: str
     pr_url: str
+    head_ref: str
+    base_ref: str
     failure_type: str
     failed_check_names: str
     failure_logs_file: str

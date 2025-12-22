@@ -67,6 +67,7 @@ class AgentExecutionTracer:
         "Glob": r"(?:Searching|Search|Finding|Glob)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
         "Grep": r"(?:Grepping|Grep|Searching)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
         "Skill": r"(?:Launching\s+skill|Skill):\s+([a-zA-Z0-9_-]+)",
+        "WebSearch": r"(?:Searching web|WebSearch|Web search)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
     }
 
     def __init__(
@@ -127,7 +128,15 @@ class AgentExecutionTracer:
                 "end_time": None,
                 "duration_seconds": None,
                 "model": "claude-sonnet-4.5",
-                "tools_allowed": ["Read", "Edit", "Bash", "Glob", "Grep", "Skill"],
+                "tools_allowed": [
+                    "Read",
+                    "Edit",
+                    "Bash",
+                    "Glob",
+                    "Grep",
+                    "Skill",
+                    "WebSearch",
+                ],
                 "metrics": None,
             },
             "events": [],

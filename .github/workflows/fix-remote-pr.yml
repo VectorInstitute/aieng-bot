@@ -296,6 +296,16 @@ jobs:
             echo "⚠️  Warning: No failure logs found at /tmp/failure-logs.txt"
           fi
 
+          # LAYER 1: Add bot files to git's local exclude list (safety net)
+          echo "Excluding bot files from git..."
+          {
+            echo "# AI Engineering Bot temporary files - DO NOT COMMIT"
+            echo ".claude/"
+            echo ".pr-context.json"
+            echo ".failure-logs.txt"
+          } >> target-repo/.git/info/exclude
+          echo "✓ Bot files added to .git/info/exclude"
+
           echo "should-skip=false" >> $GITHUB_OUTPUT
           echo "Ready to apply fixes using skills"
 
@@ -342,6 +352,8 @@ jobs:
             --pr-title "${{ steps.pr-details.outputs.pr-title }}" \
             --pr-author "${{ steps.pr-details.outputs.pr-author }}" \
             --pr-url "https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}" \
+            --head-ref "${{ steps.pr-details.outputs.head-ref }}" \
+            --base-ref "${{ steps.pr-details.outputs.base-ref }}" \
             --failure-type "${{ steps.analyze.outputs.failure-type }}" \
             --failed-check-names "${{ steps.analyze.outputs.failed-check-names }}" \
             --failure-logs-file ".failure-logs.txt" \
@@ -351,6 +363,43 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         continue-on-error: false
+
+      - name: Verify bot files not committed (Layer 3)
+        if: steps.prepare.outputs.should-skip != 'true'
+        working-directory: target-repo
+        run: |
+          echo "Verifying bot temporary files are not staged or committed..."
+
+          # Check if bot files are in staging area
+          BOT_FILES_STAGED=$(git diff --cached --name-only | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
+
+          if [ -n "$BOT_FILES_STAGED" ]; then
+            echo "❌ ERROR: Bot temporary files found in staging area!"
+            echo "$BOT_FILES_STAGED"
+            echo ""
+            echo "Unstaging bot files..."
+            echo "$BOT_FILES_STAGED" | xargs git reset HEAD --
+            echo "✓ Bot files unstaged"
+          fi
+
+          # Check if bot files exist in any unpushed commits
+          BASE_REF="${{ steps.pr-details.outputs.base-ref }}"
+          BOT_FILES_COMMITTED=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
+
+          if [ -n "$BOT_FILES_COMMITTED" ]; then
+            echo "⚠️  WARNING: Bot temporary files found in commits!"
+            echo "$BOT_FILES_COMMITTED"
+            echo ""
+            echo "These files should not be committed. Please check the commits."
+            exit 1
+          fi
+
+          echo "✓ No bot files found in staging area or commits"
+
+          # Cleanup bot files from working directory
+          echo "Cleaning up bot temporary files..."
+          rm -rf .claude/ .pr-context.json .failure-logs.txt 2>/dev/null || true
+          echo "✓ Bot files cleaned up"
 
       - name: Upload trace to GCS
         if: always()

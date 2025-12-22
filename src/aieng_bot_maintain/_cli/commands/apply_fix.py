@@ -51,6 +51,16 @@ Examples:
     parser.add_argument("--pr-author", required=True, help="Pull request author")
     parser.add_argument("--pr-url", required=True, help="Pull request URL")
     parser.add_argument(
+        "--head-ref",
+        required=True,
+        help="PR source branch name (e.g., dependabot/uv/package-1.0.0)",
+    )
+    parser.add_argument(
+        "--base-ref",
+        required=True,
+        help="PR target branch name (e.g., main)",
+    )
+    parser.add_argument(
         "--failure-type",
         required=True,
         choices=["test", "lint", "security", "build", "merge_conflict"],
@@ -84,6 +94,8 @@ Examples:
             pr_title=args.pr_title,
             pr_author=args.pr_author,
             pr_url=args.pr_url,
+            head_ref=args.head_ref,
+            base_ref=args.base_ref,
             failure_type=args.failure_type,
             failed_check_names=args.failed_check_names,
             failure_logs_file=args.failure_logs_file,

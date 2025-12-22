@@ -48,6 +48,25 @@ If auto-fix doesn't resolve everything:
 ### 4. Validate
 Re-run linters to ensure all issues are resolved.
 
+### 5. Push to Correct Branch
+
+**CRITICAL**: Push changes to the correct PR branch!
+
+```bash
+# Get branch name from .pr-context.json
+HEAD_REF=$(jq -r '.head_ref' .pr-context.json)
+
+# Push to the PR branch (NOT a new branch!)
+git push origin HEAD:refs/heads/$HEAD_REF
+```
+
+**DO NOT**:
+- ❌ Create a new branch name
+- ❌ Push to a different branch
+- ❌ Use `git push origin HEAD` without specifying target
+
+The branch name MUST match `head_ref` from `.pr-context.json`.
+
 ## Commit Format
 ```
 Fix linting issues after dependency updates
