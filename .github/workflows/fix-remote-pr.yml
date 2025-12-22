@@ -20,6 +20,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate target repository
+        run: |
+          TARGET_REPO="${{ github.event.inputs.target_repo }}"
+
+          # Prevent the bot from modifying its own repository
+          if [ "$TARGET_REPO" = "VectorInstitute/aieng-bot-maintain" ]; then
+            echo "❌ ERROR: Cannot run fix workflow on the bot repository itself (VectorInstitute/aieng-bot-maintain)"
+            echo "This would cause the bot to modify its own code, potentially deleting important files."
+            echo "If you need to fix PRs in aieng-bot-maintain, do it manually."
+            exit 1
+          fi
+
+          echo "✓ Target repository validated: $TARGET_REPO"
+
       - name: Checkout bot repository
         uses: actions/checkout@v6
         with:

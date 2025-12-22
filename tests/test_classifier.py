@@ -422,8 +422,8 @@ def test_classify_with_markdown_code_block():
 
 def test_classify_api_error():
     """Test classification when API returns an error."""
-    import anthropic
-    import httpx
+    import anthropic  # noqa: PLC0415 - Import for exception handling in test
+    import httpx  # noqa: PLC0415 - Import for exception handling in test
 
     pr_context = PRContext(
         repo="VectorInstitute/test-repo",
@@ -530,7 +530,9 @@ def test_classify_invalid_json():
 
 def test_classification_result_invalid_confidence():
     """Test that ClassificationResult validates confidence range."""
-    from aieng_bot_maintain import ClassificationResult
+    from aieng_bot_maintain import (  # noqa: PLC0415 - Import after test setup
+        ClassificationResult,
+    )
 
     # Test confidence > 1.0
     with pytest.raises(ValueError, match="Confidence must be between 0.0 and 1.0"):
@@ -555,7 +557,9 @@ def test_classification_result_invalid_confidence():
 
 def test_classification_result_valid_confidence():
     """Test that ClassificationResult accepts valid confidence values."""
-    from aieng_bot_maintain import ClassificationResult
+    from aieng_bot_maintain import (  # noqa: PLC0415 - Import after test setup
+        ClassificationResult,
+    )
 
     # Test valid values at boundaries and middle
     valid_confidences = [0.0, 0.5, 1.0]

@@ -62,6 +62,12 @@ jobs:
           BOT_AUTHORS=("app/dependabot" "pre-commit-ci[bot]")
 
           for REPO in $REPOS; do
+            # Skip the bot repository itself to prevent self-modification
+            if [ "$REPO" = "VectorInstitute/aieng-bot-maintain" ]; then
+              echo "Skipping $REPO (bot repository itself)"
+              continue
+            fi
+
             echo "Checking $REPO for bot PRs..."
 
             # Get all open PRs from each bot author

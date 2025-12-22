@@ -1,7 +1,9 @@
 """Activity logger for recording auto-merge and bot-fix activities to GCS."""
 
 import json
+import os
 import subprocess
+import tempfile
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -92,8 +94,6 @@ class ActivityLogger:
         """
         try:
             # Write to temp file
-            import tempfile
-
             with tempfile.NamedTemporaryFile(
                 mode="w", delete=False, suffix=".json"
             ) as f:
@@ -108,8 +108,6 @@ class ActivityLogger:
             )
 
             # Clean up temp file
-            import os
-
             os.unlink(temp_path)
 
             return True

@@ -21,7 +21,9 @@ def test_get_version_installed():
 def test_get_version_not_installed():
     """Test get_version returns 'unknown' when package is not installed."""
     with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
-        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import (  # noqa: PLC0415 - Import after mock setup
+            PackageNotFoundError,
+        )
 
         mock_version.side_effect = PackageNotFoundError()
         result = get_version()
@@ -38,7 +40,9 @@ def test_cli_version_flag():
         pytest.raises(SystemExit) as exc_info,
     ):
         mock_get_version.return_value = "1.2.3"
-        from aieng_bot_maintain.cli import classify_pr_failure_cli
+        from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+            classify_pr_failure_cli,
+        )
 
         # Capture stdout
         captured_output = StringIO()
@@ -51,14 +55,16 @@ def test_cli_version_flag():
 
 def test_cli_version_output_format():
     """Test that --version outputs in correct format."""
-    import re
+    import re  # noqa: PLC0415 - Import after test setup
 
     test_args = ["classify-pr-failure", "--version"]
 
     with (
         patch.object(sys, "argv", test_args),
     ):
-        from aieng_bot_maintain.cli import classify_pr_failure_cli
+        from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+            classify_pr_failure_cli,
+        )
 
         # Capture stdout
         captured_output = StringIO()
@@ -88,7 +94,9 @@ def test_version_function_exception_handling():
     """Test that get_version handles unexpected exceptions gracefully."""
     with patch("aieng_bot_maintain._cli.utils.version") as mock_version:
         # Only PackageNotFoundError should return "unknown"
-        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import (  # noqa: PLC0415 - Import after mock setup
+            PackageNotFoundError,
+        )
 
         mock_version.side_effect = PackageNotFoundError()
         result = get_version()
@@ -108,7 +116,9 @@ def test_cli_help_includes_version():
         patch.object(sys, "argv", test_args),
         pytest.raises(SystemExit) as exc_info,
     ):
-        from aieng_bot_maintain.cli import classify_pr_failure_cli
+        from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+            classify_pr_failure_cli,
+        )
 
         # Capture stdout
         captured_output = StringIO()
@@ -183,7 +193,9 @@ class TestApplyAgentFixCLI:
             pytest.raises(SystemExit) as exc_info,
         ):
             mock_get_version.return_value = "1.2.3"
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             captured_output = StringIO()
             with patch("sys.stdout", captured_output):
@@ -200,7 +212,9 @@ class TestApplyAgentFixCLI:
             patch.object(sys, "argv", test_args),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             captured_output = StringIO()
             with patch("sys.stdout", captured_output):
@@ -215,7 +229,9 @@ class TestApplyAgentFixCLI:
 
     def test_cli_success(self, cli_args, mock_env):
         """Test successful execution of apply-agent-fix CLI."""
-        from aieng_bot_maintain.agent_fixer import AgentFixResult
+        from aieng_bot_maintain.agent_fixer import (  # noqa: PLC0415 - Import after fixtures
+            AgentFixResult,
+        )
 
         mock_result = AgentFixResult(
             status="SUCCESS",
@@ -237,7 +253,9 @@ class TestApplyAgentFixCLI:
             mock_fixer_class.return_value = mock_fixer
             mock_asyncio_run.return_value = mock_result
 
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             with pytest.raises(SystemExit) as exc_info:
                 apply_agent_fix_cli()
@@ -248,7 +266,9 @@ class TestApplyAgentFixCLI:
 
     def test_cli_failure(self, cli_args, mock_env):
         """Test failed execution of apply-agent-fix CLI."""
-        from aieng_bot_maintain.agent_fixer import AgentFixResult
+        from aieng_bot_maintain.agent_fixer import (  # noqa: PLC0415 - Import after fixtures
+            AgentFixResult,
+        )
 
         mock_result = AgentFixResult(
             status="FAILED",
@@ -272,7 +292,9 @@ class TestApplyAgentFixCLI:
             mock_fixer_class.return_value = mock_fixer
             mock_asyncio_run.return_value = mock_result
 
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             apply_agent_fix_cli()
 
@@ -292,7 +314,9 @@ class TestApplyAgentFixCLI:
             patch.object(sys, "argv", test_args),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             apply_agent_fix_cli()
 
@@ -310,7 +334,9 @@ class TestApplyAgentFixCLI:
             patch.object(sys, "argv", cli_args),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             apply_agent_fix_cli()
 
@@ -324,7 +350,9 @@ class TestApplyAgentFixCLI:
             patch.object(sys, "argv", cli_args),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             apply_agent_fix_cli()
 
@@ -342,7 +370,9 @@ class TestApplyAgentFixCLI:
             ),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from aieng_bot_maintain.cli import apply_agent_fix_cli
+            from aieng_bot_maintain.cli import (  # noqa: PLC0415 - Import after mock setup
+                apply_agent_fix_cli,
+            )
 
             apply_agent_fix_cli()
 

@@ -138,7 +138,7 @@ class TestAgentFixer:
 
     def test_write_pr_context(self, fix_request, tmp_path):
         """Test writing PR context to JSON file."""
-        import json
+        import json  # noqa: PLC0415 - Import after test setup
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             fixer = AgentFixer()
@@ -309,7 +309,7 @@ class TestAgentFixer:
             fixer = AgentFixer()
             fixer._write_pr_context(fix_request)
 
-            import json
+            import json  # noqa: PLC0415 - Import after test setup
 
             context_file = tmp_path / ".pr-context.json"
             with open(context_file) as f:

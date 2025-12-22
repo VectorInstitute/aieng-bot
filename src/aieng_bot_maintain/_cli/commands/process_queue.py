@@ -64,7 +64,9 @@ Examples:
             log_error("GH_TOKEN environment variable not set")
             sys.exit(1)
 
-        from ...auto_merger import QueueManager
+        from ...auto_merger import (  # noqa: PLC0415 - Lazy import after environment validation
+            QueueManager,
+        )
 
         manager = QueueManager(gh_token=gh_token)
 

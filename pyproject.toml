@@ -134,5 +134,4 @@ ignore = [
     "PLR2004", # Replace magic number with named constant
     "PLR0913", # Too many arguments
     "COM812", # Missing trailing comma
-    "PLC0415", # `import` should be at the top-level of a file (intentional for tests and lazy imports)
 ]
