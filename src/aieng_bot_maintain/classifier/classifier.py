@@ -82,7 +82,6 @@ class PRFailureClassifier:
 
     def _execute_tool_use(self, tool_use: Any) -> dict[str, Any]:
         """Execute a single bash tool use and return the result."""
-        log_info("Claude tool use: bash command")
         try:
             # Get command from tool_use input (properly typed)
             command_input = tool_use.input
@@ -90,6 +89,9 @@ class PRFailureClassifier:
                 command = str(command_input["command"])
             else:
                 raise ValueError("Invalid tool_use input format")
+
+            # Log the actual command being run
+            log_info(f"  bash: {command[:200]}{'...' if len(command) > 200 else ''}")
 
             result = subprocess.run(
                 command,
@@ -100,12 +102,19 @@ class PRFailureClassifier:
                 check=False,
             )
             output = result.stdout if result.returncode == 0 else result.stderr
+
+            # Log output summary
+            output_lines = output.split("\n") if output else []
+            line_count = len(output_lines)
+            log_info(f"  → output: {line_count} lines, exit code {result.returncode}")
+
             return {
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,
                 "content": output[:10000],  # Limit output size
             }
         except Exception as e:
+            log_error(f"  → error executing command: {e}")
             return {
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,
@@ -143,6 +152,7 @@ class PRFailureClassifier:
                 model="claude-haiku-4-5",
                 max_tokens=8192,
                 temperature=0.0,
+                system="You are a CI/CD failure classifier. After analyzing the logs with tools, you MUST respond with ONLY a valid JSON object. Do not include any explanatory text, markdown formatting, or analysis - return ONLY the raw JSON object.",
                 tools=[bash_tool],
                 messages=messages,
             )
