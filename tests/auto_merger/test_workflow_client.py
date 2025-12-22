@@ -18,13 +18,28 @@ def workflow_client():
 
 @pytest.fixture
 def sample_pr():
-    """Sample PR for testing."""
+    """Sample Dependabot PR for testing."""
     return PRQueueItem(
         repo="VectorInstitute/test-repo",
         pr_number=123,
         pr_title="Bump dependency",
-        pr_author="dependabot[bot]",
+        pr_author="app/dependabot",
         pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
+        status=PRStatus.PENDING,
+        queued_at="2025-01-15T10:00:00Z",
+        last_updated="2025-01-15T10:00:00Z",
+    )
+
+
+@pytest.fixture
+def precommit_pr():
+    """Sample pre-commit.ci PR for testing."""
+    return PRQueueItem(
+        repo="VectorInstitute/test-repo",
+        pr_number=456,
+        pr_title="[pre-commit.ci] pre-commit autoupdate",
+        pr_author="app/pre-commit-ci",
+        pr_url="https://github.com/VectorInstitute/test-repo/pull/456",
         status=PRStatus.PENDING,
         queued_at="2025-01-15T10:00:00Z",
         last_updated="2025-01-15T10:00:00Z",
@@ -97,6 +112,36 @@ class TestWorkflowClient:
         assert "custom-bot" in jq_filter
 
     @patch("subprocess.run")
+    def test_check_latest_comment_infer_dependabot(
+        self, mock_run, workflow_client, sample_pr
+    ):
+        """Test checking latest comment infers dependabot author."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="Dependabot comment\n")
+
+        result = workflow_client.check_latest_comment(sample_pr)
+
+        assert result == "Dependabot comment"
+        # Verify dependabot was inferred from pr_author
+        call_args = mock_run.call_args[0][0]
+        jq_filter = call_args[-1]
+        assert "dependabot" in jq_filter
+
+    @patch("subprocess.run")
+    def test_check_latest_comment_infer_precommit(
+        self, mock_run, workflow_client, precommit_pr
+    ):
+        """Test checking latest comment infers pre-commit.ci author."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="Pre-commit comment\n")
+
+        result = workflow_client.check_latest_comment(precommit_pr)
+
+        assert result == "Pre-commit comment"
+        # Verify pre-commit-ci[bot] was inferred from pr_author
+        call_args = mock_run.call_args[0][0]
+        jq_filter = call_args[-1]
+        assert "pre-commit-ci[bot]" in jq_filter
+
+    @patch("subprocess.run")
     def test_get_pr_head_sha_success(self, mock_run, workflow_client, sample_pr):
         """Test getting PR head SHA successfully."""
         mock_run.return_value = MagicMock(
@@ -125,8 +170,10 @@ class TestWorkflowClient:
         assert result is None
 
     @patch("subprocess.run")
-    def test_trigger_rebase_success(self, mock_run, workflow_client, sample_pr):
-        """Test successful rebase triggering."""
+    def test_trigger_rebase_dependabot_success(
+        self, mock_run, workflow_client, sample_pr
+    ):
+        """Test successful rebase triggering for Dependabot PR."""
         mock_run.return_value = MagicMock(returncode=0, stdout="")
 
         result = workflow_client.trigger_rebase(sample_pr)
@@ -140,13 +187,107 @@ class TestWorkflowClient:
         assert "@dependabot rebase" in call_args
 
     @patch("subprocess.run")
-    def test_trigger_rebase_failure(self, mock_run, workflow_client, sample_pr):
-        """Test rebase triggering failure."""
+    def test_trigger_rebase_dependabot_failure(
+        self, mock_run, workflow_client, sample_pr
+    ):
+        """Test rebase triggering failure for Dependabot PR."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
 
         result = workflow_client.trigger_rebase(sample_pr)
 
         assert result is False
+
+    @patch("subprocess.run")
+    def test_trigger_rebase_precommit_success(
+        self, mock_run, workflow_client, precommit_pr
+    ):
+        """Test manual rebase for pre-commit.ci PR."""
+        # Mock gh pr view to get branch names
+        # Mock gh repo clone
+        # Mock git operations
+        mock_run.side_effect = [
+            # gh pr view for branch names
+            MagicMock(
+                returncode=0,
+                stdout='{"headRefName":"pre-commit-ci-update-config","baseRefName":"main"}',
+            ),
+            # gh repo clone
+            MagicMock(returncode=0, stdout=""),
+            # git config user.name
+            MagicMock(returncode=0, stdout=""),
+            # git config user.email
+            MagicMock(returncode=0, stdout=""),
+            # git fetch origin head_ref
+            MagicMock(returncode=0, stdout=""),
+            # git checkout
+            MagicMock(returncode=0, stdout=""),
+            # git fetch origin base_ref
+            MagicMock(returncode=0, stdout=""),
+            # git rebase
+            MagicMock(returncode=0, stdout=""),
+            # git push --force-with-lease
+            MagicMock(returncode=0, stdout=""),
+        ]
+
+        result = workflow_client.trigger_rebase(precommit_pr)
+
+        assert result is True
+        # Should make multiple git-related calls
+        assert mock_run.call_count == 9
+
+    @patch("subprocess.run")
+    def test_trigger_rebase_precommit_failure(
+        self, mock_run, workflow_client, precommit_pr
+    ):
+        """Test manual rebase failure for pre-commit.ci PR."""
+        # Mock gh pr view succeeds but rebase fails
+        mock_run.side_effect = [
+            # gh pr view for branch names
+            MagicMock(
+                returncode=0,
+                stdout='{"headRefName":"pre-commit-ci-update-config","baseRefName":"main"}',
+            ),
+            # gh repo clone
+            MagicMock(returncode=0, stdout=""),
+            # git config user.name
+            MagicMock(returncode=0, stdout=""),
+            # git config user.email
+            MagicMock(returncode=0, stdout=""),
+            # git fetch origin head_ref
+            MagicMock(returncode=0, stdout=""),
+            # git checkout
+            MagicMock(returncode=0, stdout=""),
+            # git fetch origin base_ref
+            MagicMock(returncode=0, stdout=""),
+            # git rebase fails
+            subprocess.CalledProcessError(
+                1, "git rebase", stderr=b"CONFLICT (content): Merge conflict"
+            ),
+        ]
+
+        result = workflow_client.trigger_rebase(precommit_pr)
+
+        assert result is False
+
+    @patch("subprocess.run")
+    def test_trigger_rebase_unknown_bot(self, mock_run, workflow_client):
+        """Test rebase failure for unknown bot author."""
+        unknown_pr = PRQueueItem(
+            repo="VectorInstitute/test-repo",
+            pr_number=789,
+            pr_title="Update by unknown bot",
+            pr_author="unknown-bot[bot]",
+            pr_url="https://github.com/VectorInstitute/test-repo/pull/789",
+            status=PRStatus.PENDING,
+            queued_at="2025-01-15T10:00:00Z",
+            last_updated="2025-01-15T10:00:00Z",
+        )
+
+        result = workflow_client.trigger_rebase(unknown_pr)
+
+        assert result is False
+        # Should not make any gh CLI calls
+        mock_run.assert_not_called()
 
     @patch("time.sleep")
     @patch("subprocess.run")

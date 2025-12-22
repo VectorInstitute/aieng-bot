@@ -127,9 +127,11 @@ class PRProcessor:
     def _trigger_rebase(self, pr: PRQueueItem) -> bool:
         """Trigger rebase for a pending PR and wait for completion.
 
-        Polls for rebase completion by monitoring:
+        For Dependabot PRs, polls for rebase completion by monitoring:
         1. Dependabot comments ("already up-to-date", error messages)
         2. PR head SHA changes (indicates successful force-push)
+
+        For pre-commit.ci PRs, skips rebase (not supported) and proceeds directly.
 
         Parameters
         ----------
@@ -164,7 +166,7 @@ class PRProcessor:
 
         log_info(f"Current head SHA: {initial_head_sha[:7]}")
 
-        # Trigger rebase via @dependabot rebase comment
+        # Trigger bot-specific rebase
         if not self.workflow_client.trigger_rebase(pr):
             pr.error_message = "Failed to trigger rebase"
             pr.status = PRStatus.FAILED
@@ -176,10 +178,15 @@ class PRProcessor:
         pr.last_updated = datetime.now(UTC).isoformat()
 
         # Poll for rebase completion
+        # - Dependabot: polls for comments + SHA changes
+        # - pre-commit.ci: polls for SHA changes (manual rebase via git)
         return self._poll_rebase_completion(pr, initial_head_sha)
 
     def _poll_rebase_completion(self, pr: PRQueueItem, initial_head_sha: str) -> bool:
         """Poll for rebase completion by checking comments and head SHA.
+
+        For Dependabot: Checks bot comments for status messages
+        For pre-commit.ci: Only checks for SHA changes (manual rebase)
 
         Parameters
         ----------
@@ -195,6 +202,8 @@ class PRProcessor:
 
         """
         # Dependabot is usually fast (seconds to ~1 min), but can take longer if busy
+        # Manual rebases (pre-commit.ci) should complete immediately, but we poll
+        # for a bit in case CI takes time to reflect the push
         timeout_seconds = 180  # 3 minutes
         poll_interval = 10
         elapsed = 0
@@ -205,48 +214,52 @@ class PRProcessor:
             time.sleep(poll_interval)
             elapsed += poll_interval
 
-            # Check for Dependabot response comments
-            latest_comment = self.workflow_client.check_latest_comment(pr)
+            # For Dependabot, check for bot response comments
+            if pr.pr_author == "app/dependabot":
+                latest_comment = self.workflow_client.check_latest_comment(pr)
 
-            # Case 1: Already up-to-date - no rebase needed
-            if "already up-to-date" in latest_comment.lower():
-                log_success(
-                    "PR already up-to-date with base branch, proceeding immediately"
-                )
-                return False  # Proceed to check monitoring
+                # Case 1: Already up-to-date - no rebase needed
+                if "already up-to-date" in latest_comment.lower():
+                    log_success(
+                        "PR already up-to-date with base branch, proceeding immediately"
+                    )
+                    return False  # Proceed to check monitoring
 
-            # Case 2: PR edited by someone else - Dependabot refuses to rebase
-            # This happens when the bot previously fixed the PR
-            # The PR is likely already up-to-date, so proceed to checks
-            edited_by_other_phrases = [
-                "edited by someone other than dependabot",
-                "can't rebase",
-                "dependabot can't rebase",
-            ]
-            if any(
-                phrase in latest_comment.lower() for phrase in edited_by_other_phrases
-            ):
-                log_warning(
-                    "PR was edited by someone else, Dependabot refuses to rebase. "
-                    "Proceeding to check monitoring (PR likely already up-to-date)."
-                )
-                return False  # Proceed to check monitoring
+                # Case 2: PR edited by someone else - Dependabot refuses to rebase
+                # This happens when the bot previously fixed the PR
+                # The PR is likely already up-to-date, so proceed to checks
+                edited_by_other_phrases = [
+                    "edited by someone other than dependabot",
+                    "can't rebase",
+                    "dependabot can't rebase",
+                ]
+                if any(
+                    phrase in latest_comment.lower()
+                    for phrase in edited_by_other_phrases
+                ):
+                    log_warning(
+                        "PR was edited by someone else, Dependabot refuses to rebase. "
+                        "Proceeding to check monitoring (PR likely already up-to-date)."
+                    )
+                    return False  # Proceed to check monitoring
 
-            # Case 3: Rebase failed - route to fix workflow
-            rebase_error_phrases = [
-                "could not rebase",
-                "merge conflict",
-                "unable to rebase",
-                "rebase failed",
-                "failed to rebase",
-            ]
-            if any(phrase in latest_comment.lower() for phrase in rebase_error_phrases):
-                log_warning(f"Rebase failed: {latest_comment[:100]}...")
-                pr.status = PRStatus.CHECKS_FAILED
-                pr.last_updated = datetime.now(UTC).isoformat()
-                return False  # Route to fix workflow
+                # Case 3: Rebase failed - route to fix workflow
+                rebase_error_phrases = [
+                    "could not rebase",
+                    "merge conflict",
+                    "unable to rebase",
+                    "rebase failed",
+                    "failed to rebase",
+                ]
+                if any(
+                    phrase in latest_comment.lower() for phrase in rebase_error_phrases
+                ):
+                    log_warning(f"Rebase failed: {latest_comment[:100]}...")
+                    pr.status = PRStatus.CHECKS_FAILED
+                    pr.last_updated = datetime.now(UTC).isoformat()
+                    return False  # Route to fix workflow
 
-            # Case 4: Head SHA changed - rebase completed successfully
+            # Check for SHA change (works for both Dependabot and pre-commit.ci)
             current_head_sha = self.workflow_client.get_pr_head_sha(pr)
             if current_head_sha and current_head_sha != initial_head_sha:
                 log_success(

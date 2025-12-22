@@ -21,12 +21,12 @@ def pr_processor():
 
 @pytest.fixture
 def sample_pr():
-    """Sample PR for testing."""
+    """Sample Dependabot PR for testing."""
     return PRQueueItem(
         repo="VectorInstitute/test-repo",
         pr_number=123,
         pr_title="Bump dependency",
-        pr_author="dependabot[bot]",
+        pr_author="app/dependabot",
         pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
         status=PRStatus.PENDING,
         queued_at="2025-01-15T10:00:00Z",

@@ -2,7 +2,9 @@
 
 import json
 import subprocess
+import tempfile
 import time
+from pathlib import Path
 from typing import Literal
 
 from ..utils.logging import log_error, log_info, log_success, log_warning
@@ -74,15 +76,15 @@ class WorkflowClient:
         )
         return result.stdout.strip()
 
-    def check_latest_comment(self, pr: PRQueueItem, author: str = "dependabot") -> str:
+    def check_latest_comment(self, pr: PRQueueItem, author: str | None = None) -> str:
         """Get the latest comment from a specific author.
 
         Parameters
         ----------
         pr : PRQueueItem
             PR to check comments for.
-        author : str, optional
-            Comment author to filter by (default="dependabot").
+        author : str or None, optional
+            Comment author to filter by. If None, infers from pr.pr_author.
 
         Returns
         -------
@@ -90,6 +92,15 @@ class WorkflowClient:
             Latest comment body from author, or empty string if none found.
 
         """
+        # Infer author from PR if not specified
+        if author is None:
+            if pr.pr_author == "app/dependabot":
+                author = "dependabot"
+            elif pr.pr_author == "app/pre-commit-ci":
+                author = "pre-commit-ci[bot]"
+            else:
+                author = pr.pr_author
+
         try:
             return self._run_gh_command(
                 [
@@ -142,7 +153,10 @@ class WorkflowClient:
             return None
 
     def trigger_rebase(self, pr: PRQueueItem) -> bool:
-        """Trigger @dependabot rebase comment.
+        """Trigger bot-specific rebase command.
+
+        For Dependabot: Post @dependabot rebase comment
+        For pre-commit.ci: Manually rebase via git operations
 
         Parameters
         ----------
@@ -155,23 +169,165 @@ class WorkflowClient:
             True on success, False on failure.
 
         """
+        # Dependabot PRs use comment-based rebase
+        if pr.pr_author == "app/dependabot":
+            try:
+                self._run_gh_command(
+                    [
+                        "gh",
+                        "pr",
+                        "comment",
+                        str(pr.pr_number),
+                        "--repo",
+                        pr.repo,
+                        "--body",
+                        "@dependabot rebase",
+                    ]
+                )
+                log_success(f"  Rebase triggered for {pr.repo}#{pr.pr_number}")
+                return True
+            except subprocess.CalledProcessError as e:
+                log_error(f"  Failed to trigger rebase: {e}")
+                return False
+
+        # pre-commit.ci PRs use manual git rebase
+        if pr.pr_author == "app/pre-commit-ci":
+            log_info("  Manually rebasing pre-commit.ci PR via git operations")
+            return self._manual_rebase(pr)
+
+        # Unknown bot author
+        log_error(f"  Unknown bot author: {pr.pr_author}, cannot rebase")
+        return False
+
+    def _manual_rebase(self, pr: PRQueueItem) -> bool:
+        """Manually rebase a PR branch via git operations.
+
+        Clones the repo, checks out PR branch, rebases onto base, and force-pushes.
+
+        Parameters
+        ----------
+        pr : PRQueueItem
+            PR to rebase.
+
+        Returns
+        -------
+        bool
+            True on success, False on failure.
+
+        """
         try:
-            self._run_gh_command(
+            # Get PR details (head ref, base ref)
+            pr_json = self._run_gh_command(
                 [
                     "gh",
                     "pr",
-                    "comment",
+                    "view",
                     str(pr.pr_number),
                     "--repo",
                     pr.repo,
-                    "--body",
-                    "@dependabot rebase",
+                    "--json",
+                    "headRefName,baseRefName",
                 ]
             )
-            log_success(f"  Rebase triggered for {pr.repo}#{pr.pr_number}")
-            return True
+            pr_data = json.loads(pr_json)
+            head_ref = pr_data["headRefName"]
+            base_ref = pr_data["baseRefName"]
+
+            log_info(f"    Rebasing {head_ref} onto {base_ref}")
+
+            # Create temporary directory for clone
+            with tempfile.TemporaryDirectory() as tmpdir:
+                repo_dir = Path(tmpdir) / "repo"
+
+                # Clone the repository
+                log_info(f"    Cloning {pr.repo}...")
+                subprocess.run(
+                    [
+                        "gh",
+                        "repo",
+                        "clone",
+                        pr.repo,
+                        str(repo_dir),
+                        "--",
+                        "--depth=50",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    env={"GH_TOKEN": self.gh_token},
+                )
+
+                # Configure git user for commits
+                subprocess.run(
+                    ["git", "config", "user.name", "aieng-bot-maintain[bot]"],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "config",
+                        "user.email",
+                        "aieng-bot@vectorinstitute.ai",
+                    ],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Fetch the PR branch
+                log_info(f"    Fetching branch {head_ref}...")
+                subprocess.run(
+                    ["git", "fetch", "origin", f"{head_ref}:{head_ref}"],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Checkout PR branch
+                subprocess.run(
+                    ["git", "checkout", head_ref],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Fetch latest base branch
+                subprocess.run(
+                    ["git", "fetch", "origin", base_ref],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Rebase onto base branch
+                log_info(f"    Rebasing onto origin/{base_ref}...")
+                subprocess.run(
+                    ["git", "rebase", f"origin/{base_ref}"],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Force push to PR branch
+                log_info("    Force-pushing rebased branch...")
+                subprocess.run(
+                    ["git", "push", "--force-with-lease", "origin", head_ref],
+                    cwd=repo_dir,
+                    check=True,
+                    capture_output=True,
+                )
+
+                log_success(f"  Successfully rebased {pr.repo}#{pr.pr_number}")
+                return True
+
         except subprocess.CalledProcessError as e:
-            log_error(f"  Failed to trigger rebase: {e}")
+            log_error(f"  Failed to manually rebase: {e}")
+            if e.stderr:
+                log_error(f"  Error output: {e.stderr.decode()}")
+            return False
+        except Exception as e:
+            log_error(f"  Unexpected error during manual rebase: {e}")
             return False
 
     def trigger_fix_workflow(self, pr: PRQueueItem) -> str | None:
