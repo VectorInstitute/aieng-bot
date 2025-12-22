@@ -331,9 +331,13 @@ class WorkflowClient:
                 )
 
                 # Force push to PR branch
+                # Using --force instead of --force-with-lease because the shallow clone
+                # doesn't set up remote tracking properly, causing "stale info" errors.
+                # This is safe because we just fetched and we're the only ones modifying
+                # this branch during the rebase operation.
                 log_info("    Force-pushing rebased branch...")
                 subprocess.run(
-                    ["git", "push", "--force-with-lease", "origin", head_ref],
+                    ["git", "push", "--force", "origin", head_ref],
                     cwd=repo_dir,
                     check=True,
                     capture_output=True,

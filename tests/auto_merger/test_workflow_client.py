@@ -227,7 +227,7 @@ class TestWorkflowClient:
             MagicMock(returncode=0, stdout=""),
             # git rebase
             MagicMock(returncode=0, stdout=""),
-            # git push --force-with-lease
+            # git push --force
             MagicMock(returncode=0, stdout=""),
         ]
 
@@ -236,6 +236,9 @@ class TestWorkflowClient:
         assert result is True
         # Should make multiple git-related calls
         assert mock_run.call_count == 10
+        # Verify we use --force (not --force-with-lease)
+        push_call = mock_run.call_args_list[-1]
+        assert "--force" in push_call[0][0]
 
     @patch("subprocess.run")
     def test_trigger_rebase_precommit_failure(
