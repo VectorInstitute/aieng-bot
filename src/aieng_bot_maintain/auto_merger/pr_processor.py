@@ -215,7 +215,24 @@ class PRProcessor:
                 )
                 return False  # Proceed to check monitoring
 
-            # Case 2: Rebase failed - route to fix workflow
+            # Case 2: PR edited by someone else - Dependabot refuses to rebase
+            # This happens when the bot previously fixed the PR
+            # The PR is likely already up-to-date, so proceed to checks
+            edited_by_other_phrases = [
+                "edited by someone other than dependabot",
+                "can't rebase",
+                "dependabot can't rebase",
+            ]
+            if any(
+                phrase in latest_comment.lower() for phrase in edited_by_other_phrases
+            ):
+                log_warning(
+                    "PR was edited by someone else, Dependabot refuses to rebase. "
+                    "Proceeding to check monitoring (PR likely already up-to-date)."
+                )
+                return False  # Proceed to check monitoring
+
+            # Case 3: Rebase failed - route to fix workflow
             rebase_error_phrases = [
                 "could not rebase",
                 "merge conflict",
@@ -229,7 +246,7 @@ class PRProcessor:
                 pr.last_updated = datetime.now(UTC).isoformat()
                 return False  # Route to fix workflow
 
-            # Case 3: Head SHA changed - rebase completed successfully
+            # Case 4: Head SHA changed - rebase completed successfully
             current_head_sha = self.workflow_client.get_pr_head_sha(pr)
             if current_head_sha and current_head_sha != initial_head_sha:
                 log_success(
