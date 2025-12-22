@@ -1,6 +1,7 @@
 """Workflow client for GitHub operations via gh CLI."""
 
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -67,12 +68,16 @@ class WorkflowClient:
             If command fails.
 
         """
+        # Inherit environment and add GH_TOKEN
+        env = os.environ.copy()
+        env["GH_TOKEN"] = self.gh_token
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             check=True,
-            env={"GH_TOKEN": self.gh_token},
+            env=env,
         )
         return result.stdout.strip()
 
@@ -239,6 +244,10 @@ class WorkflowClient:
             with tempfile.TemporaryDirectory() as tmpdir:
                 repo_dir = Path(tmpdir) / "repo"
 
+                # Inherit environment and add GH_TOKEN for all git operations
+                env = os.environ.copy()
+                env["GH_TOKEN"] = self.gh_token
+
                 # Clone the repository
                 log_info(f"    Cloning {pr.repo}...")
                 subprocess.run(
@@ -253,7 +262,7 @@ class WorkflowClient:
                     ],
                     check=True,
                     capture_output=True,
-                    env={"GH_TOKEN": self.gh_token},
+                    env=env,
                 )
 
                 # Configure git user for commits
