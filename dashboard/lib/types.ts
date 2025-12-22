@@ -86,12 +86,17 @@ export interface BotMetrics {
     prs_failed: number
     success_rate: number
     avg_fix_time_hours: number
+    total_cost_usd: number
+    avg_cost_per_attempt: number
+    avg_cost_per_success: number
   }
   by_failure_type: Record<string, {
     count: number
     fixed: number
     failed: number
     success_rate: number
+    total_cost: number
+    avg_cost: number
   }>
   by_repo: Record<string, {
     total_prs: number
@@ -99,6 +104,7 @@ export interface BotMetrics {
     bot_fixed: number
     failed: number
     success_rate: number
+    total_cost: number
   }>
 }
 
@@ -148,6 +154,7 @@ export interface PRSummary extends Record<string, unknown> {
   failure_type?: string
   fix_time_hours?: number | null
   trace_path?: string
+  cost_usd?: number | null
   // Auto-merge specific
   was_rebased?: boolean
   rebase_time_seconds?: number | null

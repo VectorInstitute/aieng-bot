@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import type { PRSummary } from '@/lib/types'
 import { Card, CardTitle } from './ui'
 import { VECTOR_COLORS } from '@/lib/constants'
+import { Info } from 'lucide-react'
 
 interface PRVelocityChartProps {
   prSummaries: PRSummary[]
@@ -18,14 +19,18 @@ interface ChartDataPoint {
 
 function aggregateByDate(prSummaries: PRSummary[]): ChartDataPoint[] {
   // Group PRs by date (YYYY-MM-DD format for proper sorting)
-  const dataByDate = new Map<string, { autoMerged: number; botFixed: number; timestamp: number }>()
+  const dataByDate = new Map<string, { autoMerged: number; botFixed: number; year: number; month: number; day: number }>()
 
   prSummaries.forEach(pr => {
     const dateObj = new Date(pr.timestamp)
-    const dateKey = dateObj.toISOString().split('T')[0] // YYYY-MM-DD format
+    // Use local date instead of UTC to match user's timezone
+    const year = dateObj.getFullYear()
+    const month = dateObj.getMonth() + 1
+    const day = dateObj.getDate()
+    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` // YYYY-MM-DD format in local timezone
 
     if (!dataByDate.has(dateKey)) {
-      dataByDate.set(dateKey, { autoMerged: 0, botFixed: 0, timestamp: dateObj.getTime() })
+      dataByDate.set(dateKey, { autoMerged: 0, botFixed: 0, year, month, day })
     }
 
     const data = dataByDate.get(dateKey)!
@@ -38,13 +43,22 @@ function aggregateByDate(prSummaries: PRSummary[]): ChartDataPoint[] {
 
   // Convert to array, sort chronologically, and format dates for display
   const sortedData = Array.from(dataByDate.entries())
-    .sort((a, b) => a[1].timestamp - b[1].timestamp)
-    .map(([dateKey, counts]) => ({
-      date: new Date(dateKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      autoMerged: counts.autoMerged,
-      botFixed: counts.botFixed,
-      total: counts.autoMerged + counts.botFixed,
-    }))
+    .sort((a, b) => {
+      // Sort by date string (YYYY-MM-DD format sorts correctly lexicographically)
+      return a[0].localeCompare(b[0])
+    })
+    .map(([, counts]) => {
+      // Format date using stored components to avoid timezone issues
+      const dateForDisplay = new Date(counts.year, counts.month - 1, counts.day)
+        .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+      return {
+        date: dateForDisplay,
+        autoMerged: counts.autoMerged,
+        botFixed: counts.botFixed,
+        total: counts.autoMerged + counts.botFixed,
+      }
+    })
 
   return sortedData
 }
@@ -112,7 +126,16 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
   if (chartData.length === 0) {
     return (
       <Card className="rounded-2xl shadow-xl border-2">
-        <CardTitle className="text-2xl mb-2">Maintenance Velocity</CardTitle>
+        <div className="flex items-center gap-2 mb-2">
+          <CardTitle className="text-2xl">Maintenance Velocity</CardTitle>
+          <div className="group relative">
+            <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+            <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-48 px-3 py-2 text-xs bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg">
+              Showing PRs from the last 30 days
+              <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
+            </div>
+          </div>
+        </div>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
           Track PRs processed over time
         </p>
@@ -125,7 +148,16 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
 
   return (
     <Card className="rounded-2xl shadow-xl border-2">
-      <CardTitle className="text-2xl mb-2">Maintenance Velocity</CardTitle>
+      <div className="flex items-center gap-2 mb-2">
+        <CardTitle className="text-2xl">Maintenance Velocity</CardTitle>
+        <div className="group relative">
+          <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+          <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-48 px-3 py-2 text-xs bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg">
+            Showing PRs from the last 30 days
+            <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
+          </div>
+        </div>
+      </div>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
         Track PRs auto-merged and fixed over time
       </p>

@@ -175,10 +175,13 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
         ? trace.execution.duration_seconds / 3600
         : null
 
+      const costUsd = trace.execution.metrics?.total_cost_usd ?? null
+
       return {
         ...summary,
         status: trace.result.status,
         fix_time_hours: duration || summary.fix_time_hours,
+        cost_usd: costUsd,
       }
     })
   )
@@ -210,13 +213,33 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
     ? fixTimes.reduce((a, b) => a + b, 0) / fixTimes.length
     : 0
 
+  // Calculate cost metrics (bot fixes only)
+  const costsForBotFixes = prSummaries
+    .filter(pr => pr.type === 'bot_fix' && pr.cost_usd !== null && pr.cost_usd !== undefined)
+    .map(pr => pr.cost_usd!)
+  const totalCost = costsForBotFixes.length > 0
+    ? costsForBotFixes.reduce((a, b) => a + b, 0)
+    : 0
+
+  // Average cost per attempt (includes both successful and failed fixes)
+  const avgCostPerAttempt = costsForBotFixes.length > 0
+    ? totalCost / costsForBotFixes.length
+    : 0
+
+  // Average cost per successful fix only
+  const successfulFixesWithCost = prSummaries
+    .filter(pr => pr.type === 'bot_fix' && pr.status === 'SUCCESS' && pr.cost_usd !== null && pr.cost_usd !== undefined)
+  const avgCostPerSuccess = successfulFixesWithCost.length > 0
+    ? successfulFixesWithCost.reduce((sum, pr) => sum + pr.cost_usd!, 0) / successfulFixesWithCost.length
+    : 0
+
   // Group by failure type (bot fixes only, auto-merges tracked separately)
-  const byFailureType: Record<string, { count: number; fixed: number; failed: number; success_rate: number }> = {}
+  const byFailureType: Record<string, { count: number; fixed: number; failed: number; success_rate: number; total_cost: number; avg_cost: number }> = {}
   prSummaries.forEach(pr => {
     if (pr.type === 'bot_fix' && pr.failure_type) {
       const type = pr.failure_type
       if (!byFailureType[type]) {
-        byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0 }
+        byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0, total_cost: 0, avg_cost: 0 }
       }
       byFailureType[type].count++
       if (pr.status === 'SUCCESS') {
@@ -225,20 +248,24 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       if (pr.status === 'FAILED') {
         byFailureType[type].failed++
       }
+      if (pr.cost_usd !== null && pr.cost_usd !== undefined) {
+        byFailureType[type].total_cost += pr.cost_usd
+      }
     }
   })
 
-  // Calculate success rates per failure type
+  // Calculate success rates and average costs per failure type
   Object.keys(byFailureType).forEach(type => {
     const data = byFailureType[type]
     data.success_rate = data.count > 0 ? data.fixed / data.count : 0
+    data.avg_cost = data.count > 0 ? data.total_cost / data.count : 0
   })
 
   // Group by repo
-  const byRepo: Record<string, { total_prs: number; auto_merged: number; bot_fixed: number; failed: number; success_rate: number }> = {}
+  const byRepo: Record<string, { total_prs: number; auto_merged: number; bot_fixed: number; failed: number; success_rate: number; total_cost: number }> = {}
   prSummaries.forEach(pr => {
     if (!byRepo[pr.repo]) {
-      byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0 }
+      byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0, total_cost: 0 }
     }
     byRepo[pr.repo].total_prs++
     if (pr.type === 'auto_merge' && pr.status === 'SUCCESS') {
@@ -247,6 +274,9 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       byRepo[pr.repo].bot_fixed++
     }
     if (pr.status === 'FAILED') byRepo[pr.repo].failed++
+    if (pr.type === 'bot_fix' && pr.cost_usd !== null && pr.cost_usd !== undefined) {
+      byRepo[pr.repo].total_cost += pr.cost_usd
+    }
   })
 
   // Calculate success rates per repo (only for bot fix attempts, not auto-merges)
@@ -265,6 +295,9 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
       prs_failed: failedFixes,
       success_rate: successRate,
       avg_fix_time_hours: avgFixTime,
+      total_cost_usd: totalCost,
+      avg_cost_per_attempt: avgCostPerAttempt,
+      avg_cost_per_success: avgCostPerSuccess,
     },
     by_failure_type: byFailureType,
     by_repo: byRepo,
