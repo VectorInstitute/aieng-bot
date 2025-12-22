@@ -39,6 +39,138 @@ class StatusPoller:
         """
         self.gh_token = gh_token
 
+    @staticmethod
+    def _should_check_be_counted(check: dict) -> bool:
+        """Check if this check should be counted in status calculations.
+
+        Parameters
+        ----------
+        check : dict
+            Check object from GitHub API.
+
+        Returns
+        -------
+        bool
+            True if check should be counted, False if it should be ignored.
+
+        """
+        # Skip phantom StatusContext entries with no state or name
+        # GitHub sometimes returns incomplete StatusContext objects
+        is_phantom_status_context = (
+            check.get("__typename") == "StatusContext"
+            and check.get("state") is None
+            and check.get("name") is None
+        )
+        return not is_phantom_status_context
+
+    @staticmethod
+    def _is_check_running(check: dict) -> bool:
+        """Check if a check is still running.
+
+        Parameters
+        ----------
+        check : dict
+            Check object from GitHub API.
+
+        Returns
+        -------
+        bool
+            True if check is running, False otherwise.
+
+        """
+        typename = check.get("__typename")
+        if typename == "StatusContext":
+            # StatusContext uses 'state' field
+            state = check.get("state")
+            return state in ["PENDING", "EXPECTED"]
+        # CheckRun uses 'conclusion' and 'status' fields
+        return check.get("conclusion") is None and check.get("status") in [
+            "IN_PROGRESS",
+            "QUEUED",
+            "PENDING",
+        ]
+
+    @staticmethod
+    def _is_check_failed(check: dict) -> bool:
+        """Check if a check has failed or is in a non-passing terminal state.
+
+        Parameters
+        ----------
+        check : dict
+            Check object from GitHub API.
+
+        Returns
+        -------
+        bool
+            True if check has failed, False otherwise.
+
+        """
+        typename = check.get("__typename")
+        if typename == "StatusContext":
+            # StatusContext uses 'state' field
+            state = check.get("state")
+            return state in ["FAILURE", "ERROR"]
+        # CheckRun uses 'conclusion' field
+        # Treat CANCELLED, TIMED_OUT, and ACTION_REQUIRED as failures
+        conclusion = check.get("conclusion")
+        return conclusion in [
+            "FAILURE",
+            "CANCELLED",
+            "TIMED_OUT",
+            "ACTION_REQUIRED",
+        ]
+
+    @staticmethod
+    def _is_check_passed(check: dict) -> bool:
+        """Check if a check has passed or is neutral.
+
+        Parameters
+        ----------
+        check : dict
+            Check object from GitHub API.
+
+        Returns
+        -------
+        bool
+            True if check has passed, False otherwise.
+
+        """
+        typename = check.get("__typename")
+        if typename == "StatusContext":
+            # StatusContext uses 'state' field
+            state = check.get("state")
+            return state in ["SUCCESS"]
+        # CheckRun uses 'conclusion' field
+        conclusion = check.get("conclusion")
+        return conclusion in ["SUCCESS", "NEUTRAL", "SKIPPED"]
+
+    @staticmethod
+    def _has_finalized_conclusion(check: dict) -> bool:
+        """Check if a check has a finalized conclusion.
+
+        GitHub may update the status field before the conclusion field,
+        causing a race condition where checks appear "done" but don't
+        have a final pass/fail state yet.
+
+        Parameters
+        ----------
+        check : dict
+            Check object from GitHub API.
+
+        Returns
+        -------
+        bool
+            True if check has finalized conclusion, False otherwise.
+
+        """
+        typename = check.get("__typename")
+        if typename == "StatusContext":
+            # StatusContext uses 'state' field - valid states are final
+            state = check.get("state")
+            return state in ["SUCCESS", "FAILURE", "ERROR"]
+        # CheckRun uses 'conclusion' field - must not be None
+        return check.get("conclusion") is not None
+
     def _run_gh_command(self, cmd: list[str]) -> str:
         """Execute gh CLI command.
 
@@ -116,10 +248,6 @@ class StatusPoller:
 
             def is_check_passed(check: dict) -> bool:
                 """Check if a check has passed or is neutral."""
-                # Skip our own monitoring check
-                if check.get("name") == "Monitor Organization Bot PRs":
-                    return True
-
                 typename = check.get("__typename")
                 if typename == "StatusContext":
                     # StatusContext uses 'state' field
@@ -131,10 +259,6 @@ class StatusPoller:
 
             def is_check_failed(check: dict) -> bool:
                 """Check if a check has failed."""
-                # Skip our own monitoring check
-                if check.get("name") == "Monitor Organization Bot PRs":
-                    return False
-
                 typename = check.get("__typename")
                 if typename == "StatusContext":
                     state = check.get("state")
@@ -218,66 +342,33 @@ class StatusPoller:
                 time.sleep(check_interval)
                 continue
 
-            # Check status - handle both CheckRun and StatusContext types
-            def is_check_running(check: dict) -> bool:
-                """Check if a check is still running."""
-                typename = check.get("__typename")
-                if typename == "StatusContext":
-                    # StatusContext uses 'state' field
-                    state = check.get("state")
-                    return state in ["PENDING", "EXPECTED"]
-                # CheckRun uses 'conclusion' and 'status' fields
-                return check.get("conclusion") is None and check.get("status") in [
-                    "IN_PROGRESS",
-                    "QUEUED",
-                    "PENDING",
-                ]
+            # Filter out checks that should be ignored (phantom entries)
+            relevant_checks = [c for c in rollup if self._should_check_be_counted(c)]
 
-            def is_check_failed(check: dict) -> bool:
-                """Check if a check has failed."""
-                typename = check.get("__typename")
-                if typename == "StatusContext":
-                    # StatusContext uses 'state' field
-                    state = check.get("state")
-                    return state in ["FAILURE", "ERROR"]
-                # CheckRun uses 'conclusion' field
-                return check.get("conclusion") == "FAILURE"
+            if not relevant_checks:
+                if attempt > 2:  # Give checks time to start
+                    log_warning("    No relevant checks found")
+                    return "NO_CHECKS"
+                time.sleep(check_interval)
+                continue
 
-            any_running = any(is_check_running(check) for check in rollup)
-            any_failed = any(is_check_failed(check) for check in rollup)
-
-            # Ensure all checks have finalized conclusions before marking as complete
-            def has_finalized_conclusion(check: dict) -> bool:
-                """Check if a check has a finalized conclusion.
-
-                GitHub may update the status field before the conclusion field,
-                causing a race condition where checks appear "done" but don't
-                have a final pass/fail state yet.
-                """
-                # Skip our own monitoring check
-                if check.get("name") == "Monitor Organization Bot PRs":
-                    return True
-
-                typename = check.get("__typename")
-                if typename == "StatusContext":
-                    # StatusContext uses 'state' field - valid states are final
-                    state = check.get("state")
-                    # Skip phantom StatusContext entries with no state or name
-                    # GitHub sometimes returns incomplete StatusContext objects
-                    if state is None and check.get("name") is None:
-                        return True  # Ignore this phantom entry
-                    return state in ["SUCCESS", "FAILURE", "ERROR"]
-                # CheckRun uses 'conclusion' field - must not be None
-                return check.get("conclusion") is not None
-
-            all_finalized = all(has_finalized_conclusion(check) for check in rollup)
+            # Check status of relevant checks
+            any_running = any(self._is_check_running(c) for c in relevant_checks)
+            any_failed = any(self._is_check_failed(c) for c in relevant_checks)
+            all_passed = all(self._is_check_passed(c) for c in relevant_checks)
+            all_finalized = all(
+                self._has_finalized_conclusion(c) for c in relevant_checks
+            )
 
             if not any_running and all_finalized:
                 if any_failed:
                     log_error("  Checks failed")
                     return "FAILED"
-                log_success("  Checks completed successfully")
-                return "COMPLETED"
+                if all_passed:
+                    log_success("  Checks completed successfully")
+                    return "COMPLETED"
+                # Checks are finalized but not all passed - still waiting
+                log_info("    ⏳ Checks finalized but not all passed, waiting...")
 
             # Debug: Show why we're still waiting
             if not any_running and not all_finalized:

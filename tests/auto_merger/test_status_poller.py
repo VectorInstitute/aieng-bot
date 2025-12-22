@@ -152,21 +152,6 @@ class TestStatusPoller:
         assert has_failures is False
         assert mergeable == "MERGEABLE"
 
-    def test_check_pr_status_skips_monitor_check(self, status_poller, sample_pr):
-        """Test that Monitor Organization Bot PRs check is skipped."""
-        with patch.object(
-            status_poller,
-            "_run_gh_command",
-            return_value='{"statusCheckRollup": [{"__typename": "CheckRun", "name": "Monitor Organization Bot PRs", "conclusion": "FAILURE"}], "mergeable": "MERGEABLE"}',
-        ):
-            all_passed, has_failures, mergeable = status_poller.check_pr_status(
-                sample_pr
-            )
-
-        # Should pass because the monitor check is skipped
-        assert all_passed is True
-        assert has_failures is False
-
     def test_check_pr_status_with_conflicting(self, status_poller, sample_pr):
         """Test check_pr_status with merge conflict."""
         with patch.object(
