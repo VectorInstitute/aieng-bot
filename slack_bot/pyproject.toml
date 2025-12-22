@@ -1,0 +1,18 @@
+[project]
+name = "aieng-bot-slack"
+version = "0.1.0"
+description = "Slack bot for AI Engineering Maintenance Bot"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "slack-bolt>=1.18.0",
+    "aieng-bot-maintain>=0.4.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+slack-bot = "app:main"

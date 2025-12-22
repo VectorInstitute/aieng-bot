@@ -1,0 +1,28 @@
+display_information:
+  name: AI Engineering Maintenance Bot
+  description: Slack bot for interacting with the AI Engineering Maintenance Bot that manages bot PRs across Vector Institute repositories
+  background_color: "#2c2d30"
+features:
+  bot_user:
+    display_name: AI Engineering Maintenance Bot
+    always_online: true
+  slash_commands:
+    - command: /aieng-bot
+      url: https://your-app-url.com/slack/events
+      description: Get information about the AI Engineering Maintenance Bot
+      usage_hint: version
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - commands
+      - chat:write
+      - app_mentions:read
+settings:
+  event_subscriptions:
+    request_url: https://your-app-url.com/slack/events
+    bot_events:
+      - app_mention
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

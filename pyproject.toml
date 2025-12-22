@@ -42,6 +42,9 @@ process-repo-queue = "aieng_bot_maintain.cli:process_repo_queue_cli"
 [tool.hatchling.build.targets.wheel]
 packages = ["src/aieng_bot_maintain"]
 
+[tool.hatchling.build.targets.wheel.shared-data]
+"src/aieng_bot_maintain/py.typed" = "aieng_bot_maintain/py.typed"
+
 [dependency-groups]
 dev = [
     "codecov>=2.1.13",
@@ -91,6 +94,7 @@ warn_unused_ignores = true
 implicit_reexport = false
 strict_equality = true
 extra_checks = true
+mypy_path = "src:slack_bot/stubs"
 
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
