@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from aieng_bot_maintain.auto_merger.activity_logger import ActivityLogger
+from aieng_bot.auto_merger.activity_logger import ActivityLogger
 
 
 @pytest.fixture

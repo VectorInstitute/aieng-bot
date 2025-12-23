@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from aieng_bot_maintain.agent_fixer import AgentFixer, AgentFixRequest, AgentFixResult
+from aieng_bot.agent_fixer import AgentFixer, AgentFixRequest, AgentFixResult
 
 
 class TestAgentFixRequest:
@@ -215,7 +215,7 @@ class TestAgentFixer:
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot_maintain.agent_fixer.fixer.query", side_effect=mock_query),
+            patch("aieng_bot.agent_fixer.fixer.query", side_effect=mock_query),
             patch.object(AgentFixer, "_create_tracer", return_value=mock_tracer),
             patch("builtins.open", mock_open()),
         ):
@@ -236,7 +236,7 @@ class TestAgentFixer:
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
             patch(
-                "aieng_bot_maintain.agent_fixer.fixer.query",
+                "aieng_bot.agent_fixer.fixer.query",
                 side_effect=RuntimeError("Agent failed"),
             ),
         ):
@@ -272,7 +272,7 @@ class TestAgentFixer:
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot_maintain.agent_fixer.fixer.query", mock_query_func),
+            patch("aieng_bot.agent_fixer.fixer.query", mock_query_func),
             patch.object(AgentFixer, "_create_tracer", return_value=mock_tracer),
             patch("builtins.open", mock_open()),
         ):

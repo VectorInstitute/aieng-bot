@@ -1,27 +1,30 @@
 """CLI command for PR failure classification."""
 
-import argparse
 import json
 import sys
 import tempfile
 
+import click
+
 from ...classifier import PRFailureClassifier
 from ...classifier.models import ClassificationResult
 from ...utils.logging import get_console, log_error, log_info, log_success
-from ..utils import get_version, parse_pr_inputs
+from ..utils import parse_pr_inputs
 
 
-def _get_failure_logs_file(args: argparse.Namespace) -> str | None:
-    """Get failure logs file path from args, return None on error."""
-    if args.failure_logs_file:
-        return args.failure_logs_file
+def _get_failure_logs_file(
+    failure_logs: str | None, failure_logs_file: str | None
+) -> str | None:
+    """Get failure logs file path, return None on error."""
+    if failure_logs_file:
+        return failure_logs_file
 
-    if args.failure_logs:
-        # Backward compatibility: write logs to temp file
+    if failure_logs:
+        # Write logs to temp file
         with tempfile.NamedTemporaryFile(
             mode="w", delete=False, suffix=".txt"
         ) as temp_file:
-            temp_file.write(args.failure_logs)
+            temp_file.write(failure_logs)
             return temp_file.name
 
     log_error("Either --failure-logs or --failure-logs-file must be provided")
@@ -61,72 +64,79 @@ def _log_summary(result: ClassificationResult) -> None:
         sys.exit(1)
 
 
-def classify_pr_failure_cli() -> None:
-    """CLI entry point for PR failure classification.
+@click.command()
+@click.option(
+    "--pr-info",
+    required=True,
+    help="PR info JSON string containing repo, pr_number, title, author, etc.",
+)
+@click.option(
+    "--failed-checks",
+    required=True,
+    help="Failed checks JSON array with check names and conclusions",
+)
+@click.option(
+    "--failure-logs",
+    required=False,
+    help="Failure logs content (truncated). Use --failure-logs-file for large logs.",
+)
+@click.option(
+    "--failure-logs-file",
+    required=False,
+    type=click.Path(exists=True),
+    help="Path to file containing failure logs (alternative to --failure-logs)",
+)
+@click.option(
+    "--output-format",
+    type=click.Choice(["json", "github"], case_sensitive=False),
+    default="github",
+    help="Output format: 'github' for GitHub Actions variables, 'json' for structured output",
+)
+def classify(
+    pr_info: str,
+    failed_checks: str,
+    failure_logs: str | None,
+    failure_logs_file: str | None,
+    output_format: str,
+) -> None:
+    r"""Classify PR failure type using Claude API.
 
-    Reads PR context, failed checks, and failure logs from command-line arguments
-    and outputs classification results in GitHub Actions format or JSON.
+    Analyzes PR context, failed checks, and logs to determine failure category
+    (test, lint, security, build, merge_conflict, unknown).
+
+    Examples:
+      \b
+      # Classify with GitHub Actions output
+      aieng-bot classify --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
+        --failure-logs-file logs.txt
+
+      \b
+      # Classify with JSON output
+      aieng-bot classify --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
+        --failure-logs "$(cat logs.txt)" --output-format json
 
     """
-    parser = argparse.ArgumentParser(
-        prog="classify-pr-failure",
-        description="Classify PR failure type using Claude API",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Classify with GitHub Actions output
-  classify-pr-failure --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
-    --failure-logs "$(cat logs.txt)"
-
-  # Classify with JSON output
-  classify-pr-failure --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
-    --failure-logs "$(cat logs.txt)" --output-format json
-        """,
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {get_version()}",
-        help="Show version number and exit",
-    )
-    parser.add_argument("--pr-info", required=True, help="PR info JSON string")
-    parser.add_argument(
-        "--failed-checks", required=True, help="Failed checks JSON array"
-    )
-    parser.add_argument(
-        "--failure-logs", required=False, help="Failure logs (truncated)"
-    )
-    parser.add_argument(
-        "--failure-logs-file",
-        required=False,
-        help="Path to file containing failure logs (alternative to --failure-logs)",
-    )
-    parser.add_argument(
-        "--output-format",
-        choices=["json", "github"],
-        default="github",
-        help="Output format (default: github)",
-    )
-
-    args = parser.parse_args()
     console = get_console()
 
     try:
-        # Parse inputs
-        pr_context, failed_checks = parse_pr_inputs(args)
+        # Parse inputs - create argparse.Namespace for compatibility with parse_pr_inputs
+        import argparse  # noqa: PLC0415
+
+        args = argparse.Namespace(pr_info=pr_info, failed_checks=failed_checks)
+        pr_context, failed_check_list = parse_pr_inputs(args)
 
         # Get failure logs file path
-        failure_logs_file = _get_failure_logs_file(args)
-        if not failure_logs_file:
+        failure_logs_path = _get_failure_logs_file(failure_logs, failure_logs_file)
+        if not failure_logs_path:
             sys.exit(1)
 
         # Run classification
         log_info(f"Classifying PR {pr_context.repo}#{pr_context.pr_number}")
-        log_info(f"Number of failed checks: {len(failed_checks)}")
-        log_info(f"Failure logs file: {failure_logs_file}")
+        log_info(f"Number of failed checks: {len(failed_check_list)}")
+        log_info(f"Failure logs file: {failure_logs_path}")
 
         classifier = PRFailureClassifier()
-        result = classifier.classify(pr_context, failed_checks, failure_logs_file)
+        result = classifier.classify(pr_context, failed_check_list, failure_logs_path)
 
         log_info(
             f"Classification result: {result.failure_type.value} "
@@ -134,7 +144,7 @@ Examples:
         )
 
         # Output results
-        _output_results(result, args.output_format, console)
+        _output_results(result, output_format, console)
 
         # Log summary
         _log_summary(result)

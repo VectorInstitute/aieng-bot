@@ -1,6 +1,6 @@
 """Tests for auto_merger data models."""
 
-from aieng_bot_maintain.auto_merger.models import (
+from aieng_bot.auto_merger.models import (
     PRQueueItem,
     PRStatus,
     QueueState,

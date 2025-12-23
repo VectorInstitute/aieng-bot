@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from aieng_bot_maintain.observability import (
+from aieng_bot.observability import (
     AgentExecutionTracer,
     create_tracer_from_env,
 )
-from aieng_bot_maintain.observability.parsers import ResultMessageParser
+from aieng_bot.observability.parsers import ResultMessageParser
 
 
 class MockMessage:

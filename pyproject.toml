@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "aieng-bot-maintain"
+name = "aieng-bot"
 version = "0.4.0"
 description = "Vector Institute AI Engineering Bot for Maintenance Tasks"
 readme = "README.md"
@@ -23,6 +23,7 @@ classifiers = [
 dependencies = [
     "anthropic>=0.42.0",
     "claude-agent-sdk",
+    "click>=8.0.0",
     "pyyaml>=6.0.2",
     "rich>=13.0.0",
 ]
@@ -34,16 +35,13 @@ Issues = "https://github.com/VectorInstitute/aieng-bot-maintain/issues"
 Changelog = "https://github.com/VectorInstitute/aieng-bot-maintain/releases"
 
 [project.scripts]
-classify-pr-failure = "aieng_bot_maintain.cli:classify_pr_failure_cli"
-apply-agent-fix = "aieng_bot_maintain.cli:apply_agent_fix_cli"
-collect-bot-metrics = "aieng_bot_maintain.cli:collect_metrics_cli"
-process-repo-queue = "aieng_bot_maintain.cli:process_repo_queue_cli"
+aieng-bot = "aieng_bot._cli.main:cli"
 
 [tool.hatchling.build.targets.wheel]
-packages = ["src/aieng_bot_maintain"]
+packages = ["src/aieng_bot"]
 
 [tool.hatchling.build.targets.wheel.shared-data]
-"src/aieng_bot_maintain/py.typed" = "aieng_bot_maintain/py.typed"
+"src/aieng_bot/py.typed" = "aieng_bot/py.typed"
 
 [dependency-groups]
 dev = [

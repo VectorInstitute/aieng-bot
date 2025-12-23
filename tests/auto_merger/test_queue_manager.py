@@ -5,13 +5,13 @@ from unittest.mock import patch
 
 import pytest
 
-from aieng_bot_maintain.auto_merger.models import (
+from aieng_bot.auto_merger.models import (
     PRQueueItem,
     PRStatus,
     QueueState,
     RepoQueue,
 )
-from aieng_bot_maintain.auto_merger.queue_manager import QueueManager
+from aieng_bot.auto_merger.queue_manager import QueueManager
 
 
 @pytest.fixture
@@ -30,20 +30,14 @@ def mock_gcs_bucket():
 def queue_manager(mock_gh_token, mock_gcs_bucket):
     """Create a QueueManager instance with mocked dependencies."""
     with (
+        patch("aieng_bot.auto_merger.queue_manager.StateManager") as mock_state_mgr,
         patch(
-            "aieng_bot_maintain.auto_merger.queue_manager.StateManager"
-        ) as mock_state_mgr,
-        patch(
-            "aieng_bot_maintain.auto_merger.queue_manager.WorkflowClient"
+            "aieng_bot.auto_merger.queue_manager.WorkflowClient"
         ) as mock_workflow_client,
+        patch("aieng_bot.auto_merger.queue_manager.StatusPoller") as mock_status_poller,
+        patch("aieng_bot.auto_merger.queue_manager.PRProcessor") as mock_pr_processor,
         patch(
-            "aieng_bot_maintain.auto_merger.queue_manager.StatusPoller"
-        ) as mock_status_poller,
-        patch(
-            "aieng_bot_maintain.auto_merger.queue_manager.PRProcessor"
-        ) as mock_pr_processor,
-        patch(
-            "aieng_bot_maintain.auto_merger.queue_manager.ActivityLogger"
+            "aieng_bot.auto_merger.queue_manager.ActivityLogger"
         ) as mock_activity_logger,
     ):
         manager = QueueManager(gh_token=mock_gh_token, gcs_bucket=mock_gcs_bucket)
@@ -92,20 +86,18 @@ class TestQueueManagerInit:
     def test_init_with_defaults(self, mock_gh_token):
         """Test initialization with default GCS bucket."""
         with (
+            patch("aieng_bot.auto_merger.queue_manager.StateManager") as mock_state_mgr,
             patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.StateManager"
-            ) as mock_state_mgr,
-            patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.WorkflowClient"
+                "aieng_bot.auto_merger.queue_manager.WorkflowClient"
             ) as mock_workflow_client,
             patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.StatusPoller"
+                "aieng_bot.auto_merger.queue_manager.StatusPoller"
             ) as mock_status_poller,
             patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.PRProcessor"
+                "aieng_bot.auto_merger.queue_manager.PRProcessor"
             ) as mock_pr_processor,
             patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.ActivityLogger"
+                "aieng_bot.auto_merger.queue_manager.ActivityLogger"
             ) as mock_activity_logger,
         ):
             manager = QueueManager(gh_token=mock_gh_token)
@@ -130,14 +122,12 @@ class TestQueueManagerInit:
     def test_init_with_custom_bucket(self, mock_gh_token, mock_gcs_bucket):
         """Test initialization with custom GCS bucket."""
         with (
+            patch("aieng_bot.auto_merger.queue_manager.StateManager") as mock_state_mgr,
+            patch("aieng_bot.auto_merger.queue_manager.WorkflowClient"),
+            patch("aieng_bot.auto_merger.queue_manager.StatusPoller"),
+            patch("aieng_bot.auto_merger.queue_manager.PRProcessor"),
             patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.StateManager"
-            ) as mock_state_mgr,
-            patch("aieng_bot_maintain.auto_merger.queue_manager.WorkflowClient"),
-            patch("aieng_bot_maintain.auto_merger.queue_manager.StatusPoller"),
-            patch("aieng_bot_maintain.auto_merger.queue_manager.PRProcessor"),
-            patch(
-                "aieng_bot_maintain.auto_merger.queue_manager.ActivityLogger"
+                "aieng_bot.auto_merger.queue_manager.ActivityLogger"
             ) as mock_activity_logger,
         ):
             QueueManager(gh_token=mock_gh_token, gcs_bucket=mock_gcs_bucket)

@@ -1,21 +1,15 @@
-"""CLI entry points for aieng-bot-maintain.
+"""Public CLI exports for aieng-bot.
 
-This module has been refactored into a modular structure under the cli/ package.
-This file maintains backward compatibility by re-exporting the CLI functions.
+This module provides the main CLI entry point.
 """
 
 from importlib.metadata import version  # Re-export for test compatibility
 
-# Re-export all CLI entry points from the _cli module
-from ._cli import (
-    apply_agent_fix_cli,
-    classify_pr_failure_cli,
-    collect_metrics_cli,
-    get_version,
-    parse_pr_inputs,
-    process_repo_queue_cli,
-    read_failure_logs,
-)
+# Export main CLI
+from ._cli.main import cli
+
+# Re-export utilities for backward compatibility
+from ._cli.utils import get_version, parse_pr_inputs, read_failure_logs
 
 # Re-export for backward compatibility with tests
 from .agent_fixer import AgentFixer, AgentFixRequest  # noqa: F401
@@ -28,11 +22,8 @@ _read_failure_logs = read_failure_logs
 _parse_pr_inputs = parse_pr_inputs
 
 __all__ = [
-    # CLI entry points
-    "classify_pr_failure_cli",
-    "apply_agent_fix_cli",
-    "collect_metrics_cli",
-    "process_repo_queue_cli",
+    # Main CLI
+    "cli",
     # Public utilities
     "get_version",
     # Private utilities (for backward compatibility)
@@ -49,4 +40,4 @@ __all__ = [
 ]
 
 if __name__ == "__main__":
-    classify_pr_failure_cli()
+    cli()

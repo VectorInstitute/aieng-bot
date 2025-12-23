@@ -17,10 +17,10 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 # Load environment variables from .env file
 load_dotenv()
 
-# Add parent directory to path to import from aieng_bot_maintain
+# Add parent directory to path to import from aieng_bot
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from aieng_bot_maintain.utils.logging import (  # noqa: E402
+from aieng_bot.utils.logging import (  # noqa: E402
     log_error,
     log_info,
     log_success,

@@ -135,7 +135,7 @@ jobs:
 
       - name: Process repository queue
         run: |
-          process-repo-queue \
+          aieng-bot queue \
             --repo "${{ matrix.repo }}" \
             --workflow-run-id "${{ github.run_id }}" \
             --all-prs '${{ needs.discover-bot-prs.outputs.prs }}'

@@ -170,7 +170,7 @@ gh run list --workflow=monitor-org-bot-prs.yml --limit 5
 gh run view RUN_ID --log
 
 # Collect metrics manually
-gh workflow run collect-bot-metrics.yml
+gh workflow run aieng-bot metrics.yml
 ```
 
 ## Documentation

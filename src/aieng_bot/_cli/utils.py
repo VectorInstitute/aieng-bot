@@ -18,7 +18,7 @@ def get_version() -> str:
 
     """
     try:
-        return version("aieng-bot-maintain")
+        return version("aieng-bot")
     except PackageNotFoundError:
         return "unknown"
 

@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from aieng_bot_maintain.auto_merger.models import PRQueueItem, PRStatus
-from aieng_bot_maintain.auto_merger.status_poller import StatusPoller
+from aieng_bot.auto_merger.models import PRQueueItem, PRStatus
+from aieng_bot.auto_merger.status_poller import StatusPoller
 
 # Patch time.sleep at module level for all tests
 pytestmark = pytest.mark.usefixtures("mock_sleep")
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.usefixtures("mock_sleep")
 @pytest.fixture(autouse=True)
 def mock_sleep():
     """Auto-mock time.sleep for all tests."""
-    with patch("aieng_bot_maintain.auto_merger.status_poller.time.sleep"):
+    with patch("aieng_bot.auto_merger.status_poller.time.sleep"):
         yield
 
 

@@ -16,6 +16,7 @@ from .classifier.models import (
     FailureType,
     PRContext,
 )
+from .config import get_model_name
 from .metrics import MetricsCollector
 from .observability import AgentExecutionTracer, create_tracer_from_env
 
@@ -33,5 +34,6 @@ __all__ = [
     "RepoQueue",
     "PRQueueItem",
     "PRStatus",
+    "get_model_name",
     "__version__",
 ]

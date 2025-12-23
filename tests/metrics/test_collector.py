@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from aieng_bot_maintain.metrics import MetricsCollector
+from aieng_bot.metrics import MetricsCollector
 
 
 @pytest.fixture

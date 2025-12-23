@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aieng_bot_maintain.auto_merger.models import PRQueueItem, PRStatus
-from aieng_bot_maintain.auto_merger.pr_processor import PRProcessor
+from aieng_bot.auto_merger.models import PRQueueItem, PRStatus
+from aieng_bot.auto_merger.pr_processor import PRProcessor
 
 
 @pytest.fixture

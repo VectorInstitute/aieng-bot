@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from aieng_bot_maintain.auto_merger.models import PRStatus
-from aieng_bot_maintain.auto_merger.state_manager import StateManager
+from aieng_bot.auto_merger.models import PRStatus
+from aieng_bot.auto_merger.state_manager import StateManager
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ class TestStateManager:
         new_callable=mock_open,
         read_data='{"workflow_run_id": "123", "started_at": "2025-01-15T10:00:00Z", "last_updated": "2025-01-15T10:00:00Z", "timeout_at": "2025-01-15T15:30:00Z", "repo_queues": {}, "completed_repos": []}',
     )
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_load_state_success(
         self, mock_datetime, mock_file, mock_run, state_manager
     ):
@@ -86,7 +86,7 @@ class TestStateManager:
         new_callable=mock_open,
         read_data='{"workflow_run_id": "123", "started_at": "2025-01-14T10:00:00Z", "last_updated": "2025-01-14T10:00:00Z", "timeout_at": "2025-01-14T15:30:00Z", "repo_queues": {}, "completed_repos": []}',
     )
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_load_state_stale(
         self, mock_datetime, mock_file, mock_run, state_manager, capsys
     ):
@@ -117,7 +117,7 @@ class TestStateManager:
 
     @patch("subprocess.run")
     @patch("builtins.open", new_callable=mock_open)
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_save_state_success(
         self, mock_datetime, mock_file, mock_run, state_manager, capsys
     ):
@@ -148,7 +148,7 @@ class TestStateManager:
         captured = capsys.readouterr()
         assert "Failed to save state" in captured.err
 
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_create_initial_state(self, mock_datetime, state_manager, sample_prs):
         """Test creating initial state from PRs."""
         mock_now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
@@ -166,7 +166,7 @@ class TestStateManager:
             == PRStatus.PENDING
         )
 
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_create_initial_state_multiple_repos(self, mock_datetime, state_manager):
         """Test creating initial state with PRs from multiple repos."""
         mock_now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
@@ -196,7 +196,7 @@ class TestStateManager:
         assert "VectorInstitute/repo1" in state.repo_queues
         assert "VectorInstitute/repo2" in state.repo_queues
 
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_create_initial_state_sorts_prs(self, mock_datetime, state_manager):
         """Test that PRs are sorted by number."""
         mock_now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
@@ -234,7 +234,7 @@ class TestStateManager:
         assert queue.prs[1].pr_number == 124
         assert queue.prs[2].pr_number == 125
 
-    @patch("aieng_bot_maintain.auto_merger.state_manager.datetime")
+    @patch("aieng_bot.auto_merger.state_manager.datetime")
     def test_create_initial_state_missing_author(self, mock_datetime, state_manager):
         """Test creating initial state when author field is missing.
 

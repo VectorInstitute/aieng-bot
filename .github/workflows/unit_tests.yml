@@ -47,7 +47,7 @@ jobs:
 
       - name: Run unit tests with coverage
         run: |
-          uv run pytest --cov src/aieng_bot_maintain --cov-report=xml --cov-report=term tests/
+          uv run pytest --cov src/aieng_bot --cov-report=xml --cov-report=term tests/
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+from ..config import get_model_name
 from ..observability import AgentExecutionTracer
 from ..utils.logging import log_error, log_info, log_success
 from .models import AgentFixRequest, AgentFixResult
@@ -75,6 +76,7 @@ class AgentFixer:
                 permission_mode="acceptEdits",
                 cwd=request.cwd,
                 setting_sources=["project"],  # Load .claude/skills/
+                model=get_model_name(),
             )
 
             # Run agent with tracing

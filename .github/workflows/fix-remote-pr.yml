@@ -244,7 +244,7 @@ jobs:
           cd ../bot-repo
 
           echo "Running classifier..."
-          if ! classify-pr-failure \
+          if ! aieng-bot classify \
             --pr-info "$PR_INFO" \
             --failed-checks "$FAILED_CHECKS" \
             --failure-logs-file /tmp/failure-logs.txt \
@@ -360,7 +360,7 @@ jobs:
         working-directory: target-repo
         run: |
           # Apply fixes using skills from .claude/skills/
-          apply-agent-fix \
+          aieng-bot fix \
             --repo "${{ github.event.inputs.target_repo }}" \
             --pr-number "${{ github.event.inputs.pr_number }}" \
             --pr-title "${{ steps.pr-details.outputs.pr-title }}" \

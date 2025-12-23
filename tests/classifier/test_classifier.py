@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aieng_bot_maintain import (
+from aieng_bot import (
     CheckFailure,
     FailureType,
     PRContext,
@@ -68,7 +68,7 @@ filelock | 3.20.0 | GHSA-w853-jp5j-5j7f | 3.20.1
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_anthropic_response
@@ -128,7 +128,7 @@ def test_classify_unknown_failure(mock_anthropic_response):
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_anthropic_response
@@ -235,7 +235,7 @@ def test_confidence_threshold_enforcement(mock_anthropic_response):
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_anthropic_response
@@ -291,7 +291,7 @@ def test_response_validation_missing_fields(mock_anthropic_response):
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_anthropic_response
@@ -347,7 +347,7 @@ def test_invalid_confidence_value(mock_anthropic_response):
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_anthropic_response
@@ -404,7 +404,7 @@ def test_classify_with_markdown_code_block():
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_response
@@ -451,7 +451,7 @@ def test_classify_api_error():
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             # Create a mock request for APIError
             mock_request = httpx.Request(
@@ -508,7 +508,7 @@ def test_classify_invalid_json():
 
     try:
         with patch(
-            "aieng_bot_maintain.classifier.classifier.anthropic.Anthropic"
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_response
@@ -530,7 +530,7 @@ def test_classify_invalid_json():
 
 def test_classification_result_invalid_confidence():
     """Test that ClassificationResult validates confidence range."""
-    from aieng_bot_maintain import (  # noqa: PLC0415 - Import after test setup
+    from aieng_bot import (  # noqa: PLC0415 - Import after test setup
         ClassificationResult,
     )
 
@@ -557,7 +557,7 @@ def test_classification_result_invalid_confidence():
 
 def test_classification_result_valid_confidence():
     """Test that ClassificationResult accepts valid confidence values."""
-    from aieng_bot_maintain import (  # noqa: PLC0415 - Import after test setup
+    from aieng_bot import (  # noqa: PLC0415 - Import after test setup
         ClassificationResult,
     )
 
