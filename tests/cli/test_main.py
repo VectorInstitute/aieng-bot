@@ -105,41 +105,24 @@ class TestApplyAgentFixCLI:
 
     @pytest.fixture
     def cli_args(self, tmp_path):
-        """Create valid CLI arguments for testing (skills-based)."""
-        logs_file = tmp_path / ".failure-logs.txt"
-        logs_file.write_text("Test logs")
-
-        # Create skills directory for agent to use
-        skills_dir = tmp_path / ".claude" / "skills" / "fix-test-failures"
-        skills_dir.mkdir(parents=True, exist_ok=True)
-        (skills_dir / "SKILL.md").write_text("Test skill")
+        """Create valid CLI arguments for testing (new simplified interface)."""
+        # Create classification JSON file
+        cls_file = tmp_path / "classification.json"
+        cls_file.write_text(
+            '{"failure_type": "test", "confidence": 0.95, '
+            '"failed_check_names": ["Run Tests"], '
+            '"reasoning": "Test failures detected", '
+            '"recommended_action": "Fix test failures"}'
+        )
 
         return [
             "fix",
             "--repo",
             "VectorInstitute/test-repo",
-            "--pr-number",
+            "--pr",
             "123",
-            "--pr-title",
-            "Bump pytest",
-            "--pr-author",
-            "app/dependabot",
-            "--pr-url",
-            "https://github.com/VectorInstitute/test-repo/pull/123",
-            "--head-ref",
-            "dependabot/pytest-8.0.0",
-            "--base-ref",
-            "main",
-            "--failure-type",
-            "test",
-            "--failed-check-names",
-            "Run Tests",
-            "--failure-logs-file",
-            str(logs_file),
-            "--workflow-run-id",
-            "1234567890",
-            "--github-run-url",
-            "https://github.com/runs/123",
+            "--cls",
+            str(cls_file),
             "--cwd",
             str(tmp_path),
         ]
@@ -168,7 +151,8 @@ class TestApplyAgentFixCLI:
         output = result.output
         assert "Apply automated fixes" in output
         assert "--repo" in output
-        assert "--failure-type" in output
+        assert "--pr" in output
+        assert "--cls" in output
         assert result.exit_code == 0
 
     def test_cli_success(self, cli_args, mock_env):
@@ -187,9 +171,30 @@ class TestApplyAgentFixCLI:
 
         with (
             patch.dict("os.environ", mock_env),
+            patch(
+                "aieng_bot._cli.commands.fix._load_and_validate_classification"
+            ) as mock_load,
+            patch("aieng_bot._cli.commands.fix._fetch_pr_data") as mock_fetch,
+            patch(
+                "aieng_bot._cli.commands.fix._prepare_agent_environment"
+            ) as mock_prepare,
+            patch(
+                "aieng_bot._cli.commands.fix._cleanup_temporary_files"
+            ) as mock_cleanup,
             patch("aieng_bot._cli.commands.fix.AgentFixer") as mock_fixer_class,
             patch("aieng_bot._cli.commands.fix.asyncio.run") as mock_asyncio_run,
         ):
+            # Mock helper function returns
+            mock_load.return_value = ("test", 0.95, ["Run Tests"])
+            mock_fetch.return_value = (
+                "Bump pytest",
+                "app/dependabot",
+                "dependabot/pytest-8.0.0",
+                "main",
+                ".failure-logs.txt",
+            )
+            mock_prepare.return_value = True
+
             mock_fixer = MagicMock()
             mock_fixer_class.return_value = mock_fixer
             mock_asyncio_run.return_value = mock_result
@@ -199,6 +204,7 @@ class TestApplyAgentFixCLI:
             assert result.exit_code == 0
             mock_fixer_class.assert_called_once()
             mock_asyncio_run.assert_called_once()
+            mock_cleanup.assert_called_once()
 
     def test_cli_failure(self, cli_args, mock_env):
         """Test failed execution of fix CLI."""
@@ -217,16 +223,38 @@ class TestApplyAgentFixCLI:
 
         with (
             patch.dict("os.environ", mock_env),
+            patch(
+                "aieng_bot._cli.commands.fix._load_and_validate_classification"
+            ) as mock_load,
+            patch("aieng_bot._cli.commands.fix._fetch_pr_data") as mock_fetch,
+            patch(
+                "aieng_bot._cli.commands.fix._prepare_agent_environment"
+            ) as mock_prepare,
+            patch(
+                "aieng_bot._cli.commands.fix._cleanup_temporary_files"
+            ) as mock_cleanup,
             patch("aieng_bot._cli.commands.fix.AgentFixer") as mock_fixer_class,
             patch("aieng_bot._cli.commands.fix.asyncio.run") as mock_asyncio_run,
         ):
+            # Mock helper function returns
+            mock_load.return_value = ("test", 0.95, ["Run Tests"])
+            mock_fetch.return_value = (
+                "Bump pytest",
+                "app/dependabot",
+                "dependabot/pytest-8.0.0",
+                "main",
+                ".failure-logs.txt",
+            )
+            mock_prepare.return_value = True
+
             mock_fixer = MagicMock()
             mock_fixer_class.return_value = mock_fixer
             mock_asyncio_run.return_value = mock_result
 
             result = runner.invoke(cli, cli_args)
 
-        assert result.exit_code == 1
+            assert result.exit_code == 1
+            mock_cleanup.assert_called_once()
 
     def test_cli_missing_required_args(self, mock_env):
         """Test CLI with missing required arguments."""
@@ -244,18 +272,28 @@ class TestApplyAgentFixCLI:
         # Should exit with error code
         assert result.exit_code != 0
 
-    def test_cli_invalid_failure_type(self, cli_args, mock_env):
-        """Test CLI with invalid failure type."""
+    def test_cli_invalid_classification_file(self, tmp_path, mock_env):
+        """Test CLI with invalid classification file."""
         runner = CliRunner()
 
-        # Modify args to have invalid failure type
-        failure_type_idx = cli_args.index("--failure-type")
-        cli_args[failure_type_idx + 1] = "invalid_type"
+        # Create invalid classification file
+        cls_file = tmp_path / "invalid.json"
+        cls_file.write_text('{"invalid": "data"}')
+
+        cli_args = [
+            "fix",
+            "--repo",
+            "VectorInstitute/test-repo",
+            "--pr",
+            "123",
+            "--cls",
+            str(cls_file),
+        ]
 
         with patch.dict("os.environ", mock_env):
             result = runner.invoke(cli, cli_args)
 
-        # Should exit with error code due to invalid choice
+        # Should exit with error code due to missing required fields
         assert result.exit_code != 0
 
     def test_cli_no_api_key(self, cli_args):
@@ -275,10 +313,19 @@ class TestApplyAgentFixCLI:
         with (
             patch.dict("os.environ", mock_env),
             patch(
-                "aieng_bot._cli.commands.fix.AgentFixer",
+                "aieng_bot._cli.commands.fix._load_and_validate_classification"
+            ) as mock_load,
+            patch(
+                "aieng_bot._cli.commands.fix._fetch_pr_data",
                 side_effect=RuntimeError("Unexpected error"),
             ),
+            patch(
+                "aieng_bot._cli.commands.fix._cleanup_temporary_files"
+            ) as mock_cleanup,
         ):
+            mock_load.return_value = ("test", 0.95, ["Run Tests"])
+
             result = runner.invoke(cli, cli_args)
 
-        assert result.exit_code == 1
+            assert result.exit_code == 1
+            mock_cleanup.assert_called_once()
