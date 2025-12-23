@@ -281,13 +281,14 @@ def classify(
     github_token: str | None,
     anthropic_api_key: str | None,
 ) -> None:
-    r"""Classify PR failure type using Claude AI.
+    """Classify PR failure type.
 
     Analyzes a GitHub PR to determine the type of CI/CD failure
     (test, lint, security, build, merge_conflict, or unknown).
 
     \b
     Examples:
+    \b
       # Rich formatted output (default)
       aieng-bot classify --repo VectorInstitute/aieng-template-mvp --pr 17
     \b

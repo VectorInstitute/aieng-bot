@@ -154,46 +154,26 @@ jobs:
           cat /tmp/classification.json
           echo ""
 
-          # Extract fields from JSON
+          # Extract fields from JSON for validation
           FAILURE_TYPE=$(jq -r '.failure_type' /tmp/classification.json)
           CONFIDENCE=$(jq -r '.confidence' /tmp/classification.json)
-          FAILED_CHECK_NAMES=$(jq -r '.failed_check_names | join(",")' /tmp/classification.json)
           REASONING=$(jq -r '.reasoning' /tmp/classification.json)
-          RECOMMENDED_ACTION=$(jq -r '.recommended_action' /tmp/classification.json)
 
           # Output to GitHub Actions
           echo "failure-type=$FAILURE_TYPE" >> $GITHUB_OUTPUT
           echo "confidence=$CONFIDENCE" >> $GITHUB_OUTPUT
-          echo "failed-check-names=$FAILED_CHECK_NAMES" >> $GITHUB_OUTPUT
           {
             echo "reasoning<<EOF_REASONING"
             echo "$REASONING"
             echo "EOF_REASONING"
           } >> $GITHUB_OUTPUT
-          {
-            echo "recommended-action<<EOF_ACTION"
-            echo "$RECOMMENDED_ACTION"
-            echo "EOF_ACTION"
-          } >> $GITHUB_OUTPUT
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
-      - name: Prepare for agent execution
-        id: prepare
-        run: |
-          FAILURE_TYPE="${{ steps.analyze.outputs.failure-type }}"
-          CONFIDENCE="${{ steps.analyze.outputs.confidence }}"
-          REASONING="${{ steps.analyze.outputs.reasoning }}"
-
+          # Check if we should skip (unknown failure type)
           echo "Classification: $FAILURE_TYPE (confidence: $CONFIDENCE)"
-          # Use printf with %s to safely output reasoning without bash interpreting special chars
           printf 'Reasoning: %s\n' "$REASONING"
 
-          # Skip unknown failure types
           if [ "$FAILURE_TYPE" = "unknown" ]; then
             echo "Failure type is unknown - skipping automated fix attempt"
-            printf 'Reasoning: %s\n' "$REASONING"
             echo "should-skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -202,6 +182,7 @@ jobs:
           case "$FAILURE_TYPE" in
             merge_conflict|test|lint|security|build)
               echo "✓ Failure type '$FAILURE_TYPE' is supported"
+              echo "should-skip=false" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "Unsupported failure type: $FAILURE_TYPE - skipping"
@@ -209,44 +190,30 @@ jobs:
               exit 0
               ;;
           esac
-
-          # Copy skills to target-repo so agent can use them
-          echo "Copying Claude Code skills to target repository..."
-          cp -r bot-repo/.claude target-repo/.claude
-          echo "✓ Skills copied to target-repo/.claude/"
-
-          # LAYER 1: Add bot files to git's local exclude list (safety net)
-          echo "Excluding bot files from git..."
-          {
-            echo "# AI Engineering Bot temporary files - DO NOT COMMIT"
-            echo ".claude/"
-            echo ".pr-context.json"
-          } >> target-repo/.git/info/exclude
-          echo "✓ Bot files added to .git/info/exclude"
-
-          echo "should-skip=false" >> $GITHUB_OUTPUT
-          echo "Ready to apply fixes using skills"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Install Claude Code CLI
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Setup Python for Agent SDK
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         uses: actions/setup-python@v6
         with:
           python-version-file: bot-repo/.python-version
 
       - name: Install uv (Python package manager)
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Authenticate to Google Cloud
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -254,42 +221,37 @@ jobs:
         continue-on-error: true
 
       - name: Set up Cloud SDK
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         uses: google-github-actions/setup-gcloud@v3
         continue-on-error: true
 
-      - name: Apply AI fixes using Claude Agent SDK with Skills
-        if: steps.prepare.outputs.should-skip != 'true'
+      - name: Apply AI fixes using Claude Agent SDK
+        if: steps.analyze.outputs.should-skip != 'true'
         id: fix
         working-directory: target-repo
         run: |
-          # Apply fixes using skills from .claude/skills/
+          # Apply fixes using the simplified fix command
+          # All preparation (skills copying, logs fetching, PR details) is now done in Python
           aieng-bot fix \
             --repo "${{ github.event.inputs.target_repo }}" \
-            --pr-number "${{ github.event.inputs.pr_number }}" \
-            --pr-title "${{ steps.pr-details.outputs.pr-title }}" \
-            --pr-author "${{ steps.pr-details.outputs.pr-author }}" \
-            --pr-url "https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}" \
-            --head-ref "${{ steps.pr-details.outputs.head-ref }}" \
-            --base-ref "${{ steps.pr-details.outputs.base-ref }}" \
-            --failure-type "${{ steps.analyze.outputs.failure-type }}" \
-            --failed-check-names "${{ steps.analyze.outputs.failed-check-names }}" \
-            --failure-logs-file ".failure-logs.txt" \
+            --pr "${{ github.event.inputs.pr_number }}" \
+            --cls /tmp/classification.json \
+            --cwd "$(pwd)" \
             --workflow-run-id "${{ github.run_id }}" \
-            --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --cwd "$(pwd)"
+            --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
         continue-on-error: false
 
       - name: Verify bot files not committed (Layer 3)
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         working-directory: target-repo
         run: |
           echo "Verifying bot temporary files are not staged or committed..."
 
           # Check if bot files are in staging area
-          BOT_FILES_STAGED=$(git diff --cached --name-only | grep -E "^\.claude/|^\.pr-context\.json$" || true)
+          BOT_FILES_STAGED=$(git diff --cached --name-only | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
 
           if [ -n "$BOT_FILES_STAGED" ]; then
             echo "❌ ERROR: Bot temporary files found in staging area!"
@@ -302,7 +264,7 @@ jobs:
 
           # Check if bot files exist in any unpushed commits
           BASE_REF="${{ steps.pr-details.outputs.base-ref }}"
-          BOT_FILES_COMMITTED=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^\.claude/|^\.pr-context\.json$" || true)
+          BOT_FILES_COMMITTED=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
 
           if [ -n "$BOT_FILES_COMMITTED" ]; then
             echo "⚠️  WARNING: Bot temporary files found in commits!"
@@ -314,10 +276,8 @@ jobs:
 
           echo "✓ No bot files found in staging area or commits"
 
-          # Cleanup bot files from working directory
-          echo "Cleaning up bot temporary files..."
-          rm -rf .claude/ .pr-context.json 2>/dev/null || true
-          echo "✓ Bot files cleaned up"
+          # Note: Cleanup is now handled by the fix command itself
+          echo "✓ Bot files cleanup handled by fix command"
 
       - name: Upload trace to GCS
         if: always()
@@ -447,7 +407,7 @@ jobs:
         continue-on-error: true
 
       - name: Check for changes and push
-        if: steps.prepare.outputs.should-skip != 'true'
+        if: steps.analyze.outputs.should-skip != 'true'
         id: push-fixes
         working-directory: target-repo
         run: |
@@ -469,12 +429,16 @@ jobs:
             git config user.email "aieng-bot@vectorinstitute.ai"
             git add -A
 
+            # Extract failure info from classification for commit message
+            FAILURE_TYPE=$(jq -r '.failure_type' /tmp/classification.json)
+            FAILED_CHECKS=$(jq -r '.failed_check_names | join(", ")' /tmp/classification.json)
+
             cat > /tmp/commit-message.txt <<EOF
-          Fix ${{ steps.analyze.outputs.failure-type }} failures after dependency updates
+          Fix ${FAILURE_TYPE} failures after dependency updates
 
           Automated fixes applied by AI Engineering Maintenance Bot
 
-          Fixes: ${{ steps.analyze.outputs.failed-check-names }}
+          Fixes: ${FAILED_CHECKS}
 
           Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
           EOF
@@ -497,7 +461,9 @@ jobs:
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
-          FAILURE_TYPE="${{ steps.analyze.outputs.failure-type }}"
+
+          # Extract failure type from classification
+          FAILURE_TYPE=$(jq -r '.failure_type' /tmp/classification.json)
 
           # Read the fix summary if available
           FIX_SUMMARY=""
