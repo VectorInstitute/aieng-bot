@@ -1,176 +1,370 @@
 """CLI command for PR failure classification."""
 
-import argparse
+import contextlib
 import json
+import os
 import sys
-import tempfile
+import traceback
+from typing import Any
 
 import click
+from dotenv import load_dotenv
 from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from ...classifier import PRFailureClassifier
-from ...classifier.models import ClassificationResult
-from ...utils.logging import get_console, log_error, log_info, log_success
-from ..utils import parse_pr_inputs
+from ...classifier.models import ClassificationResult, FailureType
+from ...utils.github_client import GitHubClient
+from ...utils.logging import get_console, log_error, log_info, log_success, log_warning
+
+# Load .env file at module import time (before Click processes envvars)
+load_dotenv()
 
 
-def _get_failure_logs_file(
-    failure_logs: str | None, failure_logs_file: str | None
-) -> str | None:
-    """Get failure logs file path, return None on error."""
-    if failure_logs_file:
-        return failure_logs_file
+def _check_environment_variables() -> tuple[bool, list[str]]:
+    """Check if required environment variables are set.
 
-    if failure_logs:
-        # Write logs to temp file
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".txt"
-        ) as temp_file:
-            temp_file.write(failure_logs)
-            return temp_file.name
+    Returns
+    -------
+    tuple[bool, list[str]]
+        (all_set, missing_vars) - True if all vars set, list of missing var names
 
-    log_error("Either --failure-logs or --failure-logs-file must be provided")
-    return None
+    """
+    required_vars = {
+        "ANTHROPIC_API_KEY": "Get from https://console.anthropic.com/settings/keys",
+        "GITHUB_TOKEN": "GitHub personal access token (or GH_TOKEN)",
+    }
 
+    missing = []
+    for var, description in required_vars.items():
+        if var == "GITHUB_TOKEN":
+            # Check both GITHUB_TOKEN and GH_TOKEN
+            if not os.environ.get("GITHUB_TOKEN") and not os.environ.get("GH_TOKEN"):
+                missing.append(f"{var} (or GH_TOKEN): {description}")
+        elif not os.environ.get(var):
+            missing.append(f"{var}: {description}")
 
-def _output_results(
-    result: ClassificationResult, output_format: str, console: Console
-) -> None:
-    """Output classification results in the specified format."""
-    if output_format == "json":
-        output = {
-            "failure_type": result.failure_type.value,
-            "confidence": result.confidence,
-            "reasoning": result.reasoning,
-            "failed_check_names": result.failed_check_names,
-            "recommended_action": result.recommended_action,
-        }
-        console.print_json(data=output)
-    else:  # github format - output for GITHUB_OUTPUT
-        # Use GitHub Actions heredoc delimiter format for multiline values
-        # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#multiline-strings
-        # This is the proper way to handle multiline strings in GitHub Actions
-
-        # Use print() directly to avoid Rich Console formatting/wrapping
-        # Simple single-line values use key=value format
-        print(f"failure-type={result.failure_type.value}", file=sys.stdout)
-        print(f"confidence={result.confidence}", file=sys.stdout)
-        print(
-            f"failed-check-names={','.join(result.failed_check_names)}",
-            file=sys.stdout,
-        )
-
-        # Multiline values use heredoc format
-        print("reasoning<<EOF_REASONING", file=sys.stdout)
-        print(result.reasoning, file=sys.stdout)
-        print("EOF_REASONING", file=sys.stdout)
-
-        print("recommended-action<<EOF_ACTION", file=sys.stdout)
-        print(result.recommended_action, file=sys.stdout)
-        print("EOF_ACTION", file=sys.stdout)
+    return len(missing) == 0, missing
 
 
-def _log_summary(result: ClassificationResult) -> None:
-    """Log summary of classification result."""
-    if result.failure_type.value != "unknown":
-        log_success(
-            f"Classified as [bold]{result.failure_type.value}[/bold] "
-            f"(confidence: {result.confidence:.2f})"
-        )
+def _output_rich_format(result: ClassificationResult, console: Console) -> None:
+    """Output classification results in Rich formatted style for terminal.
+
+    Parameters
+    ----------
+    result : ClassificationResult
+        Classification result to display.
+    console : Console
+        Rich console for output.
+
+    """
+    # Determine status color based on Vector Institute branding
+    # Vector colors: primary blue (#0066CC), teal (#00A0B0), orange (#FF6B35)
+    if result.failure_type == FailureType.UNKNOWN:
+        status_color = "yellow"
+        status_text = "UNKNOWN"
+    elif result.confidence < 0.7:
+        status_color = "yellow"
+        status_text = result.failure_type.value.upper()
     else:
-        log_error("Unable to classify failure (unknown type)")
-        sys.exit(1)
+        status_color = "bright_cyan"  # Vector teal
+        status_text = result.failure_type.value.upper()
+
+    # Build unified content
+    content = Text()
+
+    # Classification Result section
+    content.append("Classification Result\n", style="bold bright_blue")
+    content.append("─" * 60 + "\n", style="bright_blue dim")
+    content.append("Failure Type:   ", style="dim")
+    content.append(f"{status_text}\n", style=f"{status_color} bold")
+    content.append("Confidence:     ", style="dim")
+    content.append(f"{result.confidence:.1%}\n", style="white")
+
+    if result.failed_check_names:
+        content.append("Failed Checks:  ", style="dim")
+        content.append(f"{', '.join(result.failed_check_names)}\n", style="white")
+
+    content.append("\n")
+
+    # Reasoning section
+    content.append("Reasoning\n", style="bold #00A0B0")  # Vector teal
+    content.append("─" * 60 + "\n", style="#00A0B0 dim")
+    content.append(f"{result.reasoning}\n\n", style="white")
+
+    # Recommended Action section
+    content.append("Recommended Action\n", style="bold #FF6B35")  # Vector orange
+    content.append("─" * 60 + "\n", style="#FF6B35 dim")
+    content.append(f"{result.recommended_action}", style="white")
+
+    # Print in one unified panel
+    console.print()
+    console.print(
+        Panel(
+            content,
+            border_style="bright_blue",
+            padding=(1, 2),
+        )
+    )
+    console.print()
+
+
+def _get_json_output(result: ClassificationResult) -> dict[str, Any]:
+    """Get classification result as JSON dict.
+
+    Parameters
+    ----------
+    result : ClassificationResult
+        Classification result to convert.
+
+    Returns
+    -------
+    dict
+        JSON-serializable dictionary.
+
+    """
+    return {
+        "failure_type": result.failure_type.value,
+        "confidence": result.confidence,
+        "reasoning": result.reasoning,
+        "failed_check_names": result.failed_check_names,
+        "recommended_action": result.recommended_action,
+    }
+
+
+def _output_json_format(
+    result: ClassificationResult, console: Console, output_file: str | None = None
+) -> None:
+    """Output classification results in JSON format.
+
+    Parameters
+    ----------
+    result : ClassificationResult
+        Classification result to output.
+    console : Console
+        Rich console for output.
+    output_file : str, optional
+        If provided, write JSON to this file instead of stdout.
+
+    """
+    output = _get_json_output(result)
+
+    if output_file:
+        with open(output_file, "w") as f:
+            json.dump(output, f, indent=2)
+        log_success(f"Classification result saved to {output_file}")
+    else:
+        console.print_json(data=output)
+
+
+def _output_result(
+    result: ClassificationResult,
+    console: Console,
+    json_output: bool,
+    output_file: str | None,
+) -> None:
+    """Output classification result in the requested format.
+
+    Parameters
+    ----------
+    result : ClassificationResult
+        Classification result to output.
+    console : Console
+        Rich console for output.
+    json_output : bool
+        Whether to output as JSON.
+    output_file : str, optional
+        File path for JSON output.
+
+    """
+    if json_output or output_file:
+        _output_json_format(result, console, output_file)
+    else:
+        _output_rich_format(result, console)
+
+
+def _handle_merge_conflict(
+    console: Console, json_output: bool, output_file: str | None
+) -> None:
+    """Handle merge conflict case and exit.
+
+    Parameters
+    ----------
+    console : Console
+        Rich console for output.
+    json_output : bool
+        Whether to output as JSON.
+    output_file : str, optional
+        File path for JSON output.
+
+    """
+    log_warning("PR has merge conflicts")
+    result = ClassificationResult(
+        failure_type=FailureType.MERGE_CONFLICT,
+        confidence=1.0,
+        reasoning="PR has merge conflicts with base branch (mergeable=CONFLICTING)",
+        failed_check_names=["merge-conflict"],
+        recommended_action="Resolve merge conflicts manually or use automated conflict resolution",
+    )
+    _output_result(result, console, json_output, output_file)
+    sys.exit(0)
+
+
+def _handle_no_failed_checks(
+    console: Console, json_output: bool, output_file: str | None
+) -> None:
+    """Handle no failed checks case and exit.
+
+    Parameters
+    ----------
+    console : Console
+        Rich console for output.
+    json_output : bool
+        Whether to output as JSON.
+    output_file : str, optional
+        File path for JSON output.
+
+    """
+    log_warning("No failed checks found on this PR")
+    result = ClassificationResult(
+        failure_type=FailureType.UNKNOWN,
+        confidence=0.0,
+        reasoning="No failed CI checks found on this PR",
+        failed_check_names=[],
+        recommended_action="Verify that CI checks are configured and have run",
+    )
+    _output_result(result, console, json_output, output_file)
+    sys.exit(0)
 
 
 @click.command()
 @click.option(
-    "--pr-info",
+    "--repo",
     required=True,
-    help="PR info JSON string containing repo, pr_number, title, author, etc.",
+    help="Repository in format 'owner/repo' (e.g., VectorInstitute/aieng-template-mvp)",
 )
 @click.option(
-    "--failed-checks",
+    "--pr",
+    "pr_number",
     required=True,
-    help="Failed checks JSON array with check names and conclusions",
+    type=int,
+    help="Pull request number to classify",
 )
 @click.option(
-    "--failure-logs",
-    required=False,
-    help="Failure logs content (truncated). Use --failure-logs-file for large logs.",
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output in JSON format to stdout (default: Rich formatted for terminal)",
 )
 @click.option(
-    "--failure-logs-file",
-    required=False,
-    type=click.Path(exists=True),
-    help="Path to file containing failure logs (alternative to --failure-logs)",
+    "--output",
+    "output_file",
+    type=click.Path(),
+    help="Save JSON result to file (e.g., classification.json)",
 )
 @click.option(
-    "--output-format",
-    type=click.Choice(["json", "github"], case_sensitive=False),
-    default="github",
-    help="Output format: 'github' for GitHub Actions variables, 'json' for structured output",
+    "--github-token",
+    envvar="GITHUB_TOKEN",
+    help="GitHub token (or set GITHUB_TOKEN/GH_TOKEN env var)",
+)
+@click.option(
+    "--anthropic-api-key",
+    envvar="ANTHROPIC_API_KEY",
+    help="Anthropic API key (or set ANTHROPIC_API_KEY env var)",
 )
 def classify(
-    pr_info: str,
-    failed_checks: str,
-    failure_logs: str | None,
-    failure_logs_file: str | None,
-    output_format: str,
+    repo: str,
+    pr_number: int,
+    json_output: bool,
+    output_file: str | None,
+    github_token: str | None,
+    anthropic_api_key: str | None,
 ) -> None:
-    r"""Classify PR failure type using Claude API.
+    r"""Classify PR failure type using Claude AI.
 
-    Analyzes PR context, failed checks, and logs to determine failure category
-    (test, lint, security, build, merge_conflict, unknown).
+    Analyzes a GitHub PR to determine the type of CI/CD failure
+    (test, lint, security, build, merge_conflict, or unknown).
 
+    \b
     Examples:
-      \b
-      # Classify with GitHub Actions output
-      aieng-bot classify --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
-        --failure-logs-file logs.txt
+      # Rich formatted output (default)
+      aieng-bot classify --repo VectorInstitute/aieng-template-mvp --pr 17
+    \b
+      # JSON output to stdout
+      aieng-bot classify --repo VectorInstitute/repo-name --pr 123 --json
+    \b
+      # Save JSON to file
+      aieng-bot classify --repo owner/repo --pr 42 --output classification.json
 
-      \b
-      # Classify with JSON output
-      aieng-bot classify --pr-info '$PR_JSON' --failed-checks '$CHECKS_JSON' \\
-        --failure-logs "$(cat logs.txt)" --output-format json
+    \b
+    Required Environment Variables:
+      ANTHROPIC_API_KEY  - Claude API key (https://console.anthropic.com)
+      GITHUB_TOKEN       - GitHub token (or GH_TOKEN)
 
     """
     console = get_console()
 
-    try:
-        # Parse inputs - create argparse.Namespace for compatibility with parse_pr_inputs
-        args = argparse.Namespace(pr_info=pr_info, failed_checks=failed_checks)
-        pr_context, failed_check_list = parse_pr_inputs(args)
+    # Check environment variables
+    env_ok, missing_vars = _check_environment_variables()
+    if not env_ok:
+        log_error("Missing required environment variables:")
+        for var_info in missing_vars:
+            console.print(f"  • {var_info}", style="red")
+        console.print()
+        console.print(
+            "💡 Tip: Create a .env file with these variables or export them in your shell",
+            style="yellow",
+        )
+        sys.exit(1)
 
-        # Get failure logs file path
-        failure_logs_path = _get_failure_logs_file(failure_logs, failure_logs_file)
-        if not failure_logs_path:
-            sys.exit(1)
+    try:
+        # Initialize GitHub client
+        log_info(f"Analyzing PR {repo}#{pr_number}")
+        github_client = GitHubClient(github_token=github_token)
+
+        # Check for merge conflicts first (fast path)
+        if github_client.check_merge_conflicts(repo, pr_number):
+            _handle_merge_conflict(console, json_output, output_file)
+
+        # Fetch PR details
+        pr_context = github_client.get_pr_details(repo, pr_number)
+        log_success(f"PR: {pr_context.pr_title}")
+        log_info(f"Author: {pr_context.pr_author}")
+        log_info(f"Branch: {pr_context.head_ref} → {pr_context.base_ref}")
+
+        # Fetch failed checks
+        failed_checks = github_client.get_failed_checks(repo, pr_number)
+        if not failed_checks:
+            _handle_no_failed_checks(console, json_output, output_file)
+
+        log_info(f"Found {len(failed_checks)} failed checks")
+        for check in failed_checks:
+            log_info(f"  • {check.name}")
+
+        # Fetch failure logs (full logs, no truncation)
+        failure_logs_file = github_client.get_failure_logs(repo, failed_checks)
 
         # Run classification
-        log_info(f"Classifying PR {pr_context.repo}#{pr_context.pr_number}")
-        log_info(f"Number of failed checks: {len(failed_check_list)}")
-        log_info(f"Failure logs file: {failure_logs_path}")
+        log_info("Classifying failure type using Claude AI...")
+        classifier = PRFailureClassifier(api_key=anthropic_api_key)
+        result = classifier.classify(pr_context, failed_checks, failure_logs_file)
 
-        classifier = PRFailureClassifier()
-        result = classifier.classify(pr_context, failed_check_list, failure_logs_path)
+        # Clean up temp log file
+        with contextlib.suppress(Exception):
+            os.unlink(failure_logs_file)
 
-        log_info(
-            f"Classification result: {result.failure_type.value} "
-            f"(confidence: {result.confidence:.2f})"
-        )
+        # Output result
+        _output_result(result, console, json_output, output_file)
 
-        # Output results
-        _output_results(result, output_format, console)
+        # Exit with error code if classification failed
+        if result.failure_type == FailureType.UNKNOWN:
+            sys.exit(1)
 
-        # Log summary
-        _log_summary(result)
-
-    except json.JSONDecodeError as e:
-        log_error(f"Invalid JSON input: {e}")
-        sys.exit(1)
-    except KeyError as e:
-        log_error(f"Missing required field in input: {e}")
+    except ValueError as e:
+        log_error(str(e))
         sys.exit(1)
     except Exception as e:
         log_error(f"Unexpected error: {e}")
+        console.print(traceback.format_exc(), style="red dim")
         sys.exit(1)
