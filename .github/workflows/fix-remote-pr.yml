@@ -356,7 +356,7 @@ jobs:
 
       - name: Apply AI fixes using Claude Agent SDK with Skills
         if: steps.prepare.outputs.should-skip != 'true'
-        id: claude-fix
+        id: fix
         working-directory: target-repo
         run: |
           # Apply fixes using skills from .claude/skills/
@@ -489,8 +489,8 @@ jobs:
               "type": "bot_fix",
               "repo": "${{ github.event.inputs.target_repo }}",
               "pr_number": ${{ github.event.inputs.pr_number }},
-              "pr_title": "${{ steps.pr-details.outputs.title }}",
-              "pr_author": "${{ steps.pr-details.outputs.author }}",
+              "pr_title": "${{ steps.pr-details.outputs.pr-title }}",
+              "pr_author": "${{ steps.pr-details.outputs.pr-author }}",
               "pr_url": "https://github.com/${{ github.event.inputs.target_repo }}/pull/${{ github.event.inputs.pr_number }}",
               "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
               "workflow_run_id": "${{ github.run_id }}",
@@ -543,7 +543,7 @@ jobs:
         continue-on-error: true
 
       - name: Check for changes and push
-        if: steps.prepare-prompt.outputs.should-skip != 'true'
+        if: steps.prepare.outputs.should-skip != 'true'
         id: push-fixes
         working-directory: target-repo
         run: |
@@ -569,11 +569,11 @@ jobs:
             git add -A
 
             cat > /tmp/commit-message.txt <<EOF
-          Fix ${{ steps.analyze.outputs.primary-type }} failures after dependency updates
+          Fix ${{ steps.analyze.outputs.failure-type }} failures after dependency updates
 
           Automated fixes applied by AI Engineering Maintenance Bot
 
-          Fixes: ${{ steps.analyze.outputs.failed-names }}
+          Fixes: ${{ steps.analyze.outputs.failed-check-names }}
 
           Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
           EOF
@@ -596,7 +596,7 @@ jobs:
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
-          FAILURE_TYPE="${{ steps.analyze.outputs.primary-type }}"
+          FAILURE_TYPE="${{ steps.analyze.outputs.failure-type }}"
 
           # Read the fix summary if available
           FIX_SUMMARY=""
@@ -628,7 +628,7 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Wait for checks to complete
-        if: steps.apply-fix.outcome == 'success'
+        if: steps.fix.outcome == 'success'
         id: wait-checks
         run: |
           REPO="${{ github.event.inputs.target_repo }}"

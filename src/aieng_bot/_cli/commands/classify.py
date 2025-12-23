@@ -59,14 +59,17 @@ def _output_results(
         reasoning_escaped = escape_for_bash(result.reasoning)
         action_escaped = escape_for_bash(result.recommended_action)
 
-        # Use console.print with highlight=False to output plain text for GitHub Actions
-        console.print(f"failure-type={result.failure_type.value}", highlight=False)
-        console.print(f"confidence={result.confidence}", highlight=False)
-        console.print(f"reasoning={reasoning_escaped}", highlight=False)
-        console.print(
-            f"failed-check-names={','.join(result.failed_check_names)}", highlight=False
+        # Create a stdout console for GitHub Actions output (stderr console is used for logging)
+        stdout_console = Console(stderr=False, highlight=False)
+
+        # Output to stdout for GitHub Actions to capture
+        stdout_console.print(f"failure-type={result.failure_type.value}")
+        stdout_console.print(f"confidence={result.confidence}")
+        stdout_console.print(f"reasoning={reasoning_escaped}")
+        stdout_console.print(
+            f"failed-check-names={','.join(result.failed_check_names)}"
         )
-        console.print(f"recommended-action={action_escaped}", highlight=False)
+        stdout_console.print(f"recommended-action={action_escaped}")
 
 
 def _log_summary(result: ClassificationResult) -> None:
