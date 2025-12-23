@@ -46,30 +46,28 @@ def _output_results(
         }
         console.print_json(data=output)
     else:  # github format - output for GITHUB_OUTPUT
-        # Escape special characters to prevent bash interpretation
-        # Replace backticks, dollar signs, and double quotes
-        def escape_for_bash(s: str) -> str:
-            return (
-                s.replace("\\", "\\\\")
-                .replace("`", "\\`")
-                .replace("$", "\\$")
-                .replace('"', '\\"')
-            )
-
-        reasoning_escaped = escape_for_bash(result.reasoning)
-        action_escaped = escape_for_bash(result.recommended_action)
+        # Use GitHub Actions heredoc delimiter format for multiline values
+        # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#multiline-strings
 
         # Create a stdout console for GitHub Actions output (stderr console is used for logging)
         stdout_console = Console(stderr=False, highlight=False)
 
-        # Output to stdout for GitHub Actions to capture
+        # Simple values can use key=value format
         stdout_console.print(f"failure-type={result.failure_type.value}")
         stdout_console.print(f"confidence={result.confidence}")
-        stdout_console.print(f"reasoning={reasoning_escaped}")
         stdout_console.print(
             f"failed-check-names={','.join(result.failed_check_names)}"
         )
-        stdout_console.print(f"recommended-action={action_escaped}")
+
+        # Use heredoc delimiter for potentially multiline fields
+        # This prevents issues with special characters and newlines
+        stdout_console.print("reasoning<<EOF_REASONING")
+        stdout_console.print(result.reasoning)
+        stdout_console.print("EOF_REASONING")
+
+        stdout_console.print("recommended-action<<EOF_ACTION")
+        stdout_console.print(result.recommended_action)
+        stdout_console.print("EOF_ACTION")
 
 
 def _log_summary(result: ClassificationResult) -> None:
