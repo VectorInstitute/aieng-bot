@@ -639,65 +639,38 @@ jobs:
           echo "Waiting for CI checks to complete before triggering auto-merge..."
           echo ""
 
-          MAX_WAIT_MINUTES=15
-          CHECK_INTERVAL=30  # Check every 30 seconds
-          MAX_ATTEMPTS=$((MAX_WAIT_MINUTES * 60 / CHECK_INTERVAL))
-          ATTEMPT=1
+          # Use Python CLI for check waiting (testable, maintainable)
+          cd bot-repo
+          if aieng-bot wait-checks --repo "$REPO" --pr-number "$PR_NUMBER" --max-wait-minutes 15 --check-interval 30; then
+            echo "checks_completed=true" >> $GITHUB_OUTPUT
+          else
+            EXIT_CODE=$?
+            echo "checks_completed=false" >> $GITHUB_OUTPUT
 
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "⏳ Check attempt $ATTEMPT/$MAX_ATTEMPTS (waiting ${CHECK_INTERVAL}s between checks)..."
-
-            # Get check status
-            STATUS=$(gh pr view $PR_NUMBER --repo "$REPO" --json statusCheckRollup --jq '
-              .statusCheckRollup
-              | if . == null or length == 0 then
-                  "NO_CHECKS"
-                else
-                  if any(.conclusion == null or .conclusion == "" or .status == "IN_PROGRESS" or .status == "QUEUED" or .status == "PENDING") then
-                    "RUNNING"
-                  elif any(.conclusion == "FAILURE") then
-                    "FAILED"
-                  else
-                    "COMPLETED"
-                  end
-                end
-            ')
-
-            echo "  Status: $STATUS"
-
-            if [ "$STATUS" = "COMPLETED" ]; then
-              echo ""
-              echo "✅ All checks completed successfully!"
-              echo "checks_completed=true" >> $GITHUB_OUTPUT
-              break
-            elif [ "$STATUS" = "FAILED" ]; then
-              echo ""
-              echo "❌ Some checks failed. Will not trigger auto-merge."
-              echo "   The monitor workflow will re-attempt fixes on its next run."
-              echo "checks_completed=false" >> $GITHUB_OUTPUT
-              exit 0
-            elif [ "$STATUS" = "NO_CHECKS" ] && [ $ATTEMPT -gt 2 ]; then
-              # If no checks after 1 minute, something might be wrong
-              echo ""
-              echo "⚠️  No checks found on PR. This might indicate:"
-              echo "   - Repository has no CI configured"
-              echo "   - Checks haven't started yet (will retry)"
-              echo ""
-            fi
-
-            # If this is the last attempt, give up and let scheduled monitor handle it
-            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-              echo ""
-              echo "⏱️  Timeout: Checks still running after ${MAX_WAIT_MINUTES} minutes"
-              echo "   Will not trigger auto-merge now."
-              echo "   The monitor workflow (runs every 6h) will merge when checks complete."
-              echo "checks_completed=false" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-
-            sleep $CHECK_INTERVAL
-            ATTEMPT=$((ATTEMPT + 1))
-          done
+            # Provide helpful messages based on exit code
+            case $EXIT_CODE in
+              1)
+                echo ""
+                echo "❌ Some checks failed. Will not trigger auto-merge."
+                echo "   The monitor workflow will re-attempt fixes on its next run."
+                ;;
+              2)
+                echo ""
+                echo "⏱️  Timeout: Checks still running after 15 minutes"
+                echo "   Will not trigger auto-merge now."
+                echo "   The monitor workflow (runs every 6h) will merge when checks complete."
+                ;;
+              3)
+                echo ""
+                echo "⚠️  No checks found on PR. This might indicate:"
+                echo "   - Repository has no CI configured"
+                echo "   - Checks haven't started yet"
+                ;;
+              *)
+                echo "❌ Error checking PR status (exit code: $EXIT_CODE)"
+                ;;
+            esac
+          fi
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
