@@ -12,7 +12,7 @@ def get_model_name() -> str:
     Returns
     -------
     str
-        The full model identifier (e.g., "claude-sonnet-4.5-20250929").
+        The full model identifier (e.g., "claude-sonnet-4-5-20250929").
 
     """
-    return os.getenv("CLAUDE_MODEL", "claude-sonnet-4.5-20250929")
+    return os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
