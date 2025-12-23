@@ -181,7 +181,7 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Setup Python for classification
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -331,7 +331,7 @@ jobs:
 
       - name: Setup Python for Agent SDK
         if: steps.prepare.outputs.should-skip != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: bot-repo/.python-version
 
