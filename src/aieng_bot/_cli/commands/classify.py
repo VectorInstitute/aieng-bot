@@ -1,5 +1,6 @@
 """CLI command for PR failure classification."""
 
+import argparse
 import json
 import sys
 import tempfile
@@ -48,26 +49,25 @@ def _output_results(
     else:  # github format - output for GITHUB_OUTPUT
         # Use GitHub Actions heredoc delimiter format for multiline values
         # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#multiline-strings
+        # This is the proper way to handle multiline strings in GitHub Actions
 
-        # Create a stdout console for GitHub Actions output (stderr console is used for logging)
-        stdout_console = Console(stderr=False, highlight=False)
-
-        # Simple values can use key=value format
-        stdout_console.print(f"failure-type={result.failure_type.value}")
-        stdout_console.print(f"confidence={result.confidence}")
-        stdout_console.print(
-            f"failed-check-names={','.join(result.failed_check_names)}"
+        # Use print() directly to avoid Rich Console formatting/wrapping
+        # Simple single-line values use key=value format
+        print(f"failure-type={result.failure_type.value}", file=sys.stdout)
+        print(f"confidence={result.confidence}", file=sys.stdout)
+        print(
+            f"failed-check-names={','.join(result.failed_check_names)}",
+            file=sys.stdout,
         )
 
-        # Use heredoc delimiter for potentially multiline fields
-        # This prevents issues with special characters and newlines
-        stdout_console.print("reasoning<<EOF_REASONING")
-        stdout_console.print(result.reasoning)
-        stdout_console.print("EOF_REASONING")
+        # Multiline values use heredoc format
+        print("reasoning<<EOF_REASONING", file=sys.stdout)
+        print(result.reasoning, file=sys.stdout)
+        print("EOF_REASONING", file=sys.stdout)
 
-        stdout_console.print("recommended-action<<EOF_ACTION")
-        stdout_console.print(result.recommended_action)
-        stdout_console.print("EOF_ACTION")
+        print("recommended-action<<EOF_ACTION", file=sys.stdout)
+        print(result.recommended_action, file=sys.stdout)
+        print("EOF_ACTION", file=sys.stdout)
 
 
 def _log_summary(result: ClassificationResult) -> None:
@@ -138,8 +138,6 @@ def classify(
 
     try:
         # Parse inputs - create argparse.Namespace for compatibility with parse_pr_inputs
-        import argparse  # noqa: PLC0415
-
         args = argparse.Namespace(pr_info=pr_info, failed_checks=failed_checks)
         pr_context, failed_check_list = parse_pr_inputs(args)
 

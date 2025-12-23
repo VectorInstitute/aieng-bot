@@ -275,12 +275,13 @@ jobs:
           REASONING="${{ steps.analyze.outputs.reasoning }}"
 
           echo "Classification: $FAILURE_TYPE (confidence: $CONFIDENCE)"
-          echo "Reasoning: $REASONING"
+          # Use printf with %s to safely output reasoning without bash interpreting special chars
+          printf 'Reasoning: %s\n' "$REASONING"
 
           # Skip unknown failure types
           if [ "$FAILURE_TYPE" = "unknown" ]; then
             echo "Failure type is unknown - skipping automated fix attempt"
-            echo "Reasoning: $REASONING"
+            printf 'Reasoning: %s\n' "$REASONING"
             echo "should-skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
