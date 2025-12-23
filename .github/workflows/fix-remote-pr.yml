@@ -39,20 +39,20 @@ jobs:
         with:
           path: bot-repo
 
-      - name: Get PR details
+      - name: Get PR basic info for checkout
         id: pr-details
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
 
-          # Get PR information including mergeable status
+          # Get minimal PR info needed for checkout (full details fetched by CLI)
           PR_INFO=$(gh pr view $PR_NUMBER --repo "$REPO" --json \
-            title,author,headRefName,headRepository,headRepositoryOwner,statusCheckRollup,baseRefName,mergeable)
+            title,author,headRefName,baseRefName,mergeable)
 
           echo "PR Info:"
           echo "$PR_INFO" | jq '.'
 
-          # Extract details
+          # Extract details for checkout step
           HEAD_REF=$(echo "$PR_INFO" | jq -r '.headRefName')
           BASE_REF=$(echo "$PR_INFO" | jq -r '.baseRefName')
           PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
@@ -65,13 +65,8 @@ jobs:
           echo "pr-author=$PR_AUTHOR" >> $GITHUB_OUTPUT
           echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
 
-          # Get failed checks
-          FAILED_CHECKS=$(echo "$PR_INFO" | jq -c '[.statusCheckRollup[] | select(.conclusion == "FAILURE")]')
-          echo "failed-checks=$FAILED_CHECKS" >> $GITHUB_OUTPUT
-
-          FAILED_COUNT=$(echo "$FAILED_CHECKS" | jq 'length')
-          echo "Found $FAILED_COUNT failed checks"
-          echo "PR mergeable status: $MERGEABLE"
+          echo "Branch: $HEAD_REF → $BASE_REF"
+          echo "Mergeable: $MERGEABLE"
         env:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
@@ -122,63 +117,6 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Get failure logs
-        id: get-logs
-        run: |
-          REPO="${{ github.event.inputs.target_repo }}"
-          FAILED_CHECKS='${{ steps.pr-details.outputs.failed-checks }}'
-
-          echo "Extracting failure logs from failed checks..."
-
-          # Extract job URLs and fetch their logs
-          > /tmp/failure-logs.txt
-
-          echo "$FAILED_CHECKS" | jq -r '.[].detailsUrl' | while read -r JOB_URL; do
-            if [ -n "$JOB_URL" ]; then
-              # Extract run ID and job ID from URL
-              # Format: https://github.com/OWNER/REPO/actions/runs/RUN_ID/job/JOB_ID
-              RUN_ID=$(echo "$JOB_URL" | grep -oP 'runs/\K[0-9]+')
-              JOB_ID=$(echo "$JOB_URL" | grep -oP 'job/\K[0-9]+')
-
-              echo "Fetching logs for job $JOB_ID in run $RUN_ID"
-
-              # Fetch full run logs
-              gh run view "$RUN_ID" --repo "$REPO" --log > /tmp/full-logs.txt 2>&1 || continue
-
-              # Extract relevant failure sections (errors, failures, security issues)
-              grep -i -E "(error|fail|traceback|exception|exit code [^0]|vulnerability|vulnerabilities|CVE-|GHSA-|audit|found [0-9]+ known)" /tmp/full-logs.txt | tail -2000 >> /tmp/failure-logs.txt || true
-
-              # Also get the last 1000 lines which often contain the summary
-              tail -1000 /tmp/full-logs.txt >> /tmp/failure-logs.txt
-
-              rm -f /tmp/full-logs.txt
-            fi
-          done
-
-          # If we got no logs, try fallback method
-          if [ ! -s /tmp/failure-logs.txt ]; then
-            echo "No logs from specific jobs, trying fallback..."
-            HEAD_REF="${{ steps.pr-details.outputs.head-ref }}"
-            RUN_ID=$(gh run list --repo "$REPO" --branch "$HEAD_REF" --limit 5 \
-              --json databaseId,status,conclusion \
-              --jq '.[] | select(.conclusion == "failure") | .databaseId' | head -1)
-
-            if [ -n "$RUN_ID" ]; then
-              gh run view $RUN_ID --repo "$REPO" --log > /tmp/full-logs.txt 2>&1
-              grep -i -E "(error|fail|traceback|exception|exit code [^0]|vulnerability|vulnerabilities|CVE-|GHSA-|audit|found [0-9]+ known)" /tmp/full-logs.txt | tail -2000 > /tmp/failure-logs.txt || true
-              tail -1000 /tmp/full-logs.txt >> /tmp/failure-logs.txt
-              rm -f /tmp/full-logs.txt
-            fi
-          fi
-
-          # Log the size of extracted logs
-          if [ -f /tmp/failure-logs.txt ] && [ -s /tmp/failure-logs.txt ]; then
-            echo "Extracted $(wc -l < /tmp/failure-logs.txt) lines of failure logs"
-          else
-            echo "No failure logs could be extracted" > /tmp/failure-logs.txt
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Setup Python for classification
         uses: actions/setup-python@v6
@@ -192,80 +130,54 @@ jobs:
 
       - name: Analyze failure type with Claude
         id: analyze
-        working-directory: target-repo
+        working-directory: bot-repo
         run: |
-          FAILED_CHECKS='${{ steps.pr-details.outputs.failed-checks }}'
-          MERGEABLE='${{ steps.pr-details.outputs.mergeable }}'
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
 
-          echo "Analyzing failures with Claude-based classifier..."
-          echo "$FAILED_CHECKS" | jq -r '.[] | "\(.name): \(.conclusion)"'
+          echo "Analyzing PR $REPO#$PR_NUMBER with Claude-based classifier..."
+          echo ""
 
-          # Check for merge conflicts first via PR mergeable status
-          if [ "$MERGEABLE" = "CONFLICTING" ]; then
-            echo "failure-type=merge_conflict" >> $GITHUB_OUTPUT
-            echo "failed-check-names=merge-conflict" >> $GITHUB_OUTPUT
-            echo "confidence=1.0" >> $GITHUB_OUTPUT
-            echo "reasoning=PR has merge conflicts with base branch (mergeable=CONFLICTING)" >> $GITHUB_OUTPUT
-            echo "✓ Detected merge conflicts via PR mergeable status"
-            exit 0
-          fi
-
-          # Also check git status as fallback
-          if git status | grep -q "Unmerged paths\|merge conflict"; then
-            echo "failure-type=merge_conflict" >> $GITHUB_OUTPUT
-            echo "failed-check-names=merge-conflict" >> $GITHUB_OUTPUT
-            echo "confidence=1.0" >> $GITHUB_OUTPUT
-            echo "reasoning=Git merge conflicts detected in working tree" >> $GITHUB_OUTPUT
-            echo "✓ Detected merge conflicts via git status"
-            exit 0
-          fi
-
-          # Prepare PR context JSON
-          PR_INFO=$(jq -n \
-            --arg repo "${{ github.event.inputs.target_repo }}" \
-            --arg pr_number "${{ github.event.inputs.pr_number }}" \
-            --arg pr_title "${{ steps.pr-details.outputs.pr-title }}" \
-            --arg pr_author "${{ steps.pr-details.outputs.pr-author }}" \
-            --arg base_ref "${{ steps.pr-details.outputs.base-ref }}" \
-            --arg head_ref "${{ steps.pr-details.outputs.head-ref }}" \
-            '{repo: $repo, pr_number: $pr_number, pr_title: $pr_title, pr_author: $pr_author, base_ref: $base_ref, head_ref: $head_ref}')
-
-          # Check if failure logs file exists
-          if [ ! -f /tmp/failure-logs.txt ]; then
-            echo "⚠️  Warning: Failure logs file not found at /tmp/failure-logs.txt"
-            echo "No failure logs could be extracted" > /tmp/failure-logs.txt
-          fi
-
-          echo "Failure logs file size: $(wc -c < /tmp/failure-logs.txt) bytes"
-          echo "Failure logs file lines: $(wc -l < /tmp/failure-logs.txt) lines"
-
-          # Run Python classifier (using installed CLI entry point)
-          # Pass file path instead of content to avoid bash variable size limits
-          cd ../bot-repo
-
-          echo "Running classifier..."
+          # Run classify command and save JSON to file
           if ! aieng-bot classify \
-            --pr-info "$PR_INFO" \
-            --failed-checks "$FAILED_CHECKS" \
-            --failure-logs-file /tmp/failure-logs.txt \
-            --output-format github > /tmp/classification-output.txt 2> /tmp/classification-error.txt; then
+            --repo "$REPO" \
+            --pr "$PR_NUMBER" \
+            --output /tmp/classification.json 2> /tmp/classification-error.txt; then
             echo "❌ Classification failed with exit code $?"
-            echo "STDOUT:"
-            cat /tmp/classification-output.txt || echo "(no stdout)"
-            echo ""
             echo "STDERR:"
             cat /tmp/classification-error.txt || echo "(no stderr)"
             exit 1
           fi
 
-          CLASSIFICATION=$(cat /tmp/classification-output.txt)
-
-          # Parse and output results
-          echo "$CLASSIFICATION" >> $GITHUB_OUTPUT
+          # Parse JSON and output to GitHub Actions
           echo "Classification results:"
-          echo "$CLASSIFICATION"
+          cat /tmp/classification.json
+          echo ""
+
+          # Extract fields from JSON
+          FAILURE_TYPE=$(jq -r '.failure_type' /tmp/classification.json)
+          CONFIDENCE=$(jq -r '.confidence' /tmp/classification.json)
+          FAILED_CHECK_NAMES=$(jq -r '.failed_check_names | join(",")' /tmp/classification.json)
+          REASONING=$(jq -r '.reasoning' /tmp/classification.json)
+          RECOMMENDED_ACTION=$(jq -r '.recommended_action' /tmp/classification.json)
+
+          # Output to GitHub Actions
+          echo "failure-type=$FAILURE_TYPE" >> $GITHUB_OUTPUT
+          echo "confidence=$CONFIDENCE" >> $GITHUB_OUTPUT
+          echo "failed-check-names=$FAILED_CHECK_NAMES" >> $GITHUB_OUTPUT
+          {
+            echo "reasoning<<EOF_REASONING"
+            echo "$REASONING"
+            echo "EOF_REASONING"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "recommended-action<<EOF_ACTION"
+            echo "$RECOMMENDED_ACTION"
+            echo "EOF_ACTION"
+          } >> $GITHUB_OUTPUT
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Prepare for agent execution
         id: prepare
@@ -303,21 +215,12 @@ jobs:
           cp -r bot-repo/.claude target-repo/.claude
           echo "✓ Skills copied to target-repo/.claude/"
 
-          # Copy failure logs to target-repo so agent can read it
-          if [ -f /tmp/failure-logs.txt ]; then
-            cp /tmp/failure-logs.txt target-repo/.failure-logs.txt
-            echo "✓ Failure logs copied to target-repo/.failure-logs.txt"
-          else
-            echo "⚠️  Warning: No failure logs found at /tmp/failure-logs.txt"
-          fi
-
           # LAYER 1: Add bot files to git's local exclude list (safety net)
           echo "Excluding bot files from git..."
           {
             echo "# AI Engineering Bot temporary files - DO NOT COMMIT"
             echo ".claude/"
             echo ".pr-context.json"
-            echo ".failure-logs.txt"
           } >> target-repo/.git/info/exclude
           echo "✓ Bot files added to .git/info/exclude"
 
@@ -386,7 +289,7 @@ jobs:
           echo "Verifying bot temporary files are not staged or committed..."
 
           # Check if bot files are in staging area
-          BOT_FILES_STAGED=$(git diff --cached --name-only | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
+          BOT_FILES_STAGED=$(git diff --cached --name-only | grep -E "^\.claude/|^\.pr-context\.json$" || true)
 
           if [ -n "$BOT_FILES_STAGED" ]; then
             echo "❌ ERROR: Bot temporary files found in staging area!"
@@ -399,7 +302,7 @@ jobs:
 
           # Check if bot files exist in any unpushed commits
           BASE_REF="${{ steps.pr-details.outputs.base-ref }}"
-          BOT_FILES_COMMITTED=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
+          BOT_FILES_COMMITTED=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^\.claude/|^\.pr-context\.json$" || true)
 
           if [ -n "$BOT_FILES_COMMITTED" ]; then
             echo "⚠️  WARNING: Bot temporary files found in commits!"
@@ -413,7 +316,7 @@ jobs:
 
           # Cleanup bot files from working directory
           echo "Cleaning up bot temporary files..."
-          rm -rf .claude/ .pr-context.json .failure-logs.txt 2>/dev/null || true
+          rm -rf .claude/ .pr-context.json 2>/dev/null || true
           echo "✓ Bot files cleaned up"
 
       - name: Upload trace to GCS
@@ -548,9 +451,6 @@ jobs:
         id: push-fixes
         working-directory: target-repo
         run: |
-          # Remove failure logs file (don't commit it to the repo)
-          rm -f .failure-logs.txt
-
           # Check if Agent SDK created a commit (check if HEAD differs from remote)
           git fetch origin ${{ steps.pr-details.outputs.head-ref }}
 

@@ -160,6 +160,27 @@ class PRFailureClassifier:
             except json.JSONDecodeError:
                 pass
 
+        # Strategy 4: Try to fix incomplete JSON (missing closing braces)
+        if start_idx != -1:
+            potential_json = response_text[start_idx:]
+            # Count opening and closing braces
+            open_braces = potential_json.count("{")
+            close_braces = potential_json.count("}")
+
+            if open_braces > close_braces:
+                # Add missing closing braces
+                potential_json = potential_json.rstrip() + (
+                    "}" * (open_braces - close_braces)
+                )
+                try:
+                    result = json.loads(potential_json)
+                    log_warning(
+                        f"Fixed incomplete JSON by adding {open_braces - close_braces} closing braces"
+                    )
+                    return result
+                except json.JSONDecodeError:
+                    pass
+
         # All strategies failed
         log_error(f"Failed to parse JSON from response (length: {len(response_text)})")
         log_error(f"Response preview: {response_text[:500]}")
@@ -174,7 +195,7 @@ class PRFailureClassifier:
         max_turns = 15  # Allow more turns for complex log analysis
         response_text = ""
 
-        for turn in range(max_turns):
+        for _turn in range(max_turns):
             response = self.client.messages.create(
                 model="claude-haiku-4-5",
                 max_tokens=8192,
@@ -198,9 +219,13 @@ class PRFailureClassifier:
                     raise ValueError("No text content in final Claude response")
 
                 response_text = response_text.strip()
-                log_info(
-                    f"Claude classification (turn {turn + 1}): {response_text[:500]}"
-                )
+
+                # Check if response was truncated
+                if response.stop_reason == "max_tokens":
+                    log_warning(
+                        "Claude response hit max_tokens limit - response may be incomplete"
+                    )
+
                 break
 
             # Build assistant message with response content blocks
