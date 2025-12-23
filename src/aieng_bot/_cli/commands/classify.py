@@ -5,6 +5,7 @@ import sys
 import tempfile
 
 import click
+from rich.console import Console
 
 from ...classifier import PRFailureClassifier
 from ...classifier.models import ClassificationResult
@@ -32,7 +33,7 @@ def _get_failure_logs_file(
 
 
 def _output_results(
-    result: ClassificationResult, output_format: str, console: object
+    result: ClassificationResult, output_format: str, console: Console
 ) -> None:
     """Output classification results in the specified format."""
     if output_format == "json":
@@ -43,13 +44,29 @@ def _output_results(
             "failed_check_names": result.failed_check_names,
             "recommended_action": result.recommended_action,
         }
-        console.print_json(data=output)  # type: ignore[attr-defined]
+        console.print_json(data=output)
     else:  # github format - output for GITHUB_OUTPUT
-        print(f"failure-type={result.failure_type.value}")
-        print(f"confidence={result.confidence}")
-        print(f"reasoning={result.reasoning}")
-        print(f"failed-check-names={','.join(result.failed_check_names)}")
-        print(f"recommended-action={result.recommended_action}")
+        # Escape special characters to prevent bash interpretation
+        # Replace backticks, dollar signs, and double quotes
+        def escape_for_bash(s: str) -> str:
+            return (
+                s.replace("\\", "\\\\")
+                .replace("`", "\\`")
+                .replace("$", "\\$")
+                .replace('"', '\\"')
+            )
+
+        reasoning_escaped = escape_for_bash(result.reasoning)
+        action_escaped = escape_for_bash(result.recommended_action)
+
+        # Use console.print with highlight=False to output plain text for GitHub Actions
+        console.print(f"failure-type={result.failure_type.value}", highlight=False)
+        console.print(f"confidence={result.confidence}", highlight=False)
+        console.print(f"reasoning={reasoning_escaped}", highlight=False)
+        console.print(
+            f"failed-check-names={','.join(result.failed_check_names)}", highlight=False
+        )
+        console.print(f"recommended-action={action_escaped}", highlight=False)
 
 
 def _log_summary(result: ClassificationResult) -> None:
