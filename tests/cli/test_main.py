@@ -101,7 +101,10 @@ class TestApplyAgentFixCLI:
     @pytest.fixture
     def mock_env(self):
         """Set up environment variables for tests."""
-        return {"ANTHROPIC_API_KEY": "test-api-key"}
+        return {
+            "ANTHROPIC_API_KEY": "test-api-key",
+            "GITHUB_TOKEN": "test-github-token",
+        }
 
     @pytest.fixture
     def cli_args(self, tmp_path):
