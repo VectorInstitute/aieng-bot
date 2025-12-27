@@ -164,7 +164,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
 
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData}>
+          <AreaChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <defs>
               <linearGradient id="colorAutoMerged" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={VECTOR_COLORS.turquoise} stopOpacity={0.8} />
@@ -205,7 +205,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
             <Tooltip {...CHART_CONFIG.tooltip} />
             <Legend {...CHART_CONFIG.legend} />
             <Area
-              type="monotone"
+              type="linear"
               dataKey="autoMerged"
               stackId="1"
               stroke={VECTOR_COLORS.turquoise}
@@ -214,7 +214,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
               name="Auto-merged"
             />
             <Area
-              type="monotone"
+              type="linear"
               dataKey="botFixed"
               stackId="1"
               stroke={VECTOR_COLORS.violet}
