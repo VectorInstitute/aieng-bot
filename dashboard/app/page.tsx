@@ -76,7 +76,7 @@ export default async function DashboardPage() {
                     </div>
                   )}
                   <a
-                    href="/aieng-bot-maintain/api/auth/logout"
+                    href="/aieng-bot/api/auth/logout"
                     className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
                   >
                     Logout
@@ -135,7 +135,7 @@ export default async function DashboardPage() {
                   </div>
                 )}
                 <a
-                  href="/aieng-bot-maintain/api/auth/logout"
+                  href="/aieng-bot/api/auth/logout"
                   className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
                 >
                   Logout

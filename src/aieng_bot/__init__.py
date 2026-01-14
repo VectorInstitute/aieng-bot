@@ -3,7 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("aieng-bot-maintain")
+    __version__ = version("aieng-bot")
 except PackageNotFoundError:
     # Package not installed, use fallback
     __version__ = "0.2.0.dev"

@@ -127,7 +127,7 @@ def tracer():
         pr_info=pr_info,
         failure_info=failure_info,
         workflow_run_id="12345",
-        github_run_url="https://github.com/VectorInstitute/aieng-bot-maintain/actions/runs/12345",
+        github_run_url="https://github.com/VectorInstitute/aieng-bot/actions/runs/12345",
     )
 
 
@@ -343,7 +343,7 @@ class TestCreateTracerFromEnv:
             "FAILURE_LOGS": "Test failed",
             "GITHUB_RUN_ID": "12345",
             "GITHUB_SERVER_URL": "https://github.com",
-            "GITHUB_REPOSITORY": "VectorInstitute/aieng-bot-maintain",
+            "GITHUB_REPOSITORY": "VectorInstitute/aieng-bot",
         },
     )
     def test_create_tracer_from_env(self):

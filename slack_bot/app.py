@@ -1,6 +1,6 @@
-"""Slack bot for aieng-bot-maintain.
+"""Slack bot for aieng-bot.
 
-This bot provides Slack slash commands to interact with the aieng-bot-maintain
+This bot provides Slack slash commands to interact with the aieng-bot
 project and get information about bot activity.
 """
 
@@ -34,7 +34,7 @@ app = App(
 
 
 def get_version_info() -> dict[str, str]:
-    """Get version and metadata information about aieng-bot-maintain.
+    """Get version and metadata information about aieng-bot.
 
     Returns
     -------
@@ -43,16 +43,16 @@ def get_version_info() -> dict[str, str]:
 
     """
     try:
-        version = get_pkg_version("aieng-bot-maintain")
+        version = get_pkg_version("aieng-bot")
     except Exception:
         version = "unknown"
 
     return {
         "version": version,
-        "project": "aieng-bot-maintain",
+        "project": "aieng-bot",
         "description": "Vector Institute AI Engineering Bot for Maintenance Tasks",
-        "repository": "https://github.com/VectorInstitute/aieng-bot-maintain",
-        "dashboard": "https://catalog.vectorinstitute.ai/aieng-bot-maintain",
+        "repository": "https://github.com/VectorInstitute/aieng-bot",
+        "dashboard": "https://platform.vectorinstitute.ai/aieng-bot",
     }
 
 

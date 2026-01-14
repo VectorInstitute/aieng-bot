@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin
 
     if (!code || !state) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=missing_params', baseUrl))
+      return NextResponse.redirect(new URL('/aieng-bot/login?error=missing_params', baseUrl))
     }
 
     // Validate state from regular cookie
@@ -23,14 +23,14 @@ export async function GET(request: NextRequest) {
     const storedState = cookieStore.get('oauth_state')?.value
 
     if (state !== storedState) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=invalid_state', baseUrl))
+      return NextResponse.redirect(new URL('/aieng-bot/login?error=invalid_state', baseUrl))
     }
 
     // Get PKCE verifier from regular cookie
     const codeVerifier = cookieStore.get('pkce_verifier')?.value
 
     if (!codeVerifier) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=missing_verifier', baseUrl))
+      return NextResponse.redirect(new URL('/aieng-bot/login?error=missing_verifier', baseUrl))
     }
 
     // Exchange code for tokens
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const error = await tokenResponse.text()
       console.error('Token exchange failed:', error)
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=token_exchange_failed', baseUrl))
+      return NextResponse.redirect(new URL('/aieng-bot/login?error=token_exchange_failed', baseUrl))
     }
 
     const tokens = await tokenResponse.json()
@@ -65,14 +65,14 @@ export async function GET(request: NextRequest) {
     })
 
     if (!userInfoResponse.ok) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=userinfo_failed', baseUrl))
+      return NextResponse.redirect(new URL('/aieng-bot/login?error=userinfo_failed', baseUrl))
     }
 
     const userInfo = await userInfoResponse.json()
 
     // Validate email domain
     if (!isEmailAllowed(userInfo.email)) {
-      return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=unauthorized_domain', baseUrl))
+      return NextResponse.redirect(new URL('/aieng-bot/login?error=unauthorized_domain', baseUrl))
     }
 
     // Save session
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     await session.save()
 
     // Clean up temporary cookies and redirect
-    const redirectResponse = NextResponse.redirect(new URL('/aieng-bot-maintain', baseUrl))
+    const redirectResponse = NextResponse.redirect(new URL('/aieng-bot', baseUrl))
     redirectResponse.cookies.delete('pkce_verifier')
     redirectResponse.cookies.delete('oauth_state')
 
@@ -99,6 +99,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Callback error:', error)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.url
-    return NextResponse.redirect(new URL('/aieng-bot-maintain/login?error=unknown', baseUrl))
+    return NextResponse.redirect(new URL('/aieng-bot/login?error=unknown', baseUrl))
   }
 }

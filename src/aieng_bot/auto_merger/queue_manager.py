@@ -174,7 +174,7 @@ class QueueManager:
 
         # Build GitHub run URL
         github_run_url = (
-            f"https://github.com/VectorInstitute/aieng-bot-maintain/"
+            f"https://github.com/VectorInstitute/aieng-bot/"
             f"actions/runs/{state.workflow_run_id}"
         )
 

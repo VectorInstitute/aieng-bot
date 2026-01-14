@@ -560,8 +560,7 @@ class TestLogAutoMergeActivity:
 
         call_args = queue_manager.activity_logger.log_auto_merge.call_args[1]
         expected_url = (
-            "https://github.com/VectorInstitute/aieng-bot-maintain/"
-            "actions/runs/999888777"
+            "https://github.com/VectorInstitute/aieng-bot/actions/runs/999888777"
         )
         assert call_args["github_run_url"] == expected_url
         assert call_args["workflow_run_id"] == "999888777"

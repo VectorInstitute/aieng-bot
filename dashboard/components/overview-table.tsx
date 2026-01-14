@@ -252,7 +252,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
                   </td>
                   <td className={`${CLASSES.tableCell} text-right text-sm font-medium`}>
                     <a
-                      href={`/aieng-bot-maintain/pr/${encodeURIComponent(pr.repo)}/${pr.pr_number}`}
+                      href={`/aieng-bot/pr/${encodeURIComponent(pr.repo)}/${pr.pr_number}`}
                       className={`${CLASSES.link} hover:text-blue-800 dark:hover:text-blue-300 inline-flex items-center space-x-1`}
                     >
                       <span>Details</span>

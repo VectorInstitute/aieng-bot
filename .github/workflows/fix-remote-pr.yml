@@ -25,10 +25,10 @@ jobs:
           TARGET_REPO="${{ github.event.inputs.target_repo }}"
 
           # Prevent the bot from modifying its own repository
-          if [ "$TARGET_REPO" = "VectorInstitute/aieng-bot-maintain" ]; then
-            echo "❌ ERROR: Cannot run fix workflow on the bot repository itself (VectorInstitute/aieng-bot-maintain)"
+          if [ "$TARGET_REPO" = "VectorInstitute/aieng-bot" ]; then
+            echo "❌ ERROR: Cannot run fix workflow on the bot repository itself (VectorInstitute/aieng-bot)"
             echo "This would cause the bot to modify its own code, potentially deleting important files."
-            echo "If you need to fix PRs in aieng-bot-maintain, do it manually."
+            echo "If you need to fix PRs in aieng-bot, do it manually."
             exit 1
           fi
 
@@ -82,7 +82,7 @@ jobs:
       - name: Configure git for agent
         working-directory: target-repo
         run: |
-          git config user.name "aieng-bot-maintain[bot]"
+          git config user.name "aieng-bot[bot]"
           git config user.email "aieng-bot@vectorinstitute.ai"
 
       - name: Attempt merge to expose conflicts
@@ -425,7 +425,7 @@ jobs:
           elif [ -n "$(git status --porcelain)" ]; then
             echo "Uncommitted changes detected, committing..."
 
-            git config user.name "aieng-bot-maintain[bot]"
+            git config user.name "aieng-bot[bot]"
             git config user.email "aieng-bot@vectorinstitute.ai"
             git add -A
 
@@ -472,7 +472,7 @@ jobs:
           fi
 
           TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
-          DASHBOARD_URL="https://catalog.vectorinstitute.ai/aieng-bot-maintain"
+          DASHBOARD_URL="https://platform.vectorinstitute.ai/aieng-bot"
 
           echo "**Automated fix applied**" > /tmp/pr-result.txt
           echo "" >> /tmp/pr-result.txt
@@ -548,7 +548,7 @@ jobs:
 
           # Trigger the monitor workflow to check and merge the PR
           gh workflow run monitor-org-bot-prs.yml \
-            --repo VectorInstitute/aieng-bot-maintain
+            --repo VectorInstitute/aieng-bot
 
           echo "✓ Monitor workflow triggered"
           echo "  It will check the PR and auto-merge if all conditions are met."

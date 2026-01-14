@@ -30,10 +30,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/VectorInstitute/aieng-bot-maintain"
-Repository = "https://github.com/VectorInstitute/aieng-bot-maintain"
-Issues = "https://github.com/VectorInstitute/aieng-bot-maintain/issues"
-Changelog = "https://github.com/VectorInstitute/aieng-bot-maintain/releases"
+Homepage = "https://github.com/VectorInstitute/aieng-bot"
+Repository = "https://github.com/VectorInstitute/aieng-bot"
+Issues = "https://github.com/VectorInstitute/aieng-bot/issues"
+Changelog = "https://github.com/VectorInstitute/aieng-bot/releases"
 
 [project.scripts]
 aieng-bot = "aieng_bot._cli.main:cli"
