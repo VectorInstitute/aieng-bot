@@ -21,12 +21,12 @@ Deploying the AI Engineering Maintenance Bot is simple - it runs from ONE centra
 - [ ] **2.1**: Manual test run of monitor workflow
   ```bash
   gh workflow run monitor-org-bot-prs.yml \
-    --repo VectorInstitute/aieng-bot-maintain
+    --repo VectorInstitute/aieng-bot
   ```
 - [ ] **2.2**: Test fix workflow on specific PR
   ```bash
   gh workflow run fix-remote-pr.yml \
-    --repo VectorInstitute/aieng-bot-maintain \
+    --repo VectorInstitute/aieng-bot \
     --field target_repo="VectorInstitute/aieng-template-mvp" \
     --field pr_number="17"
   ```
@@ -65,7 +65,7 @@ For experienced admins who just want to get it running:
 # Actions tab → Enable workflows
 
 # 3. Test
-gh workflow run monitor-org-bot-prs.yml --repo VectorInstitute/aieng-bot-maintain
+gh workflow run monitor-org-bot-prs.yml --repo VectorInstitute/aieng-bot
 
 # 4. Monitor
 # Check Actions tab for runs every 6 hours
@@ -185,7 +185,7 @@ If something goes wrong:
 ```bash
 # Disable scheduled runs
 gh workflow disable monitor-org-bot-prs.yml \
-  --repo VectorInstitute/aieng-bot-maintain
+  --repo VectorInstitute/aieng-bot
 ```
 
 Or via GitHub UI:
@@ -255,7 +255,7 @@ We've deployed an automated bot to help manage Dependabot PRs across all VectorI
 - You can still manually review and merge if you prefer
 - Report any issues to the AI Engineering team
 
-**More info:** https://github.com/VectorInstitute/aieng-bot-maintain
+**More info:** https://github.com/VectorInstitute/aieng-bot
 ```
 
 Post in:

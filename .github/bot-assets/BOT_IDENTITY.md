@@ -1,9 +1,9 @@
 # AI Engineering Maintenance Bot Identity
 
-This document defines the visual and textual identity of the **AI Engineering Maintenance Bot** (aieng-bot-maintain).
+This document defines the visual and textual identity of the **AI Engineering Maintenance Bot** (aieng-bot).
 
 ## Bot Name
-**AI Engineering Maintenance Bot** (short: `aieng-bot-maintain`)
+**AI Engineering Maintenance Bot** (short: `aieng-bot`)
 
 ## Purpose
 Automated maintenance bot for Vector Institute repositories that:
@@ -87,7 +87,7 @@ All bot comments, commits, and messages should include this signature:
 
 ### Git Commit Identity
 ```
-Name: aieng-bot-maintain[bot]
+Name: aieng-bot[bot]
 Email: aieng-bot@vectorinstitute.ai
 ```
 
@@ -161,7 +161,7 @@ Use emojis sparingly and consistently:
 
 ### Profile Configuration (if using GitHub App)
 - **Name**: AI Engineering Maintenance Bot
-- **Username**: `aieng-bot-maintain`
+- **Username**: `aieng-bot`
 - **Description**: Automated maintenance bot for Vector Institute AI Engineering repositories. Auto-merges PRs and fixes common issues.
 - **Website**: Link to this repository or Vector Institute website
 - **Avatar**: Use the designed avatar image
@@ -170,9 +170,9 @@ Use emojis sparingly and consistently:
 In the repository settings (`.github/settings.yml` if using probot/settings):
 ```yaml
 repository:
-  name: aieng-bot-maintain
+  name: aieng-bot
   description: AI Engineering Maintenance Bot for Vector Institute repositories
-  homepage: https://github.com/VectorInstitute/aieng-bot-maintain
+  homepage: https://github.com/VectorInstitute/aieng-bot
   topics:
     - automation
     - github-actions
@@ -185,7 +185,7 @@ repository:
 
 ### Across All Platforms
 Ensure consistency in:
-1. **Naming**: Always use "AI Engineering Maintenance Bot" or "aieng-bot-maintain"
+1. **Naming**: Always use "AI Engineering Maintenance Bot" or "aieng-bot"
 2. **Avatar**: Same image across GitHub, documentation, etc.
 3. **Signature**: Always include the standard signature in bot communications
 4. **Email**: Always use `aieng-bot@vectorinstitute.ai`

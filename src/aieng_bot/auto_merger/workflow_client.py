@@ -22,7 +22,7 @@ class WorkflowClient:
     gh_token : str
         GitHub personal access token.
     bot_repo : str, optional
-        Bot repository name (default="VectorInstitute/aieng-bot-maintain").
+        Bot repository name (default="VectorInstitute/aieng-bot").
 
     Attributes
     ----------
@@ -33,9 +33,7 @@ class WorkflowClient:
 
     """
 
-    def __init__(
-        self, gh_token: str, bot_repo: str = "VectorInstitute/aieng-bot-maintain"
-    ):
+    def __init__(self, gh_token: str, bot_repo: str = "VectorInstitute/aieng-bot"):
         """Initialize workflow client.
 
         Parameters
@@ -43,7 +41,7 @@ class WorkflowClient:
         gh_token : str
             GitHub personal access token.
         bot_repo : str, optional
-            Bot repository name (default="VectorInstitute/aieng-bot-maintain").
+            Bot repository name (default="VectorInstitute/aieng-bot").
 
         """
         self.gh_token = gh_token
@@ -273,7 +271,7 @@ class WorkflowClient:
 
                 # Configure git user for commits
                 subprocess.run(
-                    ["git", "config", "user.name", "aieng-bot-maintain[bot]"],
+                    ["git", "config", "user.name", "aieng-bot[bot]"],
                     cwd=repo_dir,
                     check=True,
                     capture_output=True,

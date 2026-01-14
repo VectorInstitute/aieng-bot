@@ -77,7 +77,7 @@ jobs:
             -t "$IMAGE_URL" \
             -t "$LATEST_URL" \
             --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
-            --build-arg NEXT_PUBLIC_APP_URL="https://catalog.vectorinstitute.ai" \
+            --build-arg NEXT_PUBLIC_APP_URL="https://platform.vectorinstitute.ai" \
             --cache-from type=gha,scope=bot-dashboard \
             --cache-to type=gha,mode=max,scope=bot-dashboard \
             dashboard/
@@ -104,7 +104,7 @@ jobs:
             --min-instances=0 \
             --concurrency=80 \
             --port=8080 \
-            --set-env-vars="NODE_ENV=production,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},SESSION_SECRET=${{ secrets.SESSION_SECRET }},NEXT_PUBLIC_APP_URL=https://catalog.vectorinstitute.ai,REDIRECT_URI=https://catalog.vectorinstitute.ai/aieng-bot-maintain/api/auth/callback,ALLOWED_DOMAINS=vectorinstitute.ai" \
+            --set-env-vars="NODE_ENV=production,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},SESSION_SECRET=${{ secrets.SESSION_SECRET }},NEXT_PUBLIC_APP_URL=https://platform.vectorinstitute.ai,REDIRECT_URI=https://platform.vectorinstitute.ai/aieng-bot/api/auth/callback,ALLOWED_DOMAINS=vectorinstitute.ai" \
             --update-labels="deployed-by=github-actions,commit=${{ github.sha }},service=bot-dashboard" \
             --quiet
 
@@ -122,7 +122,7 @@ jobs:
 
           MAX_RETRIES=20
           for i in $(seq 1 $MAX_RETRIES); do
-            if curl -sf --max-time 10 "${SERVICE_URL}/aieng-bot-maintain/login" > /dev/null 2>&1; then
+            if curl -sf --max-time 10 "${SERVICE_URL}/aieng-bot/login" > /dev/null 2>&1; then
               echo "✓ Service is responding"
               exit 0
             fi
@@ -144,7 +144,7 @@ jobs:
 
           ### Next Steps
           Configure load balancer to route:
-          - \`catalog.vectorinstitute.ai/aieng-bot-maintain/*\` → Cloud Run service
+          - \`platform.vectorinstitute.ai/aieng-bot/*\` → Cloud Run service
 
           **Cloud Run Service:** \`${{ env.SERVICE_NAME }}\`
 
@@ -168,6 +168,6 @@ jobs:
             --network-endpoint-group-region=us-central1
 
           # Add path rule to existing URL map (get name first)
-          # Update path matcher to route /aieng-bot-maintain/* to bot-dashboard-backend
+          # Update path matcher to route /aieng-bot/* to bot-dashboard-backend
           \`\`\`
           EOF

@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  basePath: '/aieng-bot-maintain',
+  basePath: '/aieng-bot',
   output: 'standalone',
 
   // Disable experimental features that may cause issues

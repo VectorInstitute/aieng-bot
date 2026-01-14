@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["https://catalog.vectorinstitute.ai"],
+    "origin": ["https://platform.vectorinstitute.ai"],
     "method": ["GET"],
     "responseHeader": ["Content-Type", "Range"],
     "maxAgeSeconds": 3600

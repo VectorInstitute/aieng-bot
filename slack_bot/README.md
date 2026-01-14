@@ -169,7 +169,7 @@ After=network.target
 [Service]
 Type=simple
 User=your-user
-WorkingDirectory=/path/to/aieng-bot-maintain/slack_bot
+WorkingDirectory=/path/to/aieng-bot/slack_bot
 Environment="SLACK_BOT_TOKEN=xoxb-your-token"
 Environment="SLACK_APP_TOKEN=xapp-your-token"
 Environment="SLACK_SIGNING_SECRET=your-secret"
@@ -222,7 +222,7 @@ sudo systemctl start aieng-bot-slack
 The bot uses:
 - **Slack Bolt for Python** - Official Slack framework for building apps
 - **Socket Mode** - Eliminates need for public URLs and webhook endpoints
-- **aieng-bot-maintain package** - Imports version information from the main project
+- **aieng-bot package** - Imports version information from the main project
 
 ## Links
 
@@ -234,6 +234,6 @@ The bot uses:
 ## Support
 
 For issues or questions:
-- Open an issue at [GitHub Issues](https://github.com/VectorInstitute/aieng-bot-maintain/issues)
+- Open an issue at [GitHub Issues](https://github.com/VectorInstitute/aieng-bot/issues)
 - Check the main project [README](../README.md)
 - Review the [CLAUDE.md](../CLAUDE.md) for project architecture details

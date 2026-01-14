@@ -6,7 +6,7 @@ extra:
     - icon: fontawesome/brands/discord
       link: 404.html
     - icon: fontawesome/brands/github
-      link: https://github.com/VectorInstitute/aieng-bot-maintain
+      link: https://github.com/VectorInstitute/aieng-bot
 markdown_extensions:
   - attr_list
   - admonition
@@ -45,8 +45,8 @@ plugins:
             show_root_toc_entry: false
             show_symbol_type_heading: true
             show_symbol_type_toc: true
-repo_url: https://github.com/VectorInstitute/aieng-bot-maintain
-repo_name: VectorInstitute/aieng-bot-maintain
+repo_url: https://github.com/VectorInstitute/aieng-bot
+repo_name: VectorInstitute/aieng-bot
 site_name: AI Engineering Maintenance Bot
 theme:
   custom_dir: docs/overrides

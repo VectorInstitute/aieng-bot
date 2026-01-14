@@ -28,7 +28,7 @@ This centralized bot operates from THIS repository and manages Dependabot PRs ac
 1. Go to GitHub Settings → Developer settings → Personal access tokens → [Fine-grained tokens](https://github.com/settings/tokens?type=beta)
 2. Click "Generate new token"
 3. Configure:
-   - **Token name**: `aieng-bot-maintain-org-access`
+   - **Token name**: `aieng-bot-org-access`
    - **Expiration**: 1 year (or longer)
    - **Resource owner**: VectorInstitute
    - **Repository access**: All repositories
@@ -48,7 +48,7 @@ This centralized bot operates from THIS repository and manages Dependabot PRs ac
 1. Go to GitHub Settings → Developer settings → [Personal access tokens (classic)](https://github.com/settings/tokens)
 2. Click "Generate new token (classic)"
 3. Configure:
-   - **Note**: `aieng-bot-maintain-org-access`
+   - **Note**: `aieng-bot-org-access`
    - **Expiration**: 1 year (or longer)
    - **Scopes**: Select:
      - `repo` (Full control of private repositories)
@@ -59,7 +59,7 @@ This centralized bot operates from THIS repository and manages Dependabot PRs ac
 
 ### 3. Add Secrets to This Repository
 
-1. Go to this repository: `VectorInstitute/aieng-bot-maintain`
+1. Go to this repository: `VectorInstitute/aieng-bot`
 2. Navigate to Settings → Secrets and variables → Actions
 3. Click "New repository secret"
 
@@ -109,7 +109,7 @@ Test against [aieng-template-mvp#17](https://github.com/VectorInstitute/aieng-te
 
 ```bash
 gh workflow run fix-remote-pr.yml \
-  --repo VectorInstitute/aieng-bot-maintain \
+  --repo VectorInstitute/aieng-bot \
   --field target_repo="VectorInstitute/aieng-template-mvp" \
   --field pr_number="17"
 ```

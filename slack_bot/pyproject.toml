@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "slack-bolt>=1.18.0",
-    "aieng-bot-maintain>=0.4.0",
+    "aieng-bot>=0.4.0",
     "python-dotenv>=1.0.0",
 ]
 

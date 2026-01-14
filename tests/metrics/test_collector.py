@@ -49,7 +49,7 @@ def sample_pr_bot_fixed():
                 {
                     "commit": {
                         "author": {
-                            "name": "aieng-bot-maintain[bot]",
+                            "name": "aieng-bot[bot]",
                             "email": "aieng-bot@vectorinstitute.ai",
                         },
                         "message": "Fix test failures",

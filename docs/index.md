@@ -1,13 +1,13 @@
-# aieng-bot-maintain
+# aieng-bot
 
 ----------------------------------------------------------------------------------------
 
-[![PyPI](https://img.shields.io/pypi/v/aieng-bot-maintain)](https://pypi.org/project/aieng-bot-maintain)
-[![code checks](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/code_checks.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/code_checks.yml)
-[![unit tests](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/unit_tests.yml)
-[![docs](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/docs.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot-maintain/actions/workflows/docs.yml)
-[![codecov](https://codecov.io/github/VectorInstitute/aieng-bot-maintain/graph/badge.svg?token=83MYFZ3UPA)](https://codecov.io/github/VectorInstitute/aieng-bot-maintain)
-![GitHub License](https://img.shields.io/github/license/VectorInstitute/aieng-bot-maintain)
+[![PyPI](https://img.shields.io/pypi/v/aieng-bot)](https://pypi.org/project/aieng-bot)
+[![code checks](https://github.com/VectorInstitute/aieng-bot/actions/workflows/code_checks.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot/actions/workflows/code_checks.yml)
+[![unit tests](https://github.com/VectorInstitute/aieng-bot/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot/actions/workflows/unit_tests.yml)
+[![docs](https://github.com/VectorInstitute/aieng-bot/actions/workflows/docs.yml/badge.svg)](https://github.com/VectorInstitute/aieng-bot/actions/workflows/docs.yml)
+[![codecov](https://codecov.io/github/VectorInstitute/aieng-bot/graph/badge.svg?token=83MYFZ3UPA)](https://codecov.io/github/VectorInstitute/aieng-bot)
+![GitHub License](https://img.shields.io/github/license/VectorInstitute/aieng-bot)
 
 
 Centralized maintenance bot that automatically manages bot PRs (Dependabot and pre-commit-ci) across all Vector Institute repositories from a single location.
@@ -25,7 +25,7 @@ Centralized maintenance bot that automatically manages bot PRs (Dependabot and p
 
 ```
 ┌─────────────────────────────────┐
-│  aieng-bot-maintain Repository  │
+│  aieng-bot Repository  │
 │  (This Repo - Central Bot)      │
 │                                 │
 │  Runs every 6 hours:            │
@@ -135,7 +135,7 @@ Actions → Select workflow → Run workflow → Enter parameters
 ## Dashboard
 
 **View comprehensive analytics and agent execution traces:**
-- 📊 **[Bot Dashboard](https://catalog.vectorinstitute.ai/aieng-bot-maintain)** - Interactive dashboard with:
+- 📊 **[Bot Dashboard](https://platform.vectorinstitute.ai/aieng-bot)** - Interactive dashboard with:
   - Overview table of all bot PR fixes
   - Success rates and performance metrics
   - Detailed agent execution traces (like LangSmith/Langfuse)
@@ -156,7 +156,7 @@ Actions → Select workflow → Run workflow → Enter parameters
 ## Monitoring
 
 **View bot activity:**
-- [Dashboard](https://catalog.vectorinstitute.ai/aieng-bot-maintain) - Comprehensive analytics and traces
+- [Dashboard](https://platform.vectorinstitute.ai/aieng-bot) - Comprehensive analytics and traces
 - Actions tab - All workflow runs and success/failure rates
 - PR comments - Detailed status updates on each PR
 - Run summary - PR count and actions taken per run

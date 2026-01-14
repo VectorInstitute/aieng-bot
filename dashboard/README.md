@@ -18,7 +18,7 @@ npm install
 # Run development server
 npm run dev
 
-# Visit http://localhost:3001/aieng-bot-maintain
+# Visit http://localhost:3001/aieng-bot
 ```
 
 ## Environment Variables
@@ -30,7 +30,7 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 SESSION_SECRET=random_32_character_string
 NEXT_PUBLIC_APP_URL=http://localhost:3001
-REDIRECT_URI=http://localhost:3001/aieng-bot-maintain/api/auth/callback
+REDIRECT_URI=http://localhost:3001/aieng-bot/api/auth/callback
 ALLOWED_DOMAINS=vectorinstitute.ai
 ```
 
@@ -43,7 +43,7 @@ Deployed to GCP Cloud Run via `.github/workflows/deploy-dashboard.yml`:
 gh workflow run deploy-dashboard.yml
 ```
 
-**Production URL**: https://catalog.vectorinstitute.ai/aieng-bot-maintain
+**Production URL**: https://platform.vectorinstitute.ai/aieng-bot
 
 ## Architecture
 

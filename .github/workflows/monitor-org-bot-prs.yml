@@ -63,7 +63,7 @@ jobs:
 
           for REPO in $REPOS; do
             # Skip the bot repository itself to prevent self-modification
-            if [ "$REPO" = "VectorInstitute/aieng-bot-maintain" ]; then
+            if [ "$REPO" = "VectorInstitute/aieng-bot" ]; then
               echo "Skipping $REPO (bot repository itself)"
               continue
             fi
