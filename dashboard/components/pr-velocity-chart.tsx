@@ -207,7 +207,6 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
             <Area
               type="linear"
               dataKey="autoMerged"
-              stackId="1"
               stroke={VECTOR_COLORS.turquoise}
               strokeWidth={2}
               fill="url(#colorAutoMerged)"
@@ -216,7 +215,6 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
             <Area
               type="linear"
               dataKey="botFixed"
-              stackId="1"
               stroke={VECTOR_COLORS.violet}
               strokeWidth={2}
               fill="url(#colorBotFixed)"
