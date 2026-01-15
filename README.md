@@ -25,7 +25,7 @@ Centralized maintenance bot that automatically manages bot PRs (Dependabot and p
 
 ```
 ┌─────────────────────────────────┐
-│  aieng-bot Repository  │
+│  aieng-bot Repository           │
 │  (This Repo - Central Bot)      │
 │                                 │
 │  Runs every 6 hours:            │
