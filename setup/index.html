@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#ai-engineering-maintenance-bot-setup-guide" class="md-skip">
+        <a href="#aieng-bot-setup-guide" class="md-skip">
           Skip to content
         </a>
       
@@ -1083,9 +1083,9 @@
   
 
 
-<h1 id="ai-engineering-maintenance-bot-setup-guide">AI Engineering Maintenance Bot - Setup Guide<a class="headerlink" href="#ai-engineering-maintenance-bot-setup-guide" title="Permanent link">&para;</a></h1>
+<h1 id="aieng-bot-setup-guide">aieng-bot - Setup Guide<a class="headerlink" href="#aieng-bot-setup-guide" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>This centralized bot operates from THIS repository and manages bot PRs (Dependabot and pre-commit-ci) across ALL VectorInstitute repositories. No installation needed in individual repos.</p>
+<p>aieng-bot is an AI-powered tool that autonomously fixes CI failures, resolves merge conflicts, and merges GitHub pull requests. It can be used via CLI on any PR, or configured with GitHub workflows to automatically monitor and fix bot PRs (Dependabot, pre-commit-ci) across an organization.</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Admin access to VectorInstitute organization</li>
@@ -1143,14 +1143,21 @@
 <li><code>fix-pr-agent.yml</code></li>
 </ol>
 <h3 id="5-test-the-setup">5. Test the Setup<a class="headerlink" href="#5-test-the-setup" title="Permanent link">&para;</a></h3>
-<p><strong>Via CLI:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Run discovery</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>discover-and-dispatch.yml
+<p><strong>Via CLI (recommended):</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Fix a PR directly</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Test fix on specific PR</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>fix-pr-agent.yml<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">target_repo</span><span class="o">=</span><span class="s2">&quot;VectorInstitute/aieng-template-mvp&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">pr_number</span><span class="o">=</span><span class="s2">&quot;17&quot;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Fix with dashboard logging</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span><span class="w"> </span>--log
+</span></code></pre></div></p>
+<p><strong>Via GitHub Workflow:</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Trigger fix workflow for a specific PR</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>fix-pr-agent.yml<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">target_repo</span><span class="o">=</span><span class="s2">&quot;owner/repo&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">pr_number</span><span class="o">=</span><span class="s2">&quot;123&quot;</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Run bot PR discovery (VectorInstitute org)</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>discover-and-dispatch.yml
 </span></code></pre></div></p>
 <p><strong>Via GitHub UI:</strong>
 Actions → Select workflow → Run workflow</p>
@@ -1165,11 +1172,11 @@ Actions → Select workflow → Run workflow</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <h3 id="adjust-monitoring-frequency">Adjust Monitoring Frequency<a class="headerlink" href="#adjust-monitoring-frequency" title="Permanent link">&para;</a></h3>
 <p>Edit <code>.github/workflows/discover-and-dispatch.yml</code>:
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">on</span><span class="p">:</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">schedule</span><span class="p">:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">cron</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;0</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*&#39;</span><span class="w">    </span><span class="c1"># Daily at midnight (default)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="c1"># - cron: &#39;0 */6 * * *&#39;  # Every 6 hours</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="c1"># - cron: &#39;0 */12 * * *&#39; # Every 12 hours</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">on</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">schedule</span><span class="p">:</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">cron</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;0</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*&#39;</span><span class="w">    </span><span class="c1"># Daily at midnight (default)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="c1"># - cron: &#39;0 */6 * * *&#39;  # Every 6 hours</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="c1"># - cron: &#39;0 */12 * * *&#39; # Every 12 hours</span>
 </span></code></pre></div></p>
 <h3 id="change-claude-model">Change Claude Model<a class="headerlink" href="#change-claude-model" title="Permanent link">&para;</a></h3>
 <p>Set <code>CLAUDE_MODEL</code> environment variable to override defaults:
@@ -1197,8 +1204,8 @@ Actions → Select workflow → Run workflow</p>
 </ul>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="bot-not-finding-prs">Bot Not Finding PRs<a class="headerlink" href="#bot-not-finding-prs" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Test token access</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>gh<span class="w"> </span>api<span class="w"> </span>orgs/VectorInstitute/repos<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$ORG_ACCESS_TOKEN</span><span class="s2">&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Test token access</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>gh<span class="w"> </span>api<span class="w"> </span>orgs/VectorInstitute/repos<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$ORG_ACCESS_TOKEN</span><span class="s2">&quot;</span>
 </span></code></pre></div>
 <h3 id="bot-cant-merge-prs">Bot Can't Merge PRs<a class="headerlink" href="#bot-cant-merge-prs" title="Permanent link">&para;</a></h3>
 <ul>
@@ -1230,7 +1237,7 @@ Actions → Select workflow → Run workflow</p>
 <li>Check for model updates</li>
 </ul>
 <hr />
-<p>🤖 <em>AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories</em></p>
+<p>🤖 <em>aieng-bot - AI-powered PR maintenance by Vector Institute AI Engineering</em></p>
 
 
 

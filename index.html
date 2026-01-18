@@ -799,38 +799,27 @@
 <a href="https://github.com/VectorInstitute/aieng-bot/actions/workflows/docs.yml"><img alt="docs" src="https://github.com/VectorInstitute/aieng-bot/actions/workflows/docs.yml/badge.svg" /></a>
 <a href="https://codecov.io/github/VectorInstitute/aieng-bot"><img alt="codecov" src="https://codecov.io/github/VectorInstitute/aieng-bot/graph/badge.svg?token=83MYFZ3UPA" /></a>
 <img alt="GitHub License" src="https://img.shields.io/github/license/VectorInstitute/aieng-bot" /></p>
-<p>Centralized maintenance bot that automatically manages bot PRs (Dependabot and pre-commit-ci) across all Vector Institute repositories from a single location.</p>
+<p>AI-powered tool that autonomously fixes CI failures, resolves merge conflicts, and merges GitHub pull requests using Claude AI.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Organization-wide monitoring</strong> - Scans all VectorInstitute repos daily (00:00 UTC)</li>
-<li><strong>Auto-merge</strong> - Merges bot PRs (Dependabot and pre-commit-ci) when all checks pass</li>
-<li><strong>Auto-fix</strong> - Fixes test failures, linting issues, security vulnerabilities, and build errors using Claude AI Agent SDK</li>
-<li><strong>Centralized operation</strong> - No installation needed in individual repositories</li>
-<li><strong>Smart detection</strong> - Categorizes failures and applies appropriate fix strategies</li>
+<li><strong>Fix any PR</strong> - Use the CLI to fix CI failures on any GitHub pull request</li>
+<li><strong>Auto-fix</strong> - Automatically fixes test failures, linting issues, security vulnerabilities, merge conflicts, and build errors</li>
+<li><strong>Smart classification</strong> - Categorizes failures and applies appropriate fix strategies</li>
+<li><strong>Organization-wide automation</strong> - Includes workflows to scan VectorInstitute repos daily for bot PRs (Dependabot, pre-commit-ci)</li>
+<li><strong>Observable</strong> - Full execution tracing with dashboard analytics</li>
 <li><strong>Transparent</strong> - Comments on PRs with status updates</li>
 </ul>
 <h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────┐
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  aieng-bot Repository           │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│  (This Repo - Central Bot)      │
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│                                 │
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  Runs daily (00:00 UTC):        │
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  1. Scans VectorInstitute org   │
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  2. Finds bot PRs               │
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  3. Checks status               │
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  4. Merges or fixes PRs         │
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>└──────────────┬──────────────────┘
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>               │
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>               │ Operates on
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>               ▼
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>┌───────────────────────────────────┐
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│   VectorInstitute Organization    │
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>│                                   │
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│  ├─ repo-1  (Bot PR #1)           │
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│  ├─ repo-2  (Bot PR #2)           │
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│  ├─ repo-3  (Bot PR #3)           │
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│  └─ repo-N  ...                   │
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>└───────────────────────────────────┘
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────────────────────────┐
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  aieng-bot                                                  │
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│                                                             │
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  CLI Usage (any PR):                                        │
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│    aieng-bot fix --repo owner/repo --pr 123                 │
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│                                                             │
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  Automated Workflows (bot PRs only):                        │
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│    Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs  │
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│    with failing checks across VectorInstitute org           │
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>└─────────────────────────────────────────────────────────────┘
 </span></code></pre></div>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <h3 id="setup-in-this-repository">Setup (in this repository)<a class="headerlink" href="#setup-in-this-repository" title="Permanent link">&para;</a></h3>
@@ -846,20 +835,22 @@
 - Go to Actions tab → Enable workflows</p>
 <p>The bot now monitors all VectorInstitute repositories automatically.</p>
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
-<p><strong>1. Monitor</strong> (daily at 00:00 UTC)
-- Scans all VectorInstitute repositories for open bot PRs (Dependabot and pre-commit-ci)
-- Classifies PR failures using Claude Haiku 4.5
-- Routes to merge or fix workflow based on failure type</p>
-<p><strong>2. Auto-Merge</strong> (when all checks pass)
-- Approves PR and enables auto-merge
-- Comments with status
-- PR merges automatically</p>
-<p><strong>3. Auto-Fix</strong> (when checks fail)
+<p><strong>1. Classification</strong>
+- Analyzes PR and failure logs using Claude Haiku 4.5
+- Categorizes failure type: test, lint, security, build, or merge conflict
+- Routes to appropriate fix strategy</p>
+<p><strong>2. Fix Loop</strong>
 - Clones target repository and PR branch
-- Analyzes failure type: test, lint, security, or build
-- Loads appropriate AI prompt template
+- Loads appropriate AI prompt template for the failure type
 - Uses Claude Agent SDK to automatically apply fixes
-- Commits and pushes fixes to PR</p>
+- Commits and pushes fixes to PR
+- Polls CI status, retries on failure (up to max_retries)</p>
+<p><strong>3. Merge</strong>
+- Auto-merges when all checks pass
+- Comments on PR with status updates</p>
+<p><strong>Automated Bot PR Monitoring</strong> (optional, for VectorInstitute org)
+- Daily scan at 00:00 UTC for Dependabot/pre-commit-ci PRs with failures
+- Automatically dispatches fix jobs for discovered PRs</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p><strong>Required Secrets</strong>
 - <code>ANTHROPIC_API_KEY</code> - Anthropic API access for Claude
@@ -869,8 +860,8 @@
 - Fixing: Claude Sonnet 4.5 (<code>claude-sonnet-4-5-20250929</code>) - agentic capability
 - Override with <code>CLAUDE_MODEL</code> environment variable</p>
 <p><strong>Workflows</strong>
-- <code>discover-and-dispatch.yml</code> - Daily scan (00:00 UTC) for bot PRs with failures
-- <code>fix-pr-agent.yml</code> - Per-PR agent workflow (6-hour timeout)
+- <code>discover-and-dispatch.yml</code> - Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs with failures
+- <code>fix-pr-agent.yml</code> - Per-PR agent workflow (6-hour timeout), can be triggered manually for any PR
 - <code>code_checks.yml</code> - Ruff + mypy checks
 - <code>unit_tests.yml</code> - pytest suite</p>
 <p><strong>AI Prompt Templates</strong> (customize for your needs)
@@ -894,28 +885,34 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install dependencies</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>sync
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Classify a PR failure type</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>aieng-bot<span class="w"> </span>classify<span class="w"> </span>&lt;pr-url&gt;
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Fix and merge a PR</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Run agent to fix a PR</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>&lt;pr-url&gt;
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Fix with dashboard logging</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span><span class="w"> </span>--log
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Custom retries and timeout</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span><span class="w"> </span>--max-retries<span class="w"> </span><span class="m">5</span><span class="w"> </span>--timeout-minutes<span class="w"> </span><span class="m">180</span>
 </span></code></pre></div>
 <h2 id="manual-testing">Manual Testing<a class="headerlink" href="#manual-testing" title="Permanent link">&para;</a></h2>
 <p><strong>Trigger via CLI:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Run discovery workflow</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>discover-and-dispatch.yml
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Fix a PR using the CLI (recommended)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Fix a specific PR</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Or trigger via GitHub workflow</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>fix-pr-agent.yml<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">target_repo</span><span class="o">=</span><span class="s2">&quot;VectorInstitute/aieng-template-mvp&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">pr_number</span><span class="o">=</span><span class="s2">&quot;17&quot;</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">target_repo</span><span class="o">=</span><span class="s2">&quot;owner/repo&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">pr_number</span><span class="o">=</span><span class="s2">&quot;123&quot;</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Run the bot PR discovery workflow (VectorInstitute org only)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>discover-and-dispatch.yml
 </span></code></pre></div></p>
 <p><strong>Trigger via GitHub UI:</strong>
 Actions → Select workflow → Run workflow → Enter parameters</p>
 <h2 id="dashboard">Dashboard<a class="headerlink" href="#dashboard" title="Permanent link">&para;</a></h2>
 <p><strong>View comprehensive analytics and agent execution traces:</strong>
-- 📊 <strong><a href="https://platform.vectorinstitute.ai/aieng-bot">Bot Dashboard</a></strong> - Interactive dashboard with:
-  - Overview table of all bot PR fixes
+- 📊 <strong><a href="https://platform.vectorinstitute.ai/aieng-bot">Dashboard</a></strong> - Interactive dashboard with:
+  - Overview table of all PR fixes
   - Success rates and performance metrics
   - Detailed agent execution traces (like LangSmith/Langfuse)
   - Code diffs with syntax highlighting
@@ -930,7 +927,7 @@ Actions → Select workflow → Run workflow → Enter parameters</p>
 - Restricted to @vectorinstitute.ai email addresses
 - Google OAuth 2.0 sign-in</p>
 <h2 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Permanent link">&para;</a></h2>
-<p><strong>View bot activity:</strong>
+<p><strong>View activity:</strong>
 - <a href="https://platform.vectorinstitute.ai/aieng-bot">Dashboard</a> - Comprehensive analytics and traces
 - Actions tab - All workflow runs and success/failure rates
 - PR comments - Detailed status updates on each PR
@@ -944,9 +941,8 @@ Actions → Select workflow → Run workflow → Enter parameters</p>
 </span></code></pre></div></p>
 <h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="docs/setup.md">Setup Guide</a> - Detailed configuration and permissions</li>
-<li><a href="docs/deployment.md">Deployment Guide</a> - Rollout strategy and monitoring</li>
-<li><a href="docs/testing.md">Testing Guide</a> - Test cases and validation</li>
+<li><a href="docs/setup.md">Setup Guide</a> - Configuration and permissions</li>
+<li><a href="docs/deployment.md">Deployment Guide</a> - Rollout and monitoring</li>
 </ul>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <table>
@@ -985,7 +981,7 @@ Actions → Select workflow → Run workflow → Enter parameters</p>
 </table>
 <p>See <a href="docs/setup.md">Setup Guide</a> for detailed troubleshooting.</p>
 <hr />
-<p>🤖 <em>AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering</em></p>
+<p>🤖 <em>aieng-bot - AI-powered PR maintenance by Vector Institute AI Engineering</em></p>
 
 
 
