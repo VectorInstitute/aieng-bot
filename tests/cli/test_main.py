@@ -152,11 +152,23 @@ class TestFixCLI:
         from aieng_bot.agent_fixer import (  # noqa: PLC0415 - Import after fixtures
             AgentFixResult,
         )
+        from aieng_bot.classifier.models import (  # noqa: PLC0415 - Import after fixtures
+            ClassificationResult,
+            FailureType,
+        )
 
         mock_result = AgentFixResult(
             status="SUCCESS",
             trace_file="/tmp/trace.json",
             summary_file="/tmp/summary.txt",
+        )
+
+        mock_classification = ClassificationResult(
+            failure_type=FailureType.LINT,
+            confidence=0.95,
+            reasoning="Lint failure detected",
+            failed_check_names=["lint-check"],
+            recommended_action="Run linter",
         )
 
         runner = CliRunner()
@@ -167,6 +179,7 @@ class TestFixCLI:
             patch(
                 "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
             ) as mock_fetch_logs,
+            patch("aieng_bot._cli.commands.fix._classify_failure") as mock_classify,
             patch(
                 "aieng_bot._cli.commands.fix._prepare_agent_environment"
             ) as mock_prepare,
@@ -184,6 +197,7 @@ class TestFixCLI:
                 "main",
             )
             mock_fetch_logs.return_value = ".failure-logs.txt"
+            mock_classify.return_value = mock_classification
             mock_prepare.return_value = True
 
             mock_fixer = MagicMock()
@@ -202,12 +216,24 @@ class TestFixCLI:
         from aieng_bot.agent_fixer import (  # noqa: PLC0415 - Import after fixtures
             AgentFixResult,
         )
+        from aieng_bot.classifier.models import (  # noqa: PLC0415 - Import after fixtures
+            ClassificationResult,
+            FailureType,
+        )
 
         mock_result = AgentFixResult(
             status="FAILED",
             trace_file="",
             summary_file="",
             error_message="Agent execution failed",
+        )
+
+        mock_classification = ClassificationResult(
+            failure_type=FailureType.LINT,
+            confidence=0.95,
+            reasoning="Lint failure detected",
+            failed_check_names=["lint-check"],
+            recommended_action="Run linter",
         )
 
         runner = CliRunner()
@@ -218,6 +244,7 @@ class TestFixCLI:
             patch(
                 "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
             ) as mock_fetch_logs,
+            patch("aieng_bot._cli.commands.fix._classify_failure") as mock_classify,
             patch(
                 "aieng_bot._cli.commands.fix._prepare_agent_environment"
             ) as mock_prepare,
@@ -235,6 +262,7 @@ class TestFixCLI:
                 "main",
             )
             mock_fetch_logs.return_value = ".failure-logs.txt"
+            mock_classify.return_value = mock_classification
             mock_prepare.return_value = True
 
             mock_fixer = MagicMock()

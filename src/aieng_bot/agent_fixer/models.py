@@ -26,6 +26,8 @@ class AgenticLoopRequest:
         PR source branch name (e.g., dependabot/uv/pytest-cov-7.0.0).
     base_ref : str
         PR target branch name (e.g., main).
+    failure_type : str
+        Pre-classified failure type (lint, test, build, security, merge_conflict, merge_only, unknown).
     failure_logs_file : str
         Path to file containing initial failure logs.
     max_retries : int
@@ -48,6 +50,7 @@ class AgenticLoopRequest:
     pr_url: str
     head_ref: str
     base_ref: str
+    failure_type: str
     failure_logs_file: str
     max_retries: int
     timeout_minutes: int

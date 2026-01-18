@@ -10,15 +10,16 @@ import pytest
 from aieng_bot._cli.commands.fix import (
     _check_environment_variables,
     _check_pr_status,
+    _classify_failure,
     _cleanup_temporary_files,
     _fetch_initial_failure_logs,
     _fetch_pr_details,
-    _get_detected_failure_type,
     _handle_result,
     _log_activity_to_gcs,
     _prepare_agent_environment,
 )
 from aieng_bot.agent_fixer import AgentFixResult
+from aieng_bot.classifier.models import FailureType
 
 
 class TestCheckEnvironmentVariables:
@@ -381,45 +382,110 @@ class TestCleanupTemporaryFiles:
             _cleanup_temporary_files(tmp_dir, "/nonexistent/file.txt", False)
 
 
-class TestGetDetectedFailureType:
-    """Tests for _get_detected_failure_type function."""
+class TestClassifyFailure:
+    """Tests for _classify_failure function."""
 
-    def test_read_failure_type(self):
-        """Test reading failure type from context file."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            context_file = Path(tmp_dir) / ".pr-context.json"
-            context_file.write_text('{"failure_type": "security"}')
+    def test_classify_merge_conflict(self):
+        """Test classification when PR has merge conflicts."""
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir,
+            patch(
+                "aieng_bot._cli.commands.fix.GitHubClient"
+            ) as mock_github_client_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.check_merge_conflicts.return_value = True
+            mock_github_client_class.return_value = mock_client
 
-            result = _get_detected_failure_type(tmp_dir)
+            failure_logs_file = Path(tmp_dir) / ".failure-logs.txt"
+            failure_logs_file.write_text("some logs")
 
-            assert result == "security"
+            result = _classify_failure(
+                repo="owner/repo",
+                pr_number=123,
+                pr_title="Test PR",
+                pr_author="testuser",
+                head_ref="feature-branch",
+                base_ref="main",
+                failure_logs_file=str(failure_logs_file),
+                github_token="token",
+            )
 
-    def test_missing_failure_type(self):
-        """Test when failure_type key is missing."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            context_file = Path(tmp_dir) / ".pr-context.json"
-            context_file.write_text('{"repo": "test/repo"}')
+            assert result.failure_type == FailureType.MERGE_CONFLICT
+            assert result.confidence == 1.0
 
-            result = _get_detected_failure_type(tmp_dir)
+    def test_classify_merge_only_no_failed_checks(self):
+        """Test classification when there are no failed checks."""
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir,
+            patch(
+                "aieng_bot._cli.commands.fix.GitHubClient"
+            ) as mock_github_client_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.check_merge_conflicts.return_value = False
+            mock_client.get_failed_checks.return_value = []
+            mock_github_client_class.return_value = mock_client
 
-            assert result == "unknown"
+            failure_logs_file = Path(tmp_dir) / ".failure-logs.txt"
+            failure_logs_file.write_text("No failure logs")
 
-    def test_context_file_not_found(self):
-        """Test when context file doesn't exist."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            result = _get_detected_failure_type(tmp_dir)
+            result = _classify_failure(
+                repo="owner/repo",
+                pr_number=123,
+                pr_title="Test PR",
+                pr_author="testuser",
+                head_ref="feature-branch",
+                base_ref="main",
+                failure_logs_file=str(failure_logs_file),
+                github_token="token",
+            )
 
-            assert result == "unknown"
+            assert result.failure_type == FailureType.MERGE_ONLY
+            assert result.confidence == 1.0
 
-    def test_invalid_json(self):
-        """Test when context file contains invalid JSON."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            context_file = Path(tmp_dir) / ".pr-context.json"
-            context_file.write_text("not valid json {")
+    def test_classify_calls_classifier_with_failed_checks(self):
+        """Test that classifier is called when there are failed checks."""
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir,
+            patch(
+                "aieng_bot._cli.commands.fix.GitHubClient"
+            ) as mock_github_client_class,
+            patch(
+                "aieng_bot._cli.commands.fix.PRFailureClassifier"
+            ) as mock_classifier_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.check_merge_conflicts.return_value = False
+            mock_client.get_failed_checks.return_value = [
+                MagicMock(name="lint-check", conclusion="FAILURE")
+            ]
+            mock_github_client_class.return_value = mock_client
 
-            result = _get_detected_failure_type(tmp_dir)
+            mock_result = MagicMock()
+            mock_result.failure_type = FailureType.LINT
+            mock_result.confidence = 0.95
 
-            assert result == "unknown"
+            mock_classifier = MagicMock()
+            mock_classifier.classify.return_value = mock_result
+            mock_classifier_class.return_value = mock_classifier
+
+            failure_logs_file = Path(tmp_dir) / ".failure-logs.txt"
+            failure_logs_file.write_text("lint error logs")
+
+            result = _classify_failure(
+                repo="owner/repo",
+                pr_number=123,
+                pr_title="Test PR",
+                pr_author="testuser",
+                head_ref="feature-branch",
+                base_ref="main",
+                failure_logs_file=str(failure_logs_file),
+                github_token="token",
+            )
+
+            assert result.failure_type == FailureType.LINT
+            mock_classifier.classify.assert_called_once()
 
 
 class TestHandleResult:
