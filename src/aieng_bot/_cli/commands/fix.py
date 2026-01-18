@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 
 from ...agent_fixer import AgentFixer
 from ...agent_fixer.models import AgentFixResult, AgenticLoopRequest
+from ...classifier import PRFailureClassifier
+from ...classifier.models import ClassificationResult, FailureType, PRContext
 from ...observability import ActivityLogger, ActivityStatus
 from ...observability.storage import TraceStorage
 from ...utils.github_client import GitHubClient
@@ -186,6 +188,93 @@ def _fetch_initial_failure_logs(
     return failure_logs_file
 
 
+def _classify_failure(
+    repo: str,
+    pr_number: int,
+    pr_title: str,
+    pr_author: str,
+    head_ref: str,
+    base_ref: str,
+    failure_logs_file: str,
+    github_token: str | None,
+) -> ClassificationResult:
+    """Run the classifier to determine failure type.
+
+    Uses the same PRFailureClassifier as the classify command to ensure
+    consistent classification behavior.
+
+    Parameters
+    ----------
+    repo : str
+        Repository in format owner/repo.
+    pr_number : int
+        Pull request number.
+    pr_title : str
+        PR title.
+    pr_author : str
+        PR author.
+    head_ref : str
+        Head branch reference.
+    base_ref : str
+        Base branch reference.
+    failure_logs_file : str
+        Path to the failure logs file.
+    github_token : str | None
+        GitHub token for API access.
+
+    Returns
+    -------
+    ClassificationResult
+        Classification result with failure type, confidence, and reasoning.
+
+    """
+    log_info("Running classifier to determine failure type...")
+
+    # Check for merge conflicts first (fast path)
+    github_client = GitHubClient(github_token=github_token)
+    if github_client.check_merge_conflicts(repo, pr_number):
+        log_warning("PR has merge conflicts")
+        return ClassificationResult(
+            failure_type=FailureType.MERGE_CONFLICT,
+            confidence=1.0,
+            reasoning="PR has merge conflicts with base branch",
+            failed_check_names=["merge-conflict"],
+            recommended_action="Resolve merge conflicts",
+        )
+
+    # Check if there are any failed checks
+    failed_checks = github_client.get_failed_checks(repo, pr_number)
+    if not failed_checks:
+        log_info("No failed checks found - PR just needs rebase and merge")
+        return ClassificationResult(
+            failure_type=FailureType.MERGE_ONLY,
+            confidence=1.0,
+            reasoning="No failed CI checks found. PR is ready for rebase and merge.",
+            failed_check_names=[],
+            recommended_action="Rebase against base branch and merge",
+        )
+
+    # Run the classifier
+    pr_context = PRContext(
+        repo=repo,
+        pr_number=pr_number,
+        pr_title=pr_title,
+        pr_author=pr_author,
+        base_ref=base_ref,
+        head_ref=head_ref,
+    )
+
+    classifier = PRFailureClassifier()
+    result = classifier.classify(pr_context, failed_checks, failure_logs_file)
+
+    log_success(
+        f"Classification: {result.failure_type.value} (confidence: {result.confidence:.0%})"
+    )
+    log_info(f"Reasoning: {result.reasoning}")
+
+    return result
+
+
 def _prepare_agent_environment(cwd: str) -> bool:
     """Copy bot skills to working directory and configure git exclude.
 
@@ -267,33 +356,6 @@ def _cleanup_temporary_files(
                 log_success("Removed .pr-context.json")
     except Exception as e:
         log_warning(f"Error during cleanup: {e}")
-
-
-def _get_detected_failure_type(cwd: str) -> str:
-    """Read the detected failure type from .pr-context.json.
-
-    The agent updates this file with the failure type after analysis.
-
-    Parameters
-    ----------
-    cwd : str
-        Working directory containing .pr-context.json.
-
-    Returns
-    -------
-    str
-        Detected failure type or "unknown" if not found.
-
-    """
-    context_file = Path(cwd) / ".pr-context.json"
-    try:
-        if context_file.exists():
-            with open(context_file) as f:
-                context = json.load(f)
-                return context.get("failure_type", "unknown")
-    except Exception as e:
-        log_warning(f"Could not read failure type from context: {e}")
-    return "unknown"
 
 
 def _handle_result(
@@ -593,10 +655,23 @@ def fix(
             repo, pr_number, cwd, github_token
         )
 
-        # 3. Prepare agent environment
+        # 3. Run classifier to determine failure type
+        classification = _classify_failure(
+            repo=repo,
+            pr_number=pr_number,
+            pr_title=pr_title,
+            pr_author=pr_author,
+            head_ref=head_ref,
+            base_ref=base_ref,
+            failure_logs_file=failure_logs_file,
+            github_token=github_token,
+        )
+        failure_type = classification.failure_type.value
+
+        # 4. Prepare agent environment
         bot_skills_copied = _prepare_agent_environment(cwd)
 
-        # 4. Create agentic loop request and run agent
+        # 5. Create agentic loop request and run agent
         log_info("Initializing AgentFixer for agentic loop...")
         pr_url = f"https://github.com/{repo}/pull/{pr_number}"
 
@@ -608,6 +683,7 @@ def fix(
             pr_url=pr_url,
             head_ref=head_ref,
             base_ref=base_ref,
+            failure_type=failure_type,
             failure_logs_file=failure_logs_file,
             max_retries=max_retries,
             timeout_minutes=timeout_minutes,
@@ -620,7 +696,6 @@ def fix(
         result = asyncio.run(fixer.run_agentic_loop(request))
 
         elapsed_hours = (time.time() - start_time) / 3600
-        detected_failure_type = _get_detected_failure_type(cwd)
 
         _handle_result(
             result=result,
@@ -631,7 +706,7 @@ def fix(
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
             elapsed_hours=elapsed_hours,
-            failure_type=detected_failure_type,
+            failure_type=failure_type,
             log_to_gcs=log_to_gcs,
         )
 

@@ -11,7 +11,8 @@ CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot d
 3. **lint**: Code formatting/style violations (ESLint, Black, Prettier, Ruff, pre-commit)
 4. **test**: Test failures (Jest, pytest, unittest, integration tests)
 5. **build**: Build/compilation errors (TypeScript, webpack, tsc, compilation)
-6. **unknown**: Cannot be confidently classified into above categories
+6. **merge_only**: No actual failures - PR just needs rebase against main and merge
+7. **unknown**: Cannot be confidently classified into above categories
 
 ## Key Indicators (Look for these patterns first)
 
@@ -35,6 +36,13 @@ CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot d
 **Merge Conflict**:
 - Keywords: "conflict", "unmerged paths", "CONFLICT"
 - Patterns: "<<<<<<< HEAD", "merge conflict"
+
+**Merge Only** (NO ACTUAL FAILURES):
+- Check statuses show "success" or "neutral" (not "failure")
+- Logs show all checks passed or were skipped
+- PR is behind main/base branch and needs rebase
+- No error patterns found in logs after thorough search
+- Keywords: "all checks passed", "success", "CI passed"
 
 ## Failure Logs File
 
@@ -76,7 +84,7 @@ grep -i "CVE-\|GHSA-\|vulnerability\|audit.*found" {failure_logs_file} | head -2
 
 Return ONLY a valid JSON object with this exact structure:
 {{
-  "failure_type": "security|lint|test|build|merge_conflict|unknown",
+  "failure_type": "security|lint|test|build|merge_conflict|merge_only|unknown",
   "confidence": 0.95,
   "reasoning": "Brief explanation of why you chose this classification",
   "recommended_action": "Specific next step the bot should take"
@@ -93,6 +101,9 @@ Return ONLY a valid JSON object with this exact structure:
 
 // Lint: Formatting check
 {{"failure_type": "lint", "confidence": 0.95, "reasoning": "Black formatting check failed, 3 files need reformatting", "recommended_action": "Run black formatter"}}
+
+// Merge Only: No failures, just needs rebase
+{{"failure_type": "merge_only", "confidence": 0.95, "reasoning": "All CI checks passed or show success. PR is behind main and just needs rebase and merge.", "recommended_action": "Rebase against main and merge"}}
 
 // Unknown: Insufficient info
 {{"failure_type": "unknown", "confidence": 0.2, "reasoning": "Only 'exit code 1' shown, no actual error details", "recommended_action": "Fetch more detailed logs"}}
