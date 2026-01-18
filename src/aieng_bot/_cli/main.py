@@ -2,7 +2,6 @@
 
 import os
 
-import click
 from rich.console import Console
 from rich.text import Text
 
@@ -10,6 +9,7 @@ from ..config import get_model_name
 from ..utils.logging import get_console
 from .commands.classify import classify
 from .commands.fix import fix
+from .help_config import VECTOR_MAGENTA, click
 from .utils import get_version
 
 
@@ -52,12 +52,12 @@ def print_banner(console: Console) -> None:
     console.print()
 
 
-def version_callback(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+def version_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
     """Show version and exit.
 
     Args:
         ctx: Click context
-        param: Click parameter (unused)
+        _param: Click parameter (unused)
         value: Whether --version flag was provided
 
     """
@@ -69,7 +69,17 @@ def version_callback(ctx: click.Context, param: click.Parameter, value: bool) ->
 
 @click.group(
     invoke_without_command=True,
-    help="AI Engineering Bot for automated PR maintenance across Vector Institute repositories",
+)
+@click.rich_config(
+    help_config=click.RichHelpConfiguration(
+        width=100,
+        show_arguments=True,
+        show_metavars_column=True,
+        append_metavars_help=True,
+        style_option=f"bold {VECTOR_MAGENTA}",
+        style_command="bold cyan",
+        style_usage_command=f"bold {VECTOR_MAGENTA}",
+    )
 )
 @click.option(
     "--version",
@@ -77,12 +87,12 @@ def version_callback(ctx: click.Context, param: click.Parameter, value: bool) ->
     callback=version_callback,
     expose_value=False,
     is_eager=True,
-    help="Show version and exit",
+    help="Show version and exit.",
 )
 @click.option(
     "--no-banner",
     is_flag=True,
-    help="Disable ASCII art banner",
+    help="Disable ASCII art banner.",
 )
 @click.pass_context
 def cli(ctx: click.Context, no_banner: bool) -> None:
@@ -90,6 +100,20 @@ def cli(ctx: click.Context, no_banner: bool) -> None:
 
     Manages bot PRs (Dependabot, pre-commit-ci) across Vector Institute repositories.
     Automatically classifies failures, applies fixes, and maintains code quality.
+
+    \b
+    Commands:
+      classify  Analyze a PR to identify the failure type
+      fix       Autonomously fix a PR and merge it
+
+    \b
+    Examples:
+      # Classify a PR failure
+      $ aieng-bot classify --repo VectorInstitute/repo --pr 42
+
+    \b
+      # Fix and merge a PR
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 42
 
     Use 'aieng-bot COMMAND --help' for command-specific help.
     """

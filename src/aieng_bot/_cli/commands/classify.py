@@ -7,7 +7,6 @@ import sys
 import traceback
 from typing import Any
 
-import click
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -17,6 +16,7 @@ from ...classifier import PRFailureClassifier
 from ...classifier.models import ClassificationResult, FailureType
 from ...utils.github_client import GitHubClient
 from ...utils.logging import get_console, log_error, log_info, log_success, log_warning
+from ..help_config import VECTOR_MAGENTA, VECTOR_TEAL, click
 
 # Load .env file at module import time (before Click processes envvars)
 load_dotenv()
@@ -239,39 +239,50 @@ def _handle_no_failed_checks(
 
 
 @click.command()
+@click.rich_config(
+    help_config=click.RichHelpConfiguration(
+        width=100,
+        show_arguments=True,
+        show_metavars_column=True,
+        append_metavars_help=True,
+        style_option=f"bold {VECTOR_TEAL}",
+        style_metavar="bold yellow",
+        style_usage_command=f"bold {VECTOR_MAGENTA}",
+    )
+)
 @click.option(
     "--repo",
     required=True,
-    help="Repository in format 'owner/repo' (e.g., VectorInstitute/aieng-template-mvp)",
+    help="Repository in format 'owner/repo'.",
 )
 @click.option(
     "--pr",
     "pr_number",
     required=True,
     type=int,
-    help="Pull request number to classify",
+    help="Pull request number to classify.",
 )
 @click.option(
     "--json",
     "json_output",
     is_flag=True,
-    help="Output in JSON format to stdout (default: Rich formatted for terminal)",
+    help="Output in JSON format to stdout.",
 )
 @click.option(
     "--output",
     "output_file",
     type=click.Path(),
-    help="Save JSON result to file (e.g., classification.json)",
+    help="Save JSON result to file.",
 )
 @click.option(
     "--github-token",
     envvar="GITHUB_TOKEN",
-    help="GitHub token (or set GITHUB_TOKEN/GH_TOKEN env var)",
+    help="GitHub token (or set GITHUB_TOKEN env var).",
 )
 @click.option(
     "--anthropic-api-key",
     envvar="ANTHROPIC_API_KEY",
-    help="Anthropic API key (or set ANTHROPIC_API_KEY env var)",
+    help="Anthropic API key (or set ANTHROPIC_API_KEY env var).",
 )
 def classify(
     repo: str,
@@ -283,26 +294,26 @@ def classify(
 ) -> None:
     """Classify PR failure type.
 
-    Analyzes a GitHub PR to determine the type of CI/CD failure
-    (test, lint, security, build, merge_conflict, or unknown).
+    Analyzes a GitHub PR to determine the type of CI/CD failure:
+    test, lint, security, build, merge_conflict, or unknown.
 
     \b
     Examples:
-    \b
       # Rich formatted output (default)
-      aieng-bot classify --repo VectorInstitute/aieng-template-mvp --pr 17
+      $ aieng-bot classify --repo VectorInstitute/repo --pr 17
+
     \b
       # JSON output to stdout
-      aieng-bot classify --repo VectorInstitute/repo-name --pr 123 --json
+      $ aieng-bot classify --repo VectorInstitute/repo --pr 123 --json
+
     \b
       # Save JSON to file
-      aieng-bot classify --repo owner/repo --pr 42 --output classification.json
+      $ aieng-bot classify --repo owner/repo --pr 42 --output result.json
 
     \b
-    Required Environment Variables:
-      ANTHROPIC_API_KEY  - Claude API key (https://console.anthropic.com)
-      GITHUB_TOKEN       - GitHub token (or GH_TOKEN)
-
+    Environment Variables:
+      ANTHROPIC_API_KEY  Claude API key (console.anthropic.com)
+      GITHUB_TOKEN       GitHub token (or GH_TOKEN)
     """
     console = get_console()
 

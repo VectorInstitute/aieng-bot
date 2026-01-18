@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aieng-bot"
-version = "0.5.0"
+version = "0.6.0"
 description = "Vector Institute AI Engineering Bot for Maintenance Tasks"
 readme = "README.md"
 authors = [{name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
@@ -26,6 +26,7 @@ dependencies = [
     "click>=8.0.0",
     "pyyaml>=6.0.2",
     "rich>=13.0.0",
+    "rich-click>=1.8.0",
     "python-dotenv>=1.0.0",
 ]
 
