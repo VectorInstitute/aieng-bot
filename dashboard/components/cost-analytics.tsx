@@ -26,6 +26,7 @@ const FAILURE_TYPE_COLORS: Record<string, string> = {
   security: VECTOR_COLORS.magenta,
   build: VECTOR_COLORS.cobalt,
   merge_conflict: '#FF9E00',
+  merge_only: '#22c55e',
   unknown: '#64748b',
 }
 
@@ -35,6 +36,7 @@ const FAILURE_TYPE_LABELS: Record<string, string> = {
   security: 'Security Audits',
   build: 'Build Failures',
   merge_conflict: 'Merge Conflicts',
+  merge_only: 'Merge Only',
   unknown: 'Unknown',
 }
 
