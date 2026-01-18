@@ -89,8 +89,15 @@ class AgentFixer:
 
             log_success("Agent completed fixes")
 
-            # Finalize trace
-            tracer.finalize(status="SUCCESS")
+            # Extract file metrics from trace events
+            changes_made, files_modified = tracer.extract_file_metrics()
+
+            # Finalize trace with extracted metrics
+            tracer.finalize(
+                status="SUCCESS",
+                changes_made=changes_made,
+                files_modified=files_modified,
+            )
 
             # Save trace and summary
             trace_file = "/tmp/agent-execution-trace.json"
@@ -271,8 +278,15 @@ class AgentFixer:
 
             log_success("Agentic loop completed")
 
-            # Finalize trace
-            tracer.finalize(status="SUCCESS")
+            # Extract file metrics from trace events
+            changes_made, files_modified = tracer.extract_file_metrics()
+
+            # Finalize trace with extracted metrics
+            tracer.finalize(
+                status="SUCCESS",
+                changes_made=changes_made,
+                files_modified=files_modified,
+            )
 
             # Save trace and summary
             trace_file = "/tmp/agent-execution-trace.json"
@@ -320,7 +334,8 @@ class AgentFixer:
             "pr_url": request.pr_url,
             "head_ref": request.head_ref,
             "base_ref": request.base_ref,
-            "failure_type": request.failure_type,
+            "failure_types": request.failure_types,
+            "failure_type": request.failure_type,  # Backward compatibility
             "failure_logs_file": request.failure_logs_file,
             "max_retries": request.max_retries,
             "timeout_minutes": request.timeout_minutes,
@@ -344,12 +359,18 @@ class AgentFixer:
             Formatted prompt for Claude Agent SDK.
 
         """
+        # Format failure types as a readable list
+        failure_types_display = (
+            request.failure_types
+            if len(request.failure_types) > 1
+            else request.failure_types[0]
+        )
         return AGENTIC_LOOP_PROMPT.format(
             repo=request.repo,
             pr_number=request.pr_number,
             head_ref=request.head_ref,
             base_ref=request.base_ref,
-            failure_type=request.failure_type,
+            failure_types=failure_types_display,
             max_retries=request.max_retries,
             timeout_minutes=request.timeout_minutes,
         )
@@ -379,7 +400,8 @@ class AgentFixer:
         }
 
         failure_info = {
-            "type": request.failure_type,
+            "type": request.failure_type,  # Primary type for backward compatibility
+            "types": request.failure_types,  # Full list of failure types
             "checks": [],
         }
 

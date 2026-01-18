@@ -17,7 +17,8 @@ export interface AgentTrace {
       url: string
     }
     failure?: {
-      type: string
+      type: string  // Primary type for backward compatibility
+      types?: string[]  // Array of all failure types
       checks: string[]
     }
   }
@@ -115,7 +116,8 @@ export interface BotActivity {
   workflow_run_id: string
   github_run_url: string
   status: 'SUCCESS' | 'FAILED'
-  failure_type: string  // lint, test, build, security, merge_conflict, merge_only, unknown
+  failure_type: string  // Primary type for backward compatibility
+  failure_types?: string[]  // Array of all failure types (lint, test, build, security, etc.)
   trace_path: string
   fix_time_hours: number
 }
@@ -140,7 +142,8 @@ export interface PRSummary extends Record<string, unknown> {
   timestamp: string
   pr_url: string
   workflow_run_url: string
-  failure_type: string
+  failure_type: string  // Primary type for backward compatibility
+  failure_types?: string[]  // Array of all failure types
   fix_time_hours: number | null
   trace_path: string
   cost_usd: number | null

@@ -1,8 +1,8 @@
 """Classification prompt templates."""
 
-CLASSIFICATION_PROMPT_WITH_TOOLS = r"""You are an expert at analyzing CI/CD failures in GitHub pull requests. Your task is to classify the type of failure by analyzing the provided PR context, failed checks, and searching through the failure logs file.
+CLASSIFICATION_PROMPT_WITH_TOOLS = r"""You are an expert at analyzing CI/CD failures in GitHub pull requests. Your task is to classify ALL types of failures by analyzing the provided PR context, failed checks, and searching through the failure logs file.
 
-CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot determine the failure type from the logs.
+CRITICAL: A PR can have MULTIPLE failure types (e.g., both lint AND test failures). Identify ALL applicable types.
 
 ## Available Failure Categories
 
@@ -14,7 +14,7 @@ CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot d
 6. **merge_only**: No actual failures - PR just needs rebase against main and merge
 7. **unknown**: Cannot be confidently classified into above categories
 
-## Key Indicators (Look for these patterns first)
+## Key Indicators (Look for these patterns)
 
 **Security** (HIGH PRIORITY):
 - Keywords: "vulnerability", "CVE-", "GHSA-", "security", "audit failed"
@@ -48,65 +48,54 @@ CRITICAL: Be confident and decisive. Only return "unknown" if you truly cannot d
 
 The file `{failure_logs_file}` contains GitHub Actions logs from failed CI checks.
 
-**CRITICAL EFFICIENCY REQUIREMENT:**
-- Use AT MOST 2-3 bash tool searches
-- Return JSON classification IMMEDIATELY after finding key patterns
-- Do NOT exhaustively explore logs - grep ONCE for the most likely pattern based on check name
+**Search Strategy for Multiple Failure Types:**
 
-**Efficient Search Strategy:**
-
-For check named "code-check", "lint", "style", "format" → Search for formatting/lint patterns:
+Run a comprehensive search to detect ALL failure types present:
 ```bash
-grep -i "formatting\|prettier\|black\|eslint\|ruff\|style" {failure_logs_file} | head -20
+grep -i "CVE-\|GHSA-\|vulnerability\|audit.*found\|FAILED\|test.*failed\|assertion\|formatting\|prettier\|black\|eslint\|ruff\|style\|compilation error\|build failed\|module not found\|conflict\|unmerged" {failure_logs_file} | head -50
 ```
 
-For check named "test", "unit", "integration" → Search for test failures:
-```bash
-grep -i "FAILED\|test.*failed\|assertion\|expected" {failure_logs_file} | head -20
-```
-
-For check named "security", "audit", "vulnerability" OR any check → Search for security issues FIRST:
-```bash
-grep -i "CVE-\|GHSA-\|vulnerability\|audit.*found" {failure_logs_file} | head -20
-```
-
-**STOP searching after finding clear indicators.** Return JSON immediately.
+Then categorize the results into failure types.
 
 ## Classification Process
 
-1. Review check name and PR context
-2. Run ONE targeted grep based on check name pattern
-3. If security keywords found → Return "security" classification
-4. If no match → Run ONE more grep for generic errors
-5. Return JSON classification - DO NOT explore further
+1. Review check names - multiple checks may indicate multiple failure types
+2. Run grep to search for ALL failure patterns
+3. Identify ALL applicable failure types from the results
+4. Return JSON with array of failure types
 
 ## Output Format
 
 Return ONLY a valid JSON object with this exact structure:
 {{
-  "failure_type": "security|lint|test|build|merge_conflict|merge_only|unknown",
+  "failure_types": ["security", "lint"],
   "confidence": 0.95,
-  "reasoning": "Brief explanation of why you chose this classification",
-  "recommended_action": "Specific next step the bot should take"
+  "reasoning": "Brief explanation of all detected failure types",
+  "recommended_action": "Fix security vulnerabilities first, then run linter"
 }}
+
+**IMPORTANT**: `failure_types` is an ARRAY. Include ALL detected types, not just one.
 
 ## Examples
 
 ```json
-// Security: pip-audit found CVE
-{{"failure_type": "security", "confidence": 0.95, "reasoning": "pip-audit found GHSA-w853-jp5j-5j7f in filelock 3.20.0", "recommended_action": "Update filelock to 3.20.1"}}
+// Multiple failures: Security + Lint
+{{"failure_types": ["security", "lint"], "confidence": 0.95, "reasoning": "pip-audit found CVE-2024-1234 AND black formatting check failed for 3 files", "recommended_action": "Fix security vulnerability first, then run black formatter"}}
 
-// Test: Assertion failure
-{{"failure_type": "test", "confidence": 0.98, "reasoning": "AssertionError in test_calculation", "recommended_action": "Fix test assertion or update code"}}
+// Multiple failures: Lint + Test
+{{"failure_types": ["lint", "test"], "confidence": 0.92, "reasoning": "Ruff found style violations AND 2 pytest tests failed with AssertionError", "recommended_action": "Fix lint issues first (may resolve test failures), then fix remaining tests"}}
 
-// Lint: Formatting check
-{{"failure_type": "lint", "confidence": 0.95, "reasoning": "Black formatting check failed, 3 files need reformatting", "recommended_action": "Run black formatter"}}
+// Single failure: Security only
+{{"failure_types": ["security"], "confidence": 0.95, "reasoning": "pip-audit found GHSA-w853-jp5j-5j7f in filelock 3.20.0", "recommended_action": "Update filelock to 3.20.1"}}
 
-// Merge Only: No failures, just needs rebase
-{{"failure_type": "merge_only", "confidence": 0.95, "reasoning": "All CI checks passed or show success. PR is behind main and just needs rebase and merge.", "recommended_action": "Rebase against main and merge"}}
+// Single failure: Test only
+{{"failure_types": ["test"], "confidence": 0.98, "reasoning": "AssertionError in test_calculation", "recommended_action": "Fix test assertion or update code"}}
+
+// Merge Only: No failures
+{{"failure_types": ["merge_only"], "confidence": 0.95, "reasoning": "All CI checks passed. PR is behind main and just needs rebase and merge.", "recommended_action": "Rebase against main and merge"}}
 
 // Unknown: Insufficient info
-{{"failure_type": "unknown", "confidence": 0.2, "reasoning": "Only 'exit code 1' shown, no actual error details", "recommended_action": "Fetch more detailed logs"}}
+{{"failure_types": ["unknown"], "confidence": 0.2, "reasoning": "Only 'exit code 1' shown, no actual error details", "recommended_action": "Fetch more detailed logs"}}
 ```
 
 ---
@@ -121,4 +110,4 @@ Return ONLY a valid JSON object with this exact structure:
 
 ---
 
-Use the bash tool to search `{failure_logs_file}` for relevant error patterns, then return your classification as a JSON object."""
+Use the bash tool to search `{failure_logs_file}` for ALL relevant error patterns, then return your classification as a JSON object with an array of failure_types."""

@@ -209,13 +209,13 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
               paginatedData.map((pr) => (
                 <tr
                   key={`${pr.repo}-${pr.pr_number}-${pr.timestamp}`}
-                  className={CLASSES.hoverRow}
+                  className={`group ${CLASSES.hoverRow}`}
                 >
                   <td className={CLASSES.tableCell}>
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-gray-900 dark:group-hover:text-white">
                       {getRepoName(pr.repo)}
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 truncate max-w-xs">
                       {pr.title}
                     </div>
                   </td>

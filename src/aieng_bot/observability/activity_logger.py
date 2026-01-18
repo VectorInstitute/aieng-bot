@@ -128,7 +128,7 @@ class ActivityLogger:
         workflow_run_id: str,
         github_run_url: str,
         status: ActivityStatus,
-        failure_type: str,
+        failure_types: list[str],
         trace_path: str,
         fix_time_hours: float,
     ) -> bool:
@@ -155,9 +155,9 @@ class ActivityLogger:
             GitHub workflow run URL.
         status : ActivityStatus
             Fix status (SUCCESS, FAILED).
-        failure_type : str
-            Type of failure/action (lint, test, build, security,
-            merge_conflict, merge_only, unknown).
+        failure_types : list[str]
+            Types of failure/action (lint, test, build, security,
+            merge_conflict, merge_only, unknown). Multiple types can be present.
         trace_path : str
             Path to trace file in GCS.
         fix_time_hours : float
@@ -174,7 +174,7 @@ class ActivityLogger:
         # Load existing log
         log_data = self._load_activity_log()
 
-        # Create activity entry
+        # Create activity entry with both failure_types (new) and failure_type (backward compat)
         activity = {
             "repo": repo,
             "pr_number": pr_number,
@@ -185,7 +185,8 @@ class ActivityLogger:
             "workflow_run_id": workflow_run_id,
             "github_run_url": github_run_url,
             "status": status,
-            "failure_type": failure_type,
+            "failure_types": failure_types,
+            "failure_type": failure_types[0] if failure_types else "unknown",
             "trace_path": trace_path,
             "fix_time_hours": fix_time_hours,
         }
@@ -195,10 +196,11 @@ class ActivityLogger:
         log_data["last_updated"] = datetime.now(timezone.utc).isoformat()
 
         # Save to GCS
+        failure_types_str = ",".join(failure_types)
         if self._save_activity_log(log_data):
             log_success(
                 f"Fix activity recorded for {repo}#{pr_number} "
-                f"(status: {status}, type: {failure_type})"
+                f"(status: {status}, types: {failure_types_str})"
             )
             return True
 

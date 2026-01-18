@@ -72,7 +72,7 @@ class PRFailureClassifier:
         if not Path(failure_logs_file).exists():
             log_error(f"Failure logs file not found: {failure_logs_file}")
             return ClassificationResult(
-                failure_type=FailureType.UNKNOWN,
+                failure_types=[FailureType.UNKNOWN],
                 confidence=0.0,
                 reasoning="Failure logs file not found",
                 failed_check_names=[check.name for check in failed_checks],
@@ -259,14 +259,21 @@ class PRFailureClassifier:
     def _validate_and_build_result(
         self, result_data: dict[str, Any], failed_checks: list[CheckFailure]
     ) -> ClassificationResult:
-        """Validate result data and build ClassificationResult."""
-        # Validate required fields
-        required_fields = [
-            "failure_type",
-            "confidence",
-            "reasoning",
-            "recommended_action",
-        ]
+        """Validate result data and build ClassificationResult.
+
+        Supports both new format (failure_types array) and legacy format
+        (single failure_type) for backward compatibility.
+        """
+        # Check for required fields - support both new and legacy format
+        has_types_array = "failure_types" in result_data
+        has_single_type = "failure_type" in result_data
+
+        if not has_types_array and not has_single_type:
+            raise ValueError(
+                "Response missing required field: 'failure_types' (or legacy 'failure_type')"
+            )
+
+        required_fields = ["confidence", "reasoning", "recommended_action"]
         missing_fields = [f for f in required_fields if f not in result_data]
         if missing_fields:
             raise ValueError(
@@ -280,32 +287,57 @@ class PRFailureClassifier:
                 f"Invalid confidence value: {confidence} (must be between 0.0 and 1.0)"
             )
 
-        failure_type_str = result_data["failure_type"]
-
-        # Validate failure type
+        # Extract failure types (handle both array and single value)
         valid_types = [ft.value for ft in FailureType]
-        if failure_type_str not in valid_types:
-            raise ValueError(
-                f"Invalid failure_type: {failure_type_str}. "
-                f"Must be one of: {', '.join(valid_types)}"
-            )
+
+        if has_types_array:
+            failure_type_strs = result_data["failure_types"]
+            if not isinstance(failure_type_strs, list):
+                failure_type_strs = [failure_type_strs]
+        else:
+            # Legacy single failure_type format
+            failure_type_strs = [result_data["failure_type"]]
+
+        # Validate all failure types
+        validated_types: list[FailureType] = []
+        for ft_str in failure_type_strs:
+            if ft_str not in valid_types:
+                log_warning(
+                    f"Invalid failure_type '{ft_str}' ignored. "
+                    f"Must be one of: {', '.join(valid_types)}"
+                )
+                continue
+            validated_types.append(FailureType(ft_str))
+
+        # If no valid types found, default to unknown
+        if not validated_types:
+            validated_types = [FailureType.UNKNOWN]
 
         # Apply confidence threshold - if too uncertain, treat as unknown
-        if failure_type_str != "unknown" and confidence < self.MIN_CONFIDENCE:
+        if (
+            confidence < self.MIN_CONFIDENCE
+            and FailureType.UNKNOWN not in validated_types
+        ):
             log_warning(
                 f"Low confidence ({confidence:.2f}) "
-                f"for classification '{failure_type_str}'. "
+                f"for classification {[ft.value for ft in validated_types]}. "
                 f"Treating as unknown (threshold: {self.MIN_CONFIDENCE})"
             )
-            failure_type_str = "unknown"
+            validated_types = [FailureType.UNKNOWN]
             result_data["reasoning"] += (
                 f" [Note: Original classification had confidence {confidence:.2f}, "
                 f"below threshold {self.MIN_CONFIDENCE}]"
             )
 
+        # Log multi-failure detection
+        if len(validated_types) > 1:
+            log_info(
+                f"Multiple failure types detected: {[ft.value for ft in validated_types]}"
+            )
+
         # Validate and construct result
         return ClassificationResult(
-            failure_type=FailureType(failure_type_str),
+            failure_types=validated_types,
             confidence=confidence,
             reasoning=result_data["reasoning"],
             failed_check_names=[check.name for check in failed_checks],
@@ -383,7 +415,7 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
             log_error(f"Error calling Claude API: {e}")
             # Fallback to unknown with low confidence
             return ClassificationResult(
-                failure_type=FailureType.UNKNOWN,
+                failure_types=[FailureType.UNKNOWN],
                 confidence=0.0,
                 reasoning=f"API error: {str(e)}",
                 failed_check_names=[check.name for check in failed_checks],
@@ -392,7 +424,7 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             log_error(f"Error parsing classification result: {e}")
             return ClassificationResult(
-                failure_type=FailureType.UNKNOWN,
+                failure_types=[FailureType.UNKNOWN],
                 confidence=0.0,
                 reasoning=f"Parse error: {str(e)}",
                 failed_check_names=[check.name for check in failed_checks],

@@ -5,13 +5,21 @@ import { AlertCircle, ChevronDown, ChevronRight, AlertTriangle, Shield, Wrench, 
 
 interface FailureAnalysisProps {
   failure: {
-    type: string
+    type: string  // Primary type for backward compatibility
+    types?: string[]  // Array of all failure types
     checks: string[]
   }
 }
 
 export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
   const [isExpanded, setIsExpanded] = useState(true)
+
+  // Get all failure types (use types array if available, otherwise fall back to single type)
+  const failureTypes = failure.types && failure.types.length > 0
+    ? failure.types
+    : [failure.type]
+
+  const hasMultipleTypes = failureTypes.length > 1
 
   const getFailureIcon = (type: string) => {
     switch (type) {
@@ -70,20 +78,35 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
     }
   }
 
+  // Format types for display
+  const typesDisplay = failureTypes.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')
+
   return (
-    <div className={`border rounded-lg overflow-hidden ${getFailureColor(failure.type)}`}>
+    <div className={`border rounded-lg overflow-hidden ${getFailureColor(failureTypes[0])}`}>
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer border-b border-current/10"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center space-x-3">
-          {getFailureIcon(failure.type)}
+          <div className="flex items-center space-x-1">
+            {hasMultipleTypes ? (
+              // Show multiple icons for multiple types
+              failureTypes.slice(0, 3).map((type, idx) => (
+                <span key={idx} className={idx > 0 ? '-ml-2' : ''}>
+                  {getFailureIcon(type)}
+                </span>
+              ))
+            ) : (
+              getFailureIcon(failureTypes[0])
+            )}
+          </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-              Failure Analysis: {failure.type.charAt(0).toUpperCase() + failure.type.slice(1)}
+              Failure Analysis: {typesDisplay}
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
+              {hasMultipleTypes && <span className="font-medium">{failureTypes.length} failure types detected • </span>}
               {failure.checks.length} check{failure.checks.length !== 1 ? 's' : ''} failed
             </p>
           </div>
@@ -98,12 +121,22 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
       {/* Content */}
       {isExpanded && (
         <div className="p-4 space-y-4">
-          {/* Description */}
-          <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4">
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              {getFailureDescription(failure.type)}
-            </p>
-          </div>
+          {/* Description - show for each failure type */}
+          {failureTypes.map((type, idx) => (
+            <div key={idx} className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4">
+              {hasMultipleTypes && (
+                <div className="flex items-center space-x-2 mb-2">
+                  {getFailureIcon(type)}
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
+                    {type} Failure
+                  </span>
+                </div>
+              )}
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {getFailureDescription(type)}
+              </p>
+            </div>
+          ))}
 
           {/* Failed Checks */}
           <div>
@@ -125,13 +158,13 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
             </div>
           </div>
 
-          {/* Insights */}
+          {/* Insights - show strategies for all failure types */}
           <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              Resolution Strategy
+              Resolution {hasMultipleTypes ? 'Strategies' : 'Strategy'}
             </h4>
             <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-              {failure.type === 'test' && (
+              {failureTypes.includes('test') && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-purple-600 dark:text-purple-400 mt-0.5">•</span>
@@ -147,7 +180,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {failure.type === 'lint' && (
+              {failureTypes.includes('lint') && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
@@ -163,7 +196,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {failure.type === 'security' && (
+              {failureTypes.includes('security') && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-red-600 dark:text-red-400 mt-0.5">•</span>
@@ -179,7 +212,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {failure.type === 'build' && (
+              {failureTypes.includes('build') && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-orange-600 dark:text-orange-400 mt-0.5">•</span>
@@ -195,7 +228,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {failure.type === 'merge_conflict' && (
+              {failureTypes.includes('merge_conflict') && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-pink-600 dark:text-pink-400 mt-0.5">•</span>
@@ -215,7 +248,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {failure.type === 'merge_only' && (
+              {failureTypes.includes('merge_only') && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-green-600 dark:text-green-400 mt-0.5">•</span>
@@ -231,7 +264,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {!['test', 'lint', 'security', 'build', 'merge_conflict', 'merge_only'].includes(failure.type) && (
+              {failureTypes.some(t => !['test', 'lint', 'security', 'build', 'merge_conflict', 'merge_only'].includes(t)) && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-yellow-600 dark:text-yellow-400 mt-0.5">•</span>
