@@ -15,7 +15,6 @@ from ._cli.utils import get_version, parse_pr_inputs, read_failure_logs
 from .agent_fixer import AgentFixer, AgentFixRequest  # noqa: F401
 from .classifier import PRFailureClassifier  # noqa: F401
 from .classifier.models import CheckFailure, PRContext  # noqa: F401
-from .metrics import MetricsCollector  # noqa: F401
 
 # Maintain backward compatibility for private function names
 _read_failure_logs = read_failure_logs
@@ -36,7 +35,6 @@ __all__ = [
     "PRFailureClassifier",
     "CheckFailure",
     "PRContext",
-    "MetricsCollector",
 ]
 
 if __name__ == "__main__":

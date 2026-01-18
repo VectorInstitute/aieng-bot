@@ -11,7 +11,6 @@ import traceback
 import uuid
 from pathlib import Path
 
-import click
 from dotenv import load_dotenv
 
 from ...agent_fixer import AgentFixer
@@ -22,6 +21,7 @@ from ...observability import ActivityLogger, ActivityStatus
 from ...observability.storage import TraceStorage
 from ...utils.github_client import GitHubClient
 from ...utils.logging import log_error, log_info, log_success, log_warning
+from ..help_config import VECTOR_MAGENTA, VECTOR_TEAL, click
 
 # Load .env file at module import time
 load_dotenv()
@@ -504,62 +504,73 @@ def _log_activity_to_gcs(
 
 
 @click.command("fix")
+@click.rich_config(
+    help_config=click.RichHelpConfiguration(
+        width=100,
+        show_arguments=True,
+        show_metavars_column=True,
+        append_metavars_help=True,
+        style_option=f"bold {VECTOR_TEAL}",
+        style_metavar="bold yellow",
+        style_usage_command=f"bold {VECTOR_MAGENTA}",
+    )
+)
 @click.option(
     "--repo",
     required=True,
-    help="Repository name in owner/repo format (e.g., VectorInstitute/repo-name)",
+    help="Repository in format 'owner/repo'.",
 )
 @click.option(
     "--pr",
     "pr_number",
     required=True,
     type=int,
-    help="Pull request number",
+    help="Pull request number to fix.",
 )
 @click.option(
     "--max-retries",
     default=3,
     type=int,
-    help="Maximum number of fix attempts (default: 3)",
+    help="Maximum number of fix attempts.",
 )
 @click.option(
     "--timeout-minutes",
     default=330,
     type=int,
-    help="Maximum time for entire fix loop in minutes (default: 330 = 5.5 hours)",
+    help="Maximum time for fix loop in minutes.",
 )
 @click.option(
     "--cwd",
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
     default=".",
-    help="Working directory for agent (defaults to current directory)",
+    help="Working directory for agent.",
 )
 @click.option(
     "--workflow-run-id",
     default="",
-    help="GitHub workflow run ID for traceability (optional)",
+    help="GitHub workflow run ID for traceability.",
 )
 @click.option(
     "--github-run-url",
     default="",
-    help="GitHub workflow run URL for logging (optional)",
+    help="GitHub workflow run URL for logging.",
 )
 @click.option(
     "--github-token",
     envvar="GITHUB_TOKEN",
-    help="GitHub token (or set GITHUB_TOKEN/GH_TOKEN env var)",
+    help="GitHub token (or set GITHUB_TOKEN env var).",
 )
 @click.option(
     "--anthropic-api-key",
     envvar="ANTHROPIC_API_KEY",
-    help="Anthropic API key (or set ANTHROPIC_API_KEY env var)",
+    help="Anthropic API key (or set ANTHROPIC_API_KEY env var).",
 )
 @click.option(
     "--log",
     "log_to_gcs",
     is_flag=True,
     default=False,
-    help="Log fix activity to GCS for dashboard (requires gcloud auth)",
+    help="Log activity to GCS for dashboard.",
 )
 def fix(
     repo: str,
@@ -573,41 +584,40 @@ def fix(
     anthropic_api_key: str | None,  # noqa: ARG001 - used by env var loading
     log_to_gcs: bool,
 ) -> None:
-    """Fix and merge a PR by running Claude in an autonomous loop.
+    """Fix and merge a PR using Claude AI.
 
-    This command handles the full PR lifecycle:
-    - PRs with failures: Analyze, fix, commit, push, wait for CI, merge
-    - PRs without failures: Check if rebase needed, rebase, wait for CI, merge
-    - Already merged/closed PRs: Exit early (no API calls)
+    Runs an autonomous agent loop to analyze, fix, and merge GitHub PRs.
 
-    Claude will automatically determine what action is needed and apply
-    the appropriate fix or merge strategy. If CI fails, it retries automatically.
+    \b
+    Workflow:
+      1. Analyze  - Classify the failure type
+      2. Fix      - Apply appropriate fixes
+      3. Test     - Wait for CI to pass
+      4. Merge    - Automatically merge when ready
 
+    \b
     Examples:
-    \b
-      # Basic usage - fix failures and merge
-      aieng-bot fix --repo VectorInstitute/repo-name --pr 123
+      # Basic usage - fix and merge
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 123
 
     \b
-      # With GCS logging for dashboard
-      aieng-bot fix --repo VectorInstitute/repo-name --pr 123 --log
+      # With dashboard logging
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 123 --log
 
     \b
-      # With custom retries and timeout
-      aieng-bot fix \\
-        --repo VectorInstitute/repo-name \\
-        --pr 123 \\
-        --max-retries 5 \\
-        --timeout-minutes 180
+      # Custom retries and timeout
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 123 \\
+          --max-retries 5 --timeout-minutes 180
 
     \b
-    Required Environment Variables:
-    ANTHROPIC_API_KEY  - Claude API key (https://console.anthropic.com)
-    GITHUB_TOKEN       - GitHub token (or GH_TOKEN)
+    Environment Variables:
+      ANTHROPIC_API_KEY  Claude API key (console.anthropic.com)
+      GITHUB_TOKEN       GitHub token (or GH_TOKEN)
 
-    For --log flag (GCS logging):
-    Requires gcloud CLI authenticated with access to bot-dashboard-vectorinstitute bucket.
-
+    \b
+    GCS Logging (--log flag):
+      Requires gcloud CLI authenticated with access to the
+      bot-dashboard-vectorinstitute bucket.
     """
     start_time = time.time()
 
