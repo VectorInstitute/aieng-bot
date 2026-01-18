@@ -62,13 +62,13 @@ RESOLVE TO:
 "dep-c": "^3.0.0"   // From PR
 ```
 
-**Lock Files (package-lock.json, poetry.lock)**
+**Lock Files (uv.lock, package-lock.json)**
 - DON'T manually edit
 - Delete and regenerate:
 ```bash
-npm install      # npm
-poetry lock      # Python
-cargo update     # Rust
+unset VIRTUAL_ENV  # Clear any inherited venv
+uv lock            # Python (uv)
+npm install        # npm
 ```
 
 **Source Code**
