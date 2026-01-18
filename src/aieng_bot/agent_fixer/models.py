@@ -26,8 +26,9 @@ class AgenticLoopRequest:
         PR source branch name (e.g., dependabot/uv/pytest-cov-7.0.0).
     base_ref : str
         PR target branch name (e.g., main).
-    failure_type : str
-        Pre-classified failure type (lint, test, build, security, merge_conflict, merge_only, unknown).
+    failure_types : list[str]
+        Pre-classified failure types (lint, test, build, security, merge_conflict, merge_only, unknown).
+        Multiple types can be present for PRs with multiple issues.
     failure_logs_file : str
         Path to file containing initial failure logs.
     max_retries : int
@@ -50,13 +51,23 @@ class AgenticLoopRequest:
     pr_url: str
     head_ref: str
     base_ref: str
-    failure_type: str
+    failure_types: list[str]
     failure_logs_file: str
     max_retries: int
     timeout_minutes: int
     workflow_run_id: str
     github_run_url: str
     cwd: str
+
+    @property
+    def failure_type(self) -> str:
+        """Return primary failure type for backward compatibility."""
+        return self.failure_types[0] if self.failure_types else "unknown"
+
+    @property
+    def failure_types_str(self) -> str:
+        """Return failure types as comma-separated string."""
+        return ",".join(self.failure_types)
 
 
 @dataclass
@@ -79,8 +90,8 @@ class AgentFixRequest:
         PR source branch name (e.g., dependabot/uv/pytest-cov-7.0.0).
     base_ref : str
         PR target branch name (e.g., main).
-    failure_type : str
-        Type of failure (test, lint, security, build, merge_conflict).
+    failure_types : list[str]
+        Types of failure (test, lint, security, build, merge_conflict).
     failed_check_names : str
         Comma-separated list of failed check names.
     failure_logs_file : str
@@ -101,12 +112,17 @@ class AgentFixRequest:
     pr_url: str
     head_ref: str
     base_ref: str
-    failure_type: str
+    failure_types: list[str]
     failed_check_names: str
     failure_logs_file: str
     workflow_run_id: str
     github_run_url: str
     cwd: str
+
+    @property
+    def failure_type(self) -> str:
+        """Return primary failure type for backward compatibility."""
+        return self.failure_types[0] if self.failure_types else "unknown"
 
 
 @dataclass

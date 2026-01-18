@@ -2,7 +2,9 @@
 
 ## Overview
 
-The AI Engineering Maintenance Bot runs from ONE central repository and requires NO installation in individual repositories.
+aieng-bot can be used in two ways:
+1. **CLI** - Fix any PR directly using `aieng-bot fix --repo owner/repo --pr 123`
+2. **GitHub Workflows** - Automated monitoring and fixing of bot PRs (Dependabot, pre-commit-ci) across an organization
 
 ## Deployment Checklist
 
@@ -18,15 +20,15 @@ The AI Engineering Maintenance Bot runs from ONE central repository and requires
 
 ### Phase 2: Testing
 
-1. Manual test run:
+1. Test via CLI (recommended):
    ```bash
-   gh workflow run discover-and-dispatch.yml
+   aieng-bot fix --repo owner/repo --pr 123
    ```
-2. Test fix workflow on specific PR:
+2. Or test via GitHub workflow:
    ```bash
    gh workflow run fix-pr-agent.yml \
-     --field target_repo="VectorInstitute/aieng-template-mvp" \
-     --field pr_number="17"
+     --field target_repo="owner/repo" \
+     --field pr_number="123"
    ```
 3. Verify bot comments appear on test PR
 4. Check workflow logs for errors
@@ -41,16 +43,18 @@ The AI Engineering Maintenance Bot runs from ONE central repository and requires
 ## Quick Deployment
 
 ```bash
-# 1. Add secrets via GitHub UI
-# Settings → Secrets → Actions → New secret
+# 1. Install aieng-bot
+uv sync  # or pip install aieng-bot
 
-# 2. Enable workflows in Actions tab
+# 2. Set environment variables
+export ANTHROPIC_API_KEY="your-key"
+export GITHUB_TOKEN="your-token"
 
-# 3. Test
-gh workflow run discover-and-dispatch.yml
+# 3. Test on a PR
+aieng-bot fix --repo owner/repo --pr 123
 
-# 4. Monitor
-# Check Actions tab for daily runs
+# 4. (Optional) For automated workflows, add secrets to GitHub:
+# Settings → Secrets → Actions → Add ANTHROPIC_API_KEY and ORG_ACCESS_TOKEN
 ```
 
 ## What Happens After Deployment
@@ -146,17 +150,19 @@ Or via GitHub UI: Actions → Select workflow → "..." → Disable workflow
 
 ### Announcement Template
 ```markdown
-## 🤖 AI Engineering Maintenance Bot
+## 🤖 aieng-bot
 
-We've deployed an automated bot to manage Dependabot and pre-commit-ci PRs.
+We've deployed aieng-bot to help manage PR maintenance.
 
 **What it does:**
+- Fixes CI failures (linting, tests, security, build)
+- Resolves merge conflicts
 - Auto-merges PRs when all checks pass
-- Fixes common issues (linting, tests, security, build)
 - Comments on PRs it processes
 
-**What you need to do:**
-- Nothing! The bot works automatically
+**How to use:**
+- CLI: `aieng-bot fix --repo owner/repo --pr 123`
+- Automated workflows handle bot PRs (Dependabot, pre-commit-ci)
 - Report issues at github.com/VectorInstitute/aieng-bot
 ```
 
@@ -174,4 +180,4 @@ We've deployed an automated bot to manage Dependabot and pre-commit-ci PRs.
 
 ---
 
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories*
+🤖 *aieng-bot - AI-powered PR maintenance by Vector Institute AI Engineering*

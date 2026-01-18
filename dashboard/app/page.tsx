@@ -64,7 +64,7 @@ export default async function DashboardPage() {
                     Maintenance Analytics
                   </h1>
                   <p className="text-slate-700 dark:text-slate-300 text-lg">
-                    Automated pull request maintenance across Vector Institute repositories
+                    Automated CI fix and merge for GitHub pull requests
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
@@ -95,12 +95,12 @@ export default async function DashboardPage() {
               No Data Available
             </h2>
             <p className="text-slate-600 dark:text-slate-400 mb-4">
-              The bot hasn&apos;t processed any PRs yet. Data will appear here once the bot starts monitoring and fixing PRs.
+              No PRs have been processed yet. Data will appear here once the bot starts fixing PRs.
             </p>
             <div className="text-sm text-slate-500 dark:text-slate-500">
-              <p>Trigger the bot workflow to fix a PR:</p>
+              <p>Fix a PR using the CLI:</p>
               <code className="block mt-2 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs">
-                gh workflow run fix-remote-pr.yml --field target_repo=&quot;VectorInstitute/repo-name&quot; --field pr_number=&quot;123&quot;
+                aieng-bot fix --repo owner/repo --pr 123 --log
               </code>
             </div>
           </div>
@@ -123,7 +123,7 @@ export default async function DashboardPage() {
                   Maintenance Analytics
                 </h1>
                 <p className="text-slate-700 dark:text-slate-300 text-lg">
-                  Automated pull request maintenance across Vector Institute repositories
+                  Automated CI fix and merge for GitHub pull requests
                 </p>
               </div>
               <div className="flex items-center gap-4">

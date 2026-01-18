@@ -26,7 +26,7 @@ class TestAgentFixRequest:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             head_ref="dependabot/pytest-8.0.0",
             base_ref="main",
-            failure_type="test",
+            failure_types=["test"],
             failed_check_names="Run Tests,Lint",
             failure_logs_file=".failure-logs.txt",
             workflow_run_id="1234567890",
@@ -36,7 +36,8 @@ class TestAgentFixRequest:
 
         assert request.repo == "VectorInstitute/test-repo"
         assert request.pr_number == 123
-        assert request.failure_type == "test"
+        assert request.failure_type == "test"  # Uses property
+        assert request.failure_types == ["test"]
         assert request.cwd == "/path/to/repo"
 
     def test_request_immutable_fields(self):
@@ -49,7 +50,7 @@ class TestAgentFixRequest:
             pr_url="https://github.com/test/repo/pull/456",
             head_ref="feature/fix",
             base_ref="main",
-            failure_type="lint",
+            failure_types=["lint"],
             failed_check_names="ESLint",
             failure_logs_file="logs.txt",
             workflow_run_id="999",
@@ -60,7 +61,8 @@ class TestAgentFixRequest:
         # Verify types
         assert isinstance(request.repo, str)
         assert isinstance(request.pr_number, int)
-        assert isinstance(request.failure_type, str)
+        assert isinstance(request.failure_type, str)  # Uses property
+        assert isinstance(request.failure_types, list)
 
 
 class TestAgentFixResult:
@@ -119,7 +121,7 @@ class TestAgentFixer:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             head_ref="dependabot/pytest-8.0.0",
             base_ref="main",
-            failure_type="test",
+            failure_types=["test"],
             failed_check_names="Run Tests",
             failure_logs_file=str(logs_file),
             workflow_run_id="1234567890",
@@ -213,6 +215,7 @@ class TestAgentFixer:
         mock_tracer.capture_agent_stream = mock_capture_stream
         mock_tracer.get_summary.return_value = "Fixed 1 test"
         mock_tracer.save_trace = MagicMock()
+        mock_tracer.extract_file_metrics.return_value = (2, ["/src/test.py"])
 
         # Create a regular mock function that returns the async generator
         def mock_query(*args, **kwargs):
@@ -232,7 +235,11 @@ class TestAgentFixer:
             assert result.summary_file == "/tmp/fix-summary.txt"
             assert result.error_message is None
 
-            mock_tracer.finalize.assert_called_once_with(status="SUCCESS")
+            mock_tracer.finalize.assert_called_once_with(
+                status="SUCCESS",
+                changes_made=2,
+                files_modified=["/src/test.py"],
+            )
             mock_tracer.save_trace.assert_called_once()
 
     @pytest.mark.asyncio
@@ -271,6 +278,7 @@ class TestAgentFixer:
         mock_tracer.capture_agent_stream = mock_capture_stream
         mock_tracer.get_summary.return_value = "Summary"
         mock_tracer.save_trace = MagicMock()
+        mock_tracer.extract_file_metrics.return_value = (1, ["/src/file.py"])
 
         # Create a regular mock function that returns the async generator
         mock_query_func = MagicMock(side_effect=lambda *args, **kwargs: mock_stream())
@@ -350,9 +358,9 @@ class TestAgentFixer:
             fixer = AgentFixer()
 
             # Test different failure types
-            failure_types = ["test", "lint", "security", "build", "merge_conflict"]
-            for failure_type in failure_types:
-                fix_request.failure_type = failure_type
+            failure_type_list = ["test", "lint", "security", "build", "merge_conflict"]
+            for failure_type in failure_type_list:
+                fix_request.failure_types = [failure_type]
                 prompt = fixer._build_prompt(fix_request)
 
                 # Should reference the specific skill
@@ -375,7 +383,7 @@ class TestAgenticLoopRequest:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             head_ref="dependabot/pytest-8.0.0",
             base_ref="main",
-            failure_type="lint",
+            failure_types=["lint"],
             failure_logs_file=".failure-logs.txt",
             max_retries=3,
             timeout_minutes=330,
@@ -401,7 +409,7 @@ class TestAgenticLoopRequest:
             pr_url="https://github.com/test/repo/pull/456",
             head_ref="feature/fix",
             base_ref="main",
-            failure_type="test",
+            failure_types=["test"],
             failure_logs_file="logs.txt",
             max_retries=5,
             timeout_minutes=180,
@@ -435,7 +443,7 @@ class TestAgenticLoop:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             head_ref="dependabot/pytest-8.0.0",
             base_ref="main",
-            failure_type="test",
+            failure_types=["test"],
             failure_logs_file=str(logs_file),
             max_retries=3,
             timeout_minutes=330,
@@ -509,6 +517,10 @@ class TestAgenticLoop:
         mock_tracer.capture_agent_stream = mock_capture_stream
         mock_tracer.get_summary.return_value = "Fixed and merged PR"
         mock_tracer.save_trace = MagicMock()
+        mock_tracer.extract_file_metrics.return_value = (
+            3,
+            ["/src/app.py", "/tests/test_app.py"],
+        )
 
         # Create a regular mock function that returns the async generator
         def mock_query(*args, **kwargs):
@@ -530,7 +542,11 @@ class TestAgenticLoop:
             assert result.summary_file == "/tmp/fix-summary.txt"
             assert result.error_message is None
 
-            mock_tracer.finalize.assert_called_once_with(status="SUCCESS")
+            mock_tracer.finalize.assert_called_once_with(
+                status="SUCCESS",
+                changes_made=3,
+                files_modified=["/src/app.py", "/tests/test_app.py"],
+            )
             mock_tracer.save_trace.assert_called_once()
 
     @pytest.mark.asyncio

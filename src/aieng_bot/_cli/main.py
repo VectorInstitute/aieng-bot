@@ -7,7 +7,6 @@ from rich.text import Text
 
 from ..config import get_model_name
 from ..utils.logging import get_console
-from .commands.classify import classify
 from .commands.fix import fix
 from .help_config import VECTOR_MAGENTA, click
 from .utils import get_version
@@ -16,8 +15,10 @@ from .utils import get_version
 def print_banner(console: Console) -> None:
     """Print ASCII art banner using Rich.
 
-    Args:
-        console: Rich console instance for output
+    Parameters
+    ----------
+    console : Console
+        Rich console instance for output.
 
     """
     if os.environ.get("AIENG_BOT_NO_BANNER"):
@@ -55,10 +56,14 @@ def print_banner(console: Console) -> None:
 def version_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
     """Show version and exit.
 
-    Args:
-        ctx: Click context
-        _param: Click parameter (unused)
-        value: Whether --version flag was provided
+    Parameters
+    ----------
+    ctx : click.Context
+        Click context.
+    _param : click.Parameter
+        Click parameter (unused).
+    value : bool
+        Whether --version flag was provided.
 
     """
     if not value or ctx.resilient_parsing:
@@ -96,24 +101,23 @@ def version_callback(ctx: click.Context, _param: click.Parameter, value: bool) -
 )
 @click.pass_context
 def cli(ctx: click.Context, no_banner: bool) -> None:
-    """AI Engineering Bot - Automated PR Maintenance.
+    """AI Engineering Bot.
 
-    Manages bot PRs (Dependabot, pre-commit-ci) across Vector Institute repositories.
-    Automatically classifies failures, applies fixes, and maintains code quality.
+    Autonomously fixes CI failures, resolves merge conflicts, and merges GitHub PRs
+    using Claude AI.
 
     \b
     Commands:
-      classify  Analyze a PR to identify the failure type
       fix       Autonomously fix a PR and merge it
 
     \b
     Examples:
-      # Classify a PR failure
-      $ aieng-bot classify --repo VectorInstitute/repo --pr 42
+      # Fix and merge a PR
+      $ aieng-bot fix --repo owner/repo --pr 42
 
     \b
-      # Fix and merge a PR
-      $ aieng-bot fix --repo VectorInstitute/repo --pr 42
+      # Fix with dashboard logging
+      $ aieng-bot fix --repo owner/repo --pr 42 --log
 
     Use 'aieng-bot COMMAND --help' for command-specific help.
     """
@@ -130,7 +134,6 @@ def cli(ctx: click.Context, no_banner: bool) -> None:
 
 
 # Register subcommands
-cli.add_command(classify)
 cli.add_command(fix)
 
 
