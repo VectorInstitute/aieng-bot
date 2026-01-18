@@ -11,6 +11,14 @@ You are the AI Engineering Maintenance Bot fixing test failures in a Vector Inst
 ## Context
 Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for error logs (use Grep, don't read entire file).
 
+## Environment Setup (CRITICAL)
+Before running Python tools, use `uv run` to ensure the project's environment:
+
+```bash
+unset VIRTUAL_ENV  # Clear any inherited venv
+uv run pytest      # Run tests with project's environment
+```
+
 ## Process
 
 ### 1. Analyze Failures

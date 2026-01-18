@@ -12,14 +12,14 @@ interface PRVelocityChartProps {
 
 interface ChartDataPoint {
   date: string
-  autoMerged: number
-  botFixed: number
+  success: number
+  failed: number
   total: number
 }
 
 function aggregateByDate(prSummaries: PRSummary[]): ChartDataPoint[] {
   // Group PRs by date (YYYY-MM-DD format for proper sorting)
-  const dataByDate = new Map<string, { autoMerged: number; botFixed: number; year: number; month: number; day: number }>()
+  const dataByDate = new Map<string, { success: number; failed: number; year: number; month: number; day: number }>()
 
   prSummaries.forEach(pr => {
     const dateObj = new Date(pr.timestamp)
@@ -27,36 +27,32 @@ function aggregateByDate(prSummaries: PRSummary[]): ChartDataPoint[] {
     const year = dateObj.getFullYear()
     const month = dateObj.getMonth() + 1
     const day = dateObj.getDate()
-    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` // YYYY-MM-DD format in local timezone
+    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
     if (!dataByDate.has(dateKey)) {
-      dataByDate.set(dateKey, { autoMerged: 0, botFixed: 0, year, month, day })
+      dataByDate.set(dateKey, { success: 0, failed: 0, year, month, day })
     }
 
     const data = dataByDate.get(dateKey)!
-    if (pr.type === 'auto_merge' && pr.status === 'SUCCESS') {
-      data.autoMerged++
-    } else if (pr.type === 'bot_fix' && pr.status === 'SUCCESS') {
-      data.botFixed++
+    if (pr.status === 'SUCCESS') {
+      data.success++
+    } else if (pr.status === 'FAILED') {
+      data.failed++
     }
   })
 
   // Convert to array, sort chronologically, and format dates for display
   const sortedData = Array.from(dataByDate.entries())
-    .sort((a, b) => {
-      // Sort by date string (YYYY-MM-DD format sorts correctly lexicographically)
-      return a[0].localeCompare(b[0])
-    })
+    .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([, counts]) => {
-      // Format date using stored components to avoid timezone issues
       const dateForDisplay = new Date(counts.year, counts.month - 1, counts.day)
         .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
       return {
         date: dateForDisplay,
-        autoMerged: counts.autoMerged,
-        botFixed: counts.botFixed,
-        total: counts.autoMerged + counts.botFixed,
+        success: counts.success,
+        failed: counts.failed,
+        total: counts.success + counts.failed,
       }
     })
 
@@ -67,11 +63,8 @@ function calculateYAxisDomain(data: ChartDataPoint[]): [number, number] {
   if (data.length === 0) return [0, 10]
 
   const maxValue = Math.max(...data.map(d => d.total))
-
-  // Add 20% padding to max value
   const paddedMax = Math.ceil(maxValue * 1.2)
 
-  // Round up to nearest nice number
   const roundToNice = (num: number): number => {
     if (num <= 10) return 10
     if (num <= 20) return 20
@@ -84,19 +77,17 @@ function calculateYAxisDomain(data: ChartDataPoint[]): [number, number] {
 }
 
 function shouldShowXAxisLabel(index: number, totalPoints: number): boolean {
-  // Show labels intelligently based on data density
-  if (totalPoints <= 7) return true // Show all for a week or less
-  if (totalPoints <= 14) return index % 2 === 0 // Every 2nd day
-  if (totalPoints <= 30) return index % 3 === 0 // Every 3rd day
-  if (totalPoints <= 45) return index % 5 === 0 // Every 5th day
-  return index % 7 === 0 // Every 7th day (weekly)
+  if (totalPoints <= 7) return true
+  if (totalPoints <= 14) return index % 2 === 0
+  if (totalPoints <= 30) return index % 3 === 0
+  if (totalPoints <= 45) return index % 5 === 0
+  return index % 7 === 0
 }
 
 export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
   const chartData = aggregateByDate(prSummaries)
   const yAxisDomain = calculateYAxisDomain(chartData)
 
-  // Chart styling configuration matching engagement chart
   const CHART_CONFIG = {
     cartesianGrid: {
       strokeDasharray: '3 3',
@@ -159,20 +150,20 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
         </div>
       </div>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-        Track PRs auto-merged and fixed over time
+        Track PRs processed over time
       </p>
 
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <defs>
-              <linearGradient id="colorAutoMerged" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={VECTOR_COLORS.turquoise} stopOpacity={0.8} />
                 <stop offset="95%" stopColor={VECTOR_COLORS.turquoise} stopOpacity={0.1} />
               </linearGradient>
-              <linearGradient id="colorBotFixed" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={VECTOR_COLORS.violet} stopOpacity={0.8} />
-                <stop offset="95%" stopColor={VECTOR_COLORS.violet} stopOpacity={0.1} />
+              <linearGradient id="colorFailed" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={VECTOR_COLORS.magenta} stopOpacity={0.8} />
+                <stop offset="95%" stopColor={VECTOR_COLORS.magenta} stopOpacity={0.1} />
               </linearGradient>
             </defs>
             <CartesianGrid {...CHART_CONFIG.cartesianGrid} />
@@ -206,19 +197,19 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
             <Legend {...CHART_CONFIG.legend} />
             <Area
               type="linear"
-              dataKey="autoMerged"
+              dataKey="success"
               stroke={VECTOR_COLORS.turquoise}
               strokeWidth={2}
-              fill="url(#colorAutoMerged)"
-              name="Auto-merged"
+              fill="url(#colorSuccess)"
+              name="Fixed & Merged"
             />
             <Area
               type="linear"
-              dataKey="botFixed"
-              stroke={VECTOR_COLORS.violet}
+              dataKey="failed"
+              stroke={VECTOR_COLORS.magenta}
               strokeWidth={2}
-              fill="url(#colorBotFixed)"
-              name="Bot Fixed"
+              fill="url(#colorFailed)"
+              name="Failed"
             />
           </AreaChart>
         </ResponsiveContainer>

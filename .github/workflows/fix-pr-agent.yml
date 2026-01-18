@@ -1,0 +1,288 @@
+name: Fix PR (Agentic)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repository (e.g., VectorInstitute/repo-name)'
+        required: true
+      pr_number:
+        description: 'PR number to fix'
+        required: true
+      max_retries:
+        description: 'Maximum number of fix attempts'
+        default: '3'
+
+# One PR per repo at a time to prevent conflicts
+concurrency:
+  group: fix-pr-${{ inputs.target_repo }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+jobs:
+  fix-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+
+    steps:
+      - name: Validate target repository
+        run: |
+          TARGET_REPO="${{ github.event.inputs.target_repo }}"
+
+          # Prevent the bot from modifying its own repository
+          if [ "$TARGET_REPO" = "VectorInstitute/aieng-bot" ]; then
+            echo "ERROR: Cannot run fix workflow on the bot repository itself"
+            exit 1
+          fi
+
+          echo "Target repository validated: $TARGET_REPO"
+
+      - name: Checkout bot repository
+        uses: actions/checkout@v6
+        with:
+          path: bot-repo
+
+      - name: Get PR details for checkout
+        id: pr-details
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+
+          PR_INFO=$(gh pr view $PR_NUMBER --repo "$REPO" --json \
+            title,author,headRefName,baseRefName,mergeable)
+
+          echo "PR Info:"
+          echo "$PR_INFO" | jq '.'
+
+          HEAD_REF=$(echo "$PR_INFO" | jq -r '.headRefName')
+          BASE_REF=$(echo "$PR_INFO" | jq -r '.baseRefName')
+          PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
+          PR_AUTHOR=$(echo "$PR_INFO" | jq -r '.author.login')
+          MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
+
+          echo "head-ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "base-ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "pr-title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr-author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+          echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
+
+          echo "Branch: $HEAD_REF -> $BASE_REF"
+          echo "Mergeable: $MERGEABLE"
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Checkout target repository PR branch
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.inputs.target_repo }}
+          ref: refs/pull/${{ github.event.inputs.pr_number }}/head
+          token: ${{ secrets.ORG_ACCESS_TOKEN }}
+          path: target-repo
+          fetch-depth: 0
+
+      - name: Configure git for agent
+        working-directory: target-repo
+        run: |
+          git config user.name "aieng-bot[bot]"
+          git config user.email "aieng-bot@vectorinstitute.ai"
+
+          # Fetch the PR branch to enable pushing
+          git fetch origin ${{ steps.pr-details.outputs.head-ref }}
+
+      - name: Attempt merge to expose conflicts
+        if: steps.pr-details.outputs.mergeable == 'CONFLICTING'
+        working-directory: target-repo
+        run: |
+          BASE_REF="${{ steps.pr-details.outputs.base-ref }}"
+          echo "PR has merge conflicts - attempting merge to expose conflict markers"
+
+          git fetch origin "$BASE_REF"
+
+          if ! git merge "origin/$BASE_REF" --no-edit; then
+            echo "Merge failed as expected - conflict markers are now in files"
+            echo "Files with conflicts:"
+            git diff --name-only --diff-filter=U
+          fi
+        continue-on-error: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: bot-repo/.python-version
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install bot dependencies
+        run: |
+          cd bot-repo
+          pip install -e .
+
+      - name: Install Claude Code CLI
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        continue-on-error: true
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        continue-on-error: true
+
+      - name: Run fix loop
+        id: fix
+        working-directory: target-repo
+        run: |
+          aieng-bot fix \
+            --repo "${{ github.event.inputs.target_repo }}" \
+            --pr "${{ github.event.inputs.pr_number }}" \
+            --max-retries ${{ github.event.inputs.max_retries }} \
+            --timeout-minutes 330 \
+            --workflow-run-id "${{ github.run_id }}" \
+            --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Verify bot files not committed
+        if: always()
+        working-directory: target-repo
+        run: |
+          echo "Verifying bot temporary files are not staged or committed..."
+
+          BOT_FILES_STAGED=$(git diff --cached --name-only | grep -E "^\.claude/|^\.pr-context\.json$|^\.failure-logs\.txt$" || true)
+
+          if [ -n "$BOT_FILES_STAGED" ]; then
+            echo "WARNING: Bot temporary files found in staging area!"
+            echo "$BOT_FILES_STAGED"
+            echo "Unstaging bot files..."
+            echo "$BOT_FILES_STAGED" | xargs git reset HEAD --
+          fi
+
+          echo "Bot files check passed"
+
+      - name: Upload trace to GCS
+        if: always()
+        run: |
+          if [ -f /tmp/agent-execution-trace.json ]; then
+            DATE_PATH=$(date -u +"%Y/%m/%d")
+            REPO_NAME=$(echo "${{ github.event.inputs.target_repo }}" | sed 's/\//-/g')
+            TRACE_FILE="$REPO_NAME-pr-${{ github.event.inputs.pr_number }}-${{ github.run_id }}.json"
+            DEST_PATH="traces/$DATE_PATH/$TRACE_FILE"
+
+            echo "Uploading trace to gs://bot-dashboard-vectorinstitute/$DEST_PATH"
+
+            gcloud storage cp /tmp/agent-execution-trace.json \
+              "gs://bot-dashboard-vectorinstitute/$DEST_PATH" \
+              --content-type="application/json" \
+              --cache-control="no-cache, no-store, must-revalidate" || {
+              echo "Failed to upload trace to GCS"
+            }
+
+            echo "trace_url=https://storage.googleapis.com/bot-dashboard-vectorinstitute/$DEST_PATH" >> $GITHUB_OUTPUT
+
+            # Update traces index
+            cat > /tmp/trace-index-entry.json << EOF
+            {
+              "repo": "${{ github.event.inputs.target_repo }}",
+              "pr_number": ${{ github.event.inputs.pr_number }},
+              "trace_path": "$DEST_PATH",
+              "workflow_run_id": "${{ github.run_id }}",
+              "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            }
+          EOF
+
+            if gcloud storage cp gs://bot-dashboard-vectorinstitute/data/traces_index.json /tmp/traces_index.json 2>/dev/null; then
+              echo "Downloaded existing traces index"
+            else
+              echo '{"traces": [], "last_updated": ""}' > /tmp/traces_index.json
+            fi
+
+            jq --slurpfile entry /tmp/trace-index-entry.json \
+              '.traces += $entry | .last_updated = "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"' \
+              /tmp/traces_index.json > /tmp/traces_index_updated.json
+
+            gcloud storage cp /tmp/traces_index_updated.json \
+              gs://bot-dashboard-vectorinstitute/data/traces_index.json \
+              --content-type="application/json" || {
+              echo "Failed to update traces index"
+            }
+
+            echo "Trace uploaded and index updated"
+          else
+            echo "No trace file found"
+          fi
+        continue-on-error: true
+        id: upload-trace
+
+      - name: Upload trace as GitHub artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: agent-trace-${{ github.event.inputs.pr_number }}-${{ github.run_id }}
+          path: /tmp/agent-execution-trace.json
+          retention-days: 90
+        continue-on-error: true
+
+      - name: Comment on PR - Result
+        if: steps.fix-pr.outcome == 'success'
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
+          DASHBOARD_URL="https://platform.vectorinstitute.ai/aieng-bot"
+
+          FIX_SUMMARY=""
+          if [ -f /tmp/fix-summary.txt ]; then
+            FIX_SUMMARY=$(cat /tmp/fix-summary.txt)
+          fi
+
+          cat > /tmp/pr-comment.txt << EOF
+          **Automated fix applied and PR merged**
+
+          The agentic fix loop successfully fixed this PR and merged it.
+
+          ${FIX_SUMMARY}
+
+          **[View detailed trace on dashboard](${DASHBOARD_URL})** | [Raw trace](${TRACE_URL})
+
+          *AI Engineering Maintenance Bot*
+          EOF
+
+          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-comment.txt || true
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+      - name: Comment on PR - Failure
+        if: steps.fix-pr.outcome == 'failure'
+        run: |
+          REPO="${{ github.event.inputs.target_repo }}"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
+          DASHBOARD_URL="https://platform.vectorinstitute.ai/aieng-bot"
+
+          cat > /tmp/pr-comment.txt << EOF
+          **Automated fix attempt failed**
+
+          The agentic fix loop was unable to fix this PR after multiple attempts.
+          Manual intervention may be required.
+
+          **[View detailed trace on dashboard](${DASHBOARD_URL})** | [Raw trace](${TRACE_URL})
+
+          *AI Engineering Maintenance Bot*
+          EOF
+
+          gh pr comment $PR_NUMBER --repo "$REPO" --body-file /tmp/pr-comment.txt || true
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}

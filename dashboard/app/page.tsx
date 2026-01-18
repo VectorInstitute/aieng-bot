@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { isAuthenticated, getCurrentUser } from '@/lib/session'
 import { fetchBotActivityLog, activityLogToPRSummaries, enrichPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
 import OverviewTable from '@/components/overview-table'
-import AutoMergeTable from '@/components/auto-merge-table'
 import PRVelocityChart from '@/components/pr-velocity-chart'
 import PerformanceMetrics from '@/components/performance-metrics'
 import CostAnalytics from '@/components/cost-analytics'
@@ -21,7 +20,7 @@ export default async function DashboardPage() {
 
   const user = await getCurrentUser()
 
-  // Fetch activity log from GCS (includes both auto-merges and bot fixes)
+  // Fetch activity log from GCS
   let allPRSummaries: PRSummary[] = []
   let recentPRSummaries: PRSummary[] = []
   let metrics: BotMetrics | null = null
@@ -32,10 +31,10 @@ export default async function DashboardPage() {
       // Convert activities to PR summaries
       const summaries = activityLogToPRSummaries(activityLog)
 
-      // Enrich with trace data (only for bot_fix entries, auto_merge already has all data)
+      // Enrich with trace data for detailed execution info
       allPRSummaries = await enrichPRSummaries(summaries)
 
-      // Compute metrics from ALL activities (includes auto-merges, no time filter)
+      // Compute metrics from all activities
       metrics = computeMetricsFromPRSummaries(allPRSummaries)
 
       // Filter to last 30 days for tables only
@@ -157,11 +156,11 @@ export default async function DashboardPage() {
       {/* Cost Analytics */}
       <CostAnalytics metrics={metrics} prSummaries={allPRSummaries} />
 
-      {/* Auto-Merged PRs Table */}
+      {/* PR Activity Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center gap-2 mb-4">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-            Recent PR Merges
+            Recent PR Activity
           </h3>
           <div className="group relative">
             <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
@@ -171,41 +170,13 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
-        {recentPRSummaries.filter(pr => pr.type === 'auto_merge').length === 0 ? (
+        {recentPRSummaries.length === 0 ? (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full mb-3">
               <Activity className="w-6 h-6 text-slate-400" />
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              No auto-merged PRs recorded in the last 30 days.
-            </p>
-          </div>
-        ) : (
-          <AutoMergeTable prSummaries={recentPRSummaries} />
-        )}
-      </div>
-
-      {/* Bot Fixed PRs Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-            Recent PR Fixes
-          </h3>
-          <div className="group relative">
-            <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
-            <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-48 px-3 py-2 text-xs bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg">
-              Showing PRs from the last 30 days
-              <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
-            </div>
-          </div>
-        </div>
-        {recentPRSummaries.filter(pr => pr.type === 'bot_fix').length === 0 ? (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full mb-3">
-              <Activity className="w-6 h-6 text-slate-400" />
-            </div>
-            <p className="text-slate-600 dark:text-slate-400 text-sm">
-              No PR fixes recorded in the last 30 days.
+              No PR activity recorded in the last 30 days.
             </p>
           </div>
         ) : (

@@ -1,22 +1,22 @@
-"""Activity logger for recording auto-merge and bot-fix activities to GCS."""
+"""Activity logger for recording fix activities to GCS."""
 
 import json
 import os
 import subprocess
 import tempfile
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from ..utils.logging import log_error, log_info, log_success
 
-ActivityType = Literal["auto_merge", "bot_fix"]
-ActivityStatus = Literal["SUCCESS", "FAILED", "PARTIAL"]
+ActivityStatus = Literal["SUCCESS", "FAILED"]
 
 
 class ActivityLogger:
-    """Logger for bot activities (auto-merges and bot fixes).
+    """Logger for bot fix and merge activities.
 
     Records all bot activity to a unified log file in GCS for dashboard consumption.
+    Every invocation of the fix command logs an activity here.
 
     Parameters
     ----------
@@ -118,106 +118,7 @@ class ActivityLogger:
             log_error(f"Failed to save activity log: {e}")
             return False
 
-    def log_auto_merge(
-        self,
-        repo: str,
-        pr_number: int,
-        pr_title: str,
-        pr_author: str,
-        pr_url: str,
-        workflow_run_id: str,
-        github_run_url: str,
-        was_rebased: bool,
-        rebase_time_seconds: float | None = None,
-    ) -> bool:
-        """Log a successful auto-merge activity.
-
-        Only logs if the PR was never fixed by the bot. If a bot_fix entry exists
-        for this PR, it means the PR required intervention and should not be
-        counted as an auto-merge.
-
-        Parameters
-        ----------
-        repo : str
-            Repository name (owner/repo format).
-        pr_number : int
-            PR number.
-        pr_title : str
-            PR title.
-        pr_author : str
-            PR author.
-        pr_url : str
-            PR URL.
-        workflow_run_id : str
-            GitHub workflow run ID.
-        github_run_url : str
-            GitHub workflow run URL.
-        was_rebased : bool
-            Whether PR was rebased before merge.
-        rebase_time_seconds : float, optional
-            Time spent on rebase in seconds (if rebased).
-
-        Returns
-        -------
-        bool
-            True on success, False on failure (or skipped due to bot_fix).
-
-        """
-        log_info(f"Recording auto-merge activity for {repo}#{pr_number}")
-
-        # Load existing log
-        log_data = self._load_activity_log()
-
-        # Check if this PR already has a bot_fix entry
-        # If it does, skip logging as auto_merge (it wasn't truly auto-merged)
-        has_bot_fix = any(
-            activity["type"] == "bot_fix"
-            and activity["repo"] == repo
-            and activity["pr_number"] == pr_number
-            for activity in log_data["activities"]
-        )
-
-        if has_bot_fix:
-            log_info(
-                f"Skipping auto-merge log for {repo}#{pr_number} - "
-                "PR was previously fixed by bot"
-            )
-            return True  # Return True to indicate no error occurred
-
-        # Create activity entry
-        activity = {
-            "type": "auto_merge",
-            "repo": repo,
-            "pr_number": pr_number,
-            "pr_title": pr_title,
-            "pr_author": pr_author,
-            "pr_url": pr_url,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "workflow_run_id": workflow_run_id,
-            "github_run_url": github_run_url,
-            "status": "SUCCESS",
-            "was_rebased": was_rebased,
-        }
-
-        if rebase_time_seconds is not None:
-            activity["rebase_time_seconds"] = rebase_time_seconds
-
-        # Append activity
-        log_data["activities"].append(activity)
-        log_data["last_updated"] = datetime.now(UTC).isoformat()
-
-        # Save to GCS
-        if self._save_activity_log(log_data):
-            log_success(
-                f"✓ Auto-merge activity recorded for {repo}#{pr_number} "
-                f"(rebased: {was_rebased})"
-            )
-            return True
-
-        log_error(f"✗ Failed to record auto-merge activity for {repo}#{pr_number}")
-        return False
-
-    def log_bot_fix(
+    def log_fix(
         self,
         repo: str,
         pr_number: int,
@@ -231,7 +132,10 @@ class ActivityLogger:
         trace_path: str,
         fix_time_hours: float,
     ) -> bool:
-        """Log a bot fix activity.
+        """Log a fix and merge activity.
+
+        This is called every time the fix command processes a PR, whether it
+        needed fixing or just rebasing and merging.
 
         Parameters
         ----------
@@ -250,9 +154,10 @@ class ActivityLogger:
         github_run_url : str
             GitHub workflow run URL.
         status : ActivityStatus
-            Fix status (SUCCESS, FAILED, PARTIAL).
+            Fix status (SUCCESS, FAILED).
         failure_type : str
-            Type of failure (test, lint, security, build, merge_conflict, unknown).
+            Type of failure/action (lint, test, build, security,
+            merge_conflict, merge_only, unknown).
         trace_path : str
             Path to trace file in GCS.
         fix_time_hours : float
@@ -264,20 +169,19 @@ class ActivityLogger:
             True on success, False on failure.
 
         """
-        log_info(f"Recording bot fix activity for {repo}#{pr_number}")
+        log_info(f"Recording fix activity for {repo}#{pr_number}")
 
         # Load existing log
         log_data = self._load_activity_log()
 
         # Create activity entry
         activity = {
-            "type": "bot_fix",
             "repo": repo,
             "pr_number": pr_number,
             "pr_title": pr_title,
             "pr_author": pr_author,
             "pr_url": pr_url,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "workflow_run_id": workflow_run_id,
             "github_run_url": github_run_url,
             "status": status,
@@ -288,15 +192,15 @@ class ActivityLogger:
 
         # Append activity
         log_data["activities"].append(activity)
-        log_data["last_updated"] = datetime.now(UTC).isoformat()
+        log_data["last_updated"] = datetime.now(timezone.utc).isoformat()
 
         # Save to GCS
         if self._save_activity_log(log_data):
             log_success(
-                f"✓ Bot fix activity recorded for {repo}#{pr_number} "
+                f"Fix activity recorded for {repo}#{pr_number} "
                 f"(status: {status}, type: {failure_type})"
             )
             return True
 
-        log_error(f"✗ Failed to record bot fix activity for {repo}#{pr_number}")
+        log_error(f"Failed to record fix activity for {repo}#{pr_number}")
         return False

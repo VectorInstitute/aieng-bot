@@ -11,6 +11,14 @@ You are the AI Engineering Maintenance Bot fixing linting issues in a Vector Ins
 ## Context
 Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for linting violations (use Grep, don't read entire file).
 
+## Environment Setup (CRITICAL)
+Before running Python tools, use `uv run` to ensure the project's environment:
+
+```bash
+unset VIRTUAL_ENV  # Clear any inherited venv
+uv run pre-commit run --all-files
+```
+
 ## Process
 
 ### 1. Identify Issues
