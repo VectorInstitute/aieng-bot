@@ -214,7 +214,7 @@ def _handle_merge_conflict(
 def _handle_no_failed_checks(
     console: Console, json_output: bool, output_file: str | None
 ) -> None:
-    """Handle no failed checks case and exit.
+    """Handle no failed checks case - PR just needs rebase and merge.
 
     Parameters
     ----------
@@ -226,13 +226,13 @@ def _handle_no_failed_checks(
         File path for JSON output.
 
     """
-    log_warning("No failed checks found on this PR")
+    log_info("No failed checks found - PR may just need rebase and merge")
     result = ClassificationResult(
-        failure_type=FailureType.UNKNOWN,
-        confidence=0.0,
-        reasoning="No failed CI checks found on this PR",
+        failure_type=FailureType.MERGE_ONLY,
+        confidence=1.0,
+        reasoning="No failed CI checks found on this PR. PR is ready for rebase and merge.",
         failed_check_names=[],
-        recommended_action="Verify that CI checks are configured and have run",
+        recommended_action="Rebase against base branch and merge",
     )
     _output_result(result, console, json_output, output_file)
     sys.exit(0)

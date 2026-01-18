@@ -375,6 +375,7 @@ class TestAgenticLoopRequest:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             head_ref="dependabot/pytest-8.0.0",
             base_ref="main",
+            failure_type="lint",
             failure_logs_file=".failure-logs.txt",
             max_retries=3,
             timeout_minutes=330,
@@ -385,6 +386,7 @@ class TestAgenticLoopRequest:
 
         assert request.repo == "VectorInstitute/test-repo"
         assert request.pr_number == 123
+        assert request.failure_type == "lint"
         assert request.max_retries == 3
         assert request.timeout_minutes == 330
         assert request.cwd == "/path/to/repo"
@@ -399,6 +401,7 @@ class TestAgenticLoopRequest:
             pr_url="https://github.com/test/repo/pull/456",
             head_ref="feature/fix",
             base_ref="main",
+            failure_type="test",
             failure_logs_file="logs.txt",
             max_retries=5,
             timeout_minutes=180,
@@ -410,6 +413,7 @@ class TestAgenticLoopRequest:
         # Verify types
         assert isinstance(request.repo, str)
         assert isinstance(request.pr_number, int)
+        assert isinstance(request.failure_type, str)
         assert isinstance(request.max_retries, int)
         assert isinstance(request.timeout_minutes, int)
 
@@ -431,6 +435,7 @@ class TestAgenticLoop:
             pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
             head_ref="dependabot/pytest-8.0.0",
             base_ref="main",
+            failure_type="test",
             failure_logs_file=str(logs_file),
             max_retries=3,
             timeout_minutes=330,
@@ -483,8 +488,8 @@ class TestAgenticLoop:
 
             assert tracer.trace["metadata"]["pr"]["repo"] == "VectorInstitute/test-repo"
             assert tracer.trace["metadata"]["pr"]["number"] == 123
-            # Failure type starts as "pending" and will be updated by Claude
-            assert tracer.trace["metadata"]["failure"]["type"] == "pending"
+            # Failure type is now pre-classified before the agent runs
+            assert tracer.trace["metadata"]["failure"]["type"] == "test"
             assert tracer.trace["metadata"]["workflow_run_id"] == "1234567890"
 
     @pytest.mark.asyncio

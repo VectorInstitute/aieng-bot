@@ -320,6 +320,7 @@ class AgentFixer:
             "pr_url": request.pr_url,
             "head_ref": request.head_ref,
             "base_ref": request.base_ref,
+            "failure_type": request.failure_type,
             "failure_logs_file": request.failure_logs_file,
             "max_retries": request.max_retries,
             "timeout_minutes": request.timeout_minutes,
@@ -348,6 +349,7 @@ class AgentFixer:
             pr_number=request.pr_number,
             head_ref=request.head_ref,
             base_ref=request.base_ref,
+            failure_type=request.failure_type,
             max_retries=request.max_retries,
             timeout_minutes=request.timeout_minutes,
         )
@@ -376,10 +378,8 @@ class AgentFixer:
             "url": request.pr_url,
         }
 
-        # Failure type will be determined by Claude during analysis
-        # and written to .pr-context.json
         failure_info = {
-            "type": "pending",  # Will be updated from context file after analysis
+            "type": request.failure_type,
             "checks": [],
         }
 
