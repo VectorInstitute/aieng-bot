@@ -386,10 +386,10 @@ class TestHandleNoFailedChecks:
         assert exc_info.value.code == 0
         mock_output.assert_called_once()
 
-        # Verify the result
+        # Verify the result - no failed checks means merge_only
         result = mock_output.call_args[0][0]
-        assert result.failure_type == FailureType.UNKNOWN
-        assert result.confidence == 0.0
+        assert result.failure_type == FailureType.MERGE_ONLY
+        assert result.confidence == 1.0
         assert len(result.failed_check_names) == 0
 
     def test_handle_no_failed_checks_json_output(self):
