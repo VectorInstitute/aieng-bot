@@ -164,7 +164,7 @@ class TestFixCLI:
         )
 
         mock_classification = ClassificationResult(
-            failure_type=FailureType.LINT,
+            failure_types=[FailureType.LINT],
             confidence=0.95,
             reasoning="Lint failure detected",
             failed_check_names=["lint-check"],
@@ -229,7 +229,7 @@ class TestFixCLI:
         )
 
         mock_classification = ClassificationResult(
-            failure_type=FailureType.LINT,
+            failure_types=[FailureType.LINT],
             confidence=0.95,
             reasoning="Lint failure detected",
             failed_check_names=["lint-check"],

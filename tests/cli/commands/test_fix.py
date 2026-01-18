@@ -509,7 +509,7 @@ class TestHandleResult:
                 workflow_run_id="run123",
                 github_run_url="https://github.com/...",
                 elapsed_hours=0.5,
-                failure_type="lint",
+                failure_types=["lint"],
                 log_to_gcs=False,
             )
 
@@ -534,7 +534,7 @@ class TestHandleResult:
                 workflow_run_id="run123",
                 github_run_url="https://github.com/...",
                 elapsed_hours=0.5,
-                failure_type="unknown",
+                failure_types=["unknown"],
                 log_to_gcs=False,
             )
 
@@ -561,7 +561,7 @@ class TestHandleResult:
                 workflow_run_id="run123",
                 github_run_url="https://github.com/...",
                 elapsed_hours=0.5,
-                failure_type="lint",
+                failure_types=["lint"],
                 log_to_gcs=True,
             )
 
@@ -587,7 +587,7 @@ class TestLogActivityToGCS:
                 status="SUCCESS",
                 trace_path="/tmp/trace.json",
                 fix_time_hours=0.5,
-                failure_type="lint",
+                failure_types=["lint"],
             )
 
             mock_logger.log_fix.assert_called_once()
@@ -595,7 +595,7 @@ class TestLogActivityToGCS:
             assert call_kwargs["repo"] == "owner/repo"
             assert call_kwargs["pr_number"] == 123
             assert call_kwargs["status"] == "SUCCESS"
-            assert call_kwargs["failure_type"] == "lint"
+            assert call_kwargs["failure_types"] == ["lint"]
 
     def test_log_activity_handles_exception(self):
         """Test that logging errors are handled gracefully."""
@@ -613,7 +613,7 @@ class TestLogActivityToGCS:
                 status="SUCCESS",
                 trace_path="/tmp/trace.json",
                 fix_time_hours=0.5,
-                failure_type="lint",
+                failure_types=["lint"],
             )
 
     def test_log_activity_constructs_pr_url(self):
@@ -632,7 +632,7 @@ class TestLogActivityToGCS:
                 status="SUCCESS",
                 trace_path="",
                 fix_time_hours=0.1,
-                failure_type="test",
+                failure_types=["test"],
             )
 
             call_kwargs = mock_logger.log_fix.call_args[1]

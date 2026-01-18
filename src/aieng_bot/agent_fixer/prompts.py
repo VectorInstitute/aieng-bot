@@ -43,28 +43,33 @@ Make minimal, targeted changes following the skill's guidance.
 
 AGENTIC_LOOP_PROMPT = r"""You are the AI Engineering Maintenance Bot for Vector Institute.
 
-## Pre-classified Failure Type: {failure_type}
+## Pre-classified Failure Types: {failure_types}
 
-The failure type has been pre-classified. Use this to determine your approach:
-- **merge_only**: No failures - just rebase against main and merge using /merge-pr skill
+The failure types have been pre-classified. A PR may have MULTIPLE failure types that need to be fixed in sequence.
+
+**Skill Mapping** (apply in this priority order):
+- **security**: Use /fix-security-audit skill (HIGHEST PRIORITY - fix first)
+- **merge_conflict**: Use /fix-merge-conflicts skill (must resolve before other fixes)
+- **build**: Use /fix-build-failures skill
 - **lint**: Use /fix-lint-failures skill
 - **test**: Use /fix-test-failures skill
-- **build**: Use /fix-build-failures skill
-- **security**: Use /fix-security-audit skill
-- **merge_conflict**: Use /fix-merge-conflicts skill
+- **merge_only**: No failures - just rebase against main and merge using /merge-pr skill
 - **unknown**: Search logs to understand the failure, then apply appropriate fix
+
+**IMPORTANT**: If multiple failure types are detected, fix them IN ORDER of priority listed above.
+For example, if you have ["lint", "test"], first run /fix-lint-failures, commit, then run /fix-test-failures.
 
 ## Your Mission
 Fix the PR (if needed) and get it merged. You have FULL AUTONOMY to:
 1. Read `.pr-context.json` to understand the PR context
-2. Apply the appropriate skill based on the pre-classified failure type above
-3. Commit and push changes to the PR branch
+2. Apply skills for ALL detected failure types in priority order
+3. Commit and push changes to the PR branch after each skill completes
 4. Wait for CI to complete using `gh pr checks`
 5. If CI passes, merge the PR
 6. If CI fails, fetch new logs and retry (up to {max_retries} times)
 
 ## Context Files
-- `.pr-context.json` - PR metadata (repo, number, head_ref, failure_type)
+- `.pr-context.json` - PR metadata (repo, number, head_ref, failure_types)
 - `.failure-logs.txt` - Initial CI failure logs (if any)
 
 ## CI Monitoring Commands
@@ -150,7 +155,7 @@ The `.failure-logs.txt` can be VERY LARGE (tens of thousands of lines).
    - Focus on stack traces, error messages, and failure summaries
 
 ## Start Now
-1. Read `.pr-context.json` to understand the PR and confirm the failure type
+1. Read `.pr-context.json` to understand the PR and confirm the failure types
 2. **Rebase against target branch first** (especially for merge_only):
    ```bash
    git fetch origin
@@ -161,6 +166,8 @@ The `.failure-logs.txt` can be VERY LARGE (tens of thousands of lines).
      # Wait for CI to re-run after rebase
    fi
    ```
-3. Apply the appropriate skill based on the pre-classified failure type: {failure_type}
-4. Commit, push, wait for CI, merge or retry as needed
+3. Apply skills for ALL pre-classified failure types: {failure_types}
+   - Run each skill in priority order
+   - Commit and push after each skill completes
+4. Wait for CI, merge when ready, or retry as needed
 """

@@ -224,7 +224,7 @@ class TestLogFix:
                 workflow_run_id="123456789",
                 github_run_url="https://github.com/.../actions/runs/123456789",
                 status="SUCCESS",
-                failure_type="test",
+                failure_types=["test"],
                 trace_path="traces/2025/12/19/test-repo-pr-42.json",
                 fix_time_hours=0.5,
             )
@@ -247,7 +247,10 @@ class TestLogFix:
             assert activity["pr_author"] == "app/dependabot"
             assert activity["workflow_run_id"] == "123456789"
             assert activity["status"] == "SUCCESS"
-            assert activity["failure_type"] == "test"
+            assert (
+                activity["failure_type"] == "test"
+            )  # Primary type for backward compat
+            assert activity["failure_types"] == ["test"]  # Array of types
             assert activity["trace_path"] == "traces/2025/12/19/test-repo-pr-42.json"
             assert activity["fix_time_hours"] == 0.5
 
@@ -273,7 +276,7 @@ class TestLogFix:
                     workflow_run_id="123456789",
                     github_run_url="https://github.com/.../actions/runs/123456789",
                     status=status,
-                    failure_type="lint",
+                    failure_types=["lint"],
                     trace_path="traces/2025/12/19/test-repo-pr-42.json",
                     fix_time_hours=0.25,
                 )
@@ -284,7 +287,7 @@ class TestLogFix:
 
     def test_log_fix_all_failure_types(self, activity_logger):
         """Test logging fix with different failure types."""
-        failure_types = [
+        failure_type_list = [
             "test",
             "lint",
             "security",
@@ -294,7 +297,7 @@ class TestLogFix:
             "unknown",
         ]
 
-        for failure_type in failure_types:
+        for ft in failure_type_list:
             with (
                 patch.object(
                     activity_logger,
@@ -314,14 +317,15 @@ class TestLogFix:
                     workflow_run_id="123456789",
                     github_run_url="https://github.com/.../actions/runs/123456789",
                     status="SUCCESS",
-                    failure_type=failure_type,
+                    failure_types=[ft],
                     trace_path="traces/2025/12/19/test-repo-pr-42.json",
                     fix_time_hours=0.25,
                 )
 
                 assert result is True
                 saved_data = mock_save.call_args[0][0]
-                assert saved_data["activities"][0]["failure_type"] == failure_type
+                assert saved_data["activities"][0]["failure_type"] == ft
+                assert saved_data["activities"][0]["failure_types"] == [ft]
 
     def test_log_fix_appends_to_existing_log(self, activity_logger):
         """Test that fix activities are appended to existing log."""
@@ -362,7 +366,7 @@ class TestLogFix:
                 workflow_run_id="123456789",
                 github_run_url="https://github.com/.../actions/runs/123456789",
                 status="SUCCESS",
-                failure_type="test",
+                failure_types=["test"],
                 trace_path="traces/2025/12/19/test-repo-pr-42.json",
                 fix_time_hours=0.5,
             )
@@ -392,7 +396,7 @@ class TestLogFix:
                 workflow_run_id="123456789",
                 github_run_url="https://github.com/.../actions/runs/123456789",
                 status="SUCCESS",
-                failure_type="test",
+                failure_types=["test"],
                 trace_path="traces/2025/12/19/test-repo-pr-42.json",
                 fix_time_hours=0.5,
             )
