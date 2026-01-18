@@ -28,7 +28,6 @@ nav:
   - Home: index.md
   - Setup: setup.md
   - Deployment: deployment.md
-  - Testing: testing.md
 plugins:
   - search
   - mkdocstrings:

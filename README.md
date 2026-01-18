@@ -192,9 +192,8 @@ gh run view RUN_ID --log
 
 ## Documentation
 
-- [Setup Guide](docs/setup.md) - Detailed configuration and permissions
-- [Deployment Guide](docs/deployment.md) - Rollout strategy and monitoring
-- [Testing Guide](docs/testing.md) - Test cases and validation
+- [Setup Guide](docs/setup.md) - Configuration and permissions
+- [Deployment Guide](docs/deployment.md) - Rollout and monitoring
 
 ## Troubleshooting
 
