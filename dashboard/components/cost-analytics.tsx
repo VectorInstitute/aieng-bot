@@ -93,7 +93,7 @@ export default function CostAnalytics({ metrics, prSummaries }: CostAnalyticsPro
     },
     {
       label: 'Fixes Tracked',
-      value: prSummaries.filter(pr => pr.type === 'bot_fix' && pr.cost_usd !== null).length,
+      value: prSummaries.filter(pr => pr.cost_usd !== null).length,
       description: 'Total attempts with cost data',
       icon: <PieChart className="w-5 h-5" style={{ color: VECTOR_COLORS.violet }} />,
       color: `text-[${VECTOR_COLORS.violet}]`,
