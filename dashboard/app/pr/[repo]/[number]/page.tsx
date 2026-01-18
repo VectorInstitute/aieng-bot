@@ -29,8 +29,8 @@ export default async function PRPage({ params }: PRPageProps) {
   // Await params
   const { repo, number } = await params
 
-  // Decode repo (it will be URL encoded)
-  const decodedRepo = decodeURIComponent(repo)
+  // Decode repo: '--' is used as separator instead of '/' to avoid URL path issues
+  const decodedRepo = decodeURIComponent(repo).replace('--', '/')
   const fullRepo = decodedRepo.includes('/') ? decodedRepo : `VectorInstitute/${decodedRepo}`
   const prNumber = parseInt(number, 10)
 

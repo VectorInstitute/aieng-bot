@@ -151,7 +151,17 @@ jq '.failure_type = "security"' .pr-context.json > .pr-context.tmp && mv .pr-con
 
 ## Start Now
 1. Read `.pr-context.json` to understand the PR
-2. Search `.failure-logs.txt` for error patterns (DO NOT read entire file)
-3. Determine failure type, update `.pr-context.json` with the type, and apply the appropriate fix skill
-4. Commit, push, wait for CI, merge or retry as needed
+2. **Rebase against target branch first** (failures may be caused by being behind):
+   ```bash
+   git fetch origin
+   BEHIND=$(git rev-list --count HEAD..origin/{base_ref})
+   if [ "$BEHIND" -gt 0 ]; then
+     git rebase origin/{base_ref}
+     git push origin HEAD:{head_ref} --force-with-lease
+     # Wait for CI to re-run after rebase before analyzing failures
+   fi
+   ```
+3. Search `.failure-logs.txt` for error patterns (DO NOT read entire file)
+4. Determine failure type, update `.pr-context.json` with the type, and apply the appropriate fix skill
+5. Commit, push, wait for CI, merge or retry as needed
 """

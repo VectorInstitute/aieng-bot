@@ -8,7 +8,6 @@ except PackageNotFoundError:
     # Package not installed, use fallback
     __version__ = "0.2.0.dev"
 
-from .auto_merger import ActivityLogger, ActivityStatus
 from .classifier.classifier import PRFailureClassifier
 from .classifier.models import (
     CheckFailure,
@@ -17,7 +16,12 @@ from .classifier.models import (
     PRContext,
 )
 from .config import get_model_name
-from .observability import AgentExecutionTracer, create_tracer_from_env
+from .observability import (
+    ActivityLogger,
+    ActivityStatus,
+    AgentExecutionTracer,
+    create_tracer_from_env,
+)
 
 __all__ = [
     "PRFailureClassifier",

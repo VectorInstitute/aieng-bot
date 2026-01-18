@@ -16,7 +16,8 @@ from dotenv import load_dotenv
 
 from ...agent_fixer import AgentFixer
 from ...agent_fixer.models import AgentFixResult, AgenticLoopRequest
-from ...auto_merger.activity_logger import ActivityLogger, ActivityStatus
+from ...observability import ActivityLogger, ActivityStatus
+from ...observability.storage import TraceStorage
 from ...utils.github_client import GitHubClient
 from ...utils.logging import log_error, log_info, log_success, log_warning
 
@@ -344,13 +345,25 @@ def _handle_result(
         log_info(f"Summary saved to: {result.summary_file}")
         log_info(f"Failure type: {failure_type}")
         status: ActivityStatus = "SUCCESS"
-        trace_path = result.trace_file
         exit_code = 0
     else:
         log_error(f"Agentic fix failed: {result.error_message}")
         status = "FAILED"
-        trace_path = result.trace_file or ""
         exit_code = 1
+
+    # Upload trace to GCS and get the GCS path
+    gcs_trace_path = ""
+    if log_to_gcs and result.trace_file:
+        gcs_bucket = "bot-dashboard-vectorinstitute"
+        # Create a unique blob name: data/traces/{repo}/{pr_number}/{workflow_run_id}.json
+        safe_repo = repo.replace("/", "-")
+        gcs_blob_name = f"data/traces/{safe_repo}/{pr_number}/{workflow_run_id}.json"
+
+        if TraceStorage.upload_to_gcs(result.trace_file, gcs_bucket, gcs_blob_name):
+            gcs_trace_path = gcs_blob_name
+            log_info(f"Trace uploaded to gs://{gcs_bucket}/{gcs_blob_name}")
+        else:
+            log_warning("Failed to upload trace to GCS")
 
     if log_to_gcs:
         _log_activity_to_gcs(
@@ -361,7 +374,7 @@ def _handle_result(
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
             status=status,
-            trace_path=trace_path,
+            trace_path=gcs_trace_path,
             fix_time_hours=elapsed_hours,
             failure_type=failure_type,
         )
