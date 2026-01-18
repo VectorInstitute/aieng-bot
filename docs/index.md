@@ -10,41 +10,30 @@
 ![GitHub License](https://img.shields.io/github/license/VectorInstitute/aieng-bot)
 
 
-Centralized maintenance bot that automatically manages bot PRs (Dependabot and pre-commit-ci) across all Vector Institute repositories from a single location.
+AI-powered tool that autonomously fixes CI failures, resolves merge conflicts, and merges GitHub pull requests using Claude AI.
 
 ## Features
 
-- **Organization-wide monitoring** - Scans all VectorInstitute repos daily (00:00 UTC)
-- **Auto-merge** - Merges bot PRs (Dependabot and pre-commit-ci) when all checks pass
-- **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Claude AI Agent SDK
-- **Centralized operation** - No installation needed in individual repositories
-- **Smart detection** - Categorizes failures and applies appropriate fix strategies
+- **Fix any PR** - Use the CLI to fix CI failures on any GitHub pull request
+- **Auto-fix** - Automatically fixes test failures, linting issues, security vulnerabilities, merge conflicts, and build errors
+- **Smart classification** - Categorizes failures and applies appropriate fix strategies
+- **Organization-wide automation** - Includes workflows to scan VectorInstitute repos daily for bot PRs (Dependabot, pre-commit-ci)
+- **Observable** - Full execution tracing with dashboard analytics
 - **Transparent** - Comments on PRs with status updates
 
 ## Architecture
 
 ```
-┌─────────────────────────────────┐
-│  aieng-bot Repository           │
-│  (This Repo - Central Bot)      │
-│                                 │
-│  Runs daily (00:00 UTC):        │
-│  1. Scans VectorInstitute org   │
-│  2. Finds bot PRs               │
-│  3. Checks status               │
-│  4. Merges or fixes PRs         │
-└──────────────┬──────────────────┘
-               │
-               │ Operates on
-               ▼
-┌───────────────────────────────────┐
-│   VectorInstitute Organization    │
-│                                   │
-│  ├─ repo-1  (Bot PR #1)           │
-│  ├─ repo-2  (Bot PR #2)           │
-│  ├─ repo-3  (Bot PR #3)           │
-│  └─ repo-N  ...                   │
-└───────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  aieng-bot                                                  │
+│                                                             │
+│  CLI Usage (any PR):                                        │
+│    aieng-bot fix --repo owner/repo --pr 123                 │
+│                                                             │
+│  Automated Workflows (bot PRs only):                        │
+│    Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs  │
+│    with failing checks across VectorInstitute org           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -68,22 +57,25 @@ The bot now monitors all VectorInstitute repositories automatically.
 
 ## How It Works
 
-**1. Monitor** (daily at 00:00 UTC)
-- Scans all VectorInstitute repositories for open bot PRs (Dependabot and pre-commit-ci)
-- Classifies PR failures using Claude Haiku 4.5
-- Routes to merge or fix workflow based on failure type
+**1. Classification**
+- Analyzes PR and failure logs using Claude Haiku 4.5
+- Categorizes failure type: test, lint, security, build, or merge conflict
+- Routes to appropriate fix strategy
 
-**2. Auto-Merge** (when all checks pass)
-- Approves PR and enables auto-merge
-- Comments with status
-- PR merges automatically
-
-**3. Auto-Fix** (when checks fail)
+**2. Fix Loop**
 - Clones target repository and PR branch
-- Analyzes failure type: test, lint, security, or build
-- Loads appropriate AI prompt template
+- Loads appropriate AI prompt template for the failure type
 - Uses Claude Agent SDK to automatically apply fixes
 - Commits and pushes fixes to PR
+- Polls CI status, retries on failure (up to max_retries)
+
+**3. Merge**
+- Auto-merges when all checks pass
+- Comments on PR with status updates
+
+**Automated Bot PR Monitoring** (optional, for VectorInstitute org)
+- Daily scan at 00:00 UTC for Dependabot/pre-commit-ci PRs with failures
+- Automatically dispatches fix jobs for discovered PRs
 
 ## Configuration
 
@@ -97,8 +89,8 @@ The bot now monitors all VectorInstitute repositories automatically.
 - Override with `CLAUDE_MODEL` environment variable
 
 **Workflows**
-- `discover-and-dispatch.yml` - Daily scan (00:00 UTC) for bot PRs with failures
-- `fix-pr-agent.yml` - Per-PR agent workflow (6-hour timeout)
+- `discover-and-dispatch.yml` - Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs with failures
+- `fix-pr-agent.yml` - Per-PR agent workflow (6-hour timeout), can be triggered manually for any PR
 - `code_checks.yml` - Ruff + mypy checks
 - `unit_tests.yml` - pytest suite
 
@@ -129,24 +121,30 @@ The bot now monitors all VectorInstitute repositories automatically.
 # Install dependencies
 uv sync
 
-# Classify a PR failure type
-aieng-bot classify <pr-url>
+# Fix and merge a PR
+aieng-bot fix --repo owner/repo --pr 123
 
-# Run agent to fix a PR
-aieng-bot fix <pr-url>
+# Fix with dashboard logging
+aieng-bot fix --repo owner/repo --pr 123 --log
+
+# Custom retries and timeout
+aieng-bot fix --repo owner/repo --pr 123 --max-retries 5 --timeout-minutes 180
 ```
 
 ## Manual Testing
 
 **Trigger via CLI:**
 ```bash
-# Run discovery workflow
-gh workflow run discover-and-dispatch.yml
+# Fix a PR using the CLI (recommended)
+aieng-bot fix --repo owner/repo --pr 123
 
-# Fix a specific PR
+# Or trigger via GitHub workflow
 gh workflow run fix-pr-agent.yml \
-  --field target_repo="VectorInstitute/aieng-template-mvp" \
-  --field pr_number="17"
+  --field target_repo="owner/repo" \
+  --field pr_number="123"
+
+# Run the bot PR discovery workflow (VectorInstitute org only)
+gh workflow run discover-and-dispatch.yml
 ```
 
 **Trigger via GitHub UI:**
@@ -155,8 +153,8 @@ Actions → Select workflow → Run workflow → Enter parameters
 ## Dashboard
 
 **View comprehensive analytics and agent execution traces:**
-- 📊 **[Bot Dashboard](https://platform.vectorinstitute.ai/aieng-bot)** - Interactive dashboard with:
-  - Overview table of all bot PR fixes
+- 📊 **[Dashboard](https://platform.vectorinstitute.ai/aieng-bot)** - Interactive dashboard with:
+  - Overview table of all PR fixes
   - Success rates and performance metrics
   - Detailed agent execution traces (like LangSmith/Langfuse)
   - Code diffs with syntax highlighting
@@ -175,7 +173,7 @@ Actions → Select workflow → Run workflow → Enter parameters
 
 ## Monitoring
 
-**View bot activity:**
+**View activity:**
 - [Dashboard](https://platform.vectorinstitute.ai/aieng-bot) - Comprehensive analytics and traces
 - Actions tab - All workflow runs and success/failure rates
 - PR comments - Detailed status updates on each PR
@@ -192,9 +190,8 @@ gh run view RUN_ID --log
 
 ## Documentation
 
-- [Setup Guide](docs/setup.md) - Detailed configuration and permissions
-- [Deployment Guide](docs/deployment.md) - Rollout strategy and monitoring
-- [Testing Guide](docs/testing.md) - Test cases and validation
+- [Setup Guide](docs/setup.md) - Configuration and permissions
+- [Deployment Guide](docs/deployment.md) - Rollout and monitoring
 
 ## Troubleshooting
 
@@ -211,4 +208,4 @@ See [Setup Guide](docs/setup.md) for detailed troubleshooting.
 
 ---
 
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories built by AI Engineering*
+🤖 *aieng-bot - AI-powered PR maintenance by Vector Institute AI Engineering*

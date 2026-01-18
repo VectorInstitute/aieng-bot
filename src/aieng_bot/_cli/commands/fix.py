@@ -235,7 +235,7 @@ def _classify_failure(
     if github_client.check_merge_conflicts(repo, pr_number):
         log_warning("PR has merge conflicts")
         return ClassificationResult(
-            failure_type=FailureType.MERGE_CONFLICT,
+            failure_types=[FailureType.MERGE_CONFLICT],
             confidence=1.0,
             reasoning="PR has merge conflicts with base branch",
             failed_check_names=["merge-conflict"],
@@ -247,7 +247,7 @@ def _classify_failure(
     if not failed_checks:
         log_info("No failed checks found - PR just needs rebase and merge")
         return ClassificationResult(
-            failure_type=FailureType.MERGE_ONLY,
+            failure_types=[FailureType.MERGE_ONLY],
             confidence=1.0,
             reasoning="No failed CI checks found. PR is ready for rebase and merge.",
             failed_check_names=[],
@@ -267,9 +267,11 @@ def _classify_failure(
     classifier = PRFailureClassifier()
     result = classifier.classify(pr_context, failed_checks, failure_logs_file)
 
-    log_success(
-        f"Classification: {result.failure_type.value} (confidence: {result.confidence:.0%})"
-    )
+    # Log classification results
+    types_str = ", ".join(result.failure_type_values)
+    log_success(f"Classification: {types_str} (confidence: {result.confidence:.0%})")
+    if result.has_multiple_failures:
+        log_info(f"Multiple failure types detected: {result.failure_type_values}")
     log_info(f"Reasoning: {result.reasoning}")
 
     return result
@@ -367,7 +369,7 @@ def _handle_result(
     workflow_run_id: str,
     github_run_url: str,
     elapsed_hours: float,
-    failure_type: str,
+    failure_types: list[str],
     log_to_gcs: bool,
 ) -> None:
     """Handle the result of the agentic loop and optionally log to GCS.
@@ -390,8 +392,8 @@ def _handle_result(
         GitHub workflow run URL.
     elapsed_hours : float
         Time spent on fix in hours.
-    failure_type : str
-        Type of failure that was fixed.
+    failure_types : list[str]
+        Types of failures that were fixed.
     log_to_gcs : bool
         Whether to log activity to GCS.
 
@@ -401,11 +403,12 @@ def _handle_result(
         Exits with 0 on success, 1 on failure.
 
     """
+    failure_types_str = ",".join(failure_types)
     if result.status == "SUCCESS":
         log_success("PR fixed and merged successfully!")
         log_info(f"Trace saved to: {result.trace_file}")
         log_info(f"Summary saved to: {result.summary_file}")
-        log_info(f"Failure type: {failure_type}")
+        log_info(f"Failure types: {failure_types_str}")
         status: ActivityStatus = "SUCCESS"
         exit_code = 0
     else:
@@ -438,7 +441,7 @@ def _handle_result(
             status=status,
             trace_path=gcs_trace_path,
             fix_time_hours=elapsed_hours,
-            failure_type=failure_type,
+            failure_types=failure_types,
         )
 
     sys.exit(exit_code)
@@ -454,7 +457,7 @@ def _log_activity_to_gcs(
     status: ActivityStatus,
     trace_path: str,
     fix_time_hours: float,
-    failure_type: str,
+    failure_types: list[str],
 ) -> None:
     """Log activity to GCS for dashboard.
 
@@ -478,8 +481,8 @@ def _log_activity_to_gcs(
         Path to trace file in GCS.
     fix_time_hours : float
         Time spent on fix in hours.
-    failure_type : str
-        Type of failure that was fixed (lint, test, build, security, merge_conflict, etc.).
+    failure_types : list[str]
+        Types of failures that were fixed (lint, test, build, security, merge_conflict, etc.).
 
     """
     try:
@@ -495,7 +498,7 @@ def _log_activity_to_gcs(
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
             status=status,
-            failure_type=failure_type,
+            failure_types=failure_types,
             trace_path=trace_path,
             fix_time_hours=fix_time_hours,
         )
@@ -584,7 +587,7 @@ def fix(
     anthropic_api_key: str | None,  # noqa: ARG001 - used by env var loading
     log_to_gcs: bool,
 ) -> None:
-    """Fix and merge a PR using Claude AI.
+    """Fix and merge a PR.
 
     Runs an autonomous agent loop to analyze, fix, and merge GitHub PRs.
 
@@ -676,7 +679,7 @@ def fix(
             failure_logs_file=failure_logs_file,
             github_token=github_token,
         )
-        failure_type = classification.failure_type.value
+        failure_types = classification.failure_type_values
 
         # 4. Prepare agent environment
         bot_skills_copied = _prepare_agent_environment(cwd)
@@ -693,7 +696,7 @@ def fix(
             pr_url=pr_url,
             head_ref=head_ref,
             base_ref=base_ref,
-            failure_type=failure_type,
+            failure_types=failure_types,
             failure_logs_file=failure_logs_file,
             max_retries=max_retries,
             timeout_minutes=timeout_minutes,
@@ -716,7 +719,7 @@ def fix(
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
             elapsed_hours=elapsed_hours,
-            failure_type=failure_type,
+            failure_types=failure_types,
             log_to_gcs=log_to_gcs,
         )
 

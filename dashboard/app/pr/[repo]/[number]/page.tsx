@@ -115,11 +115,26 @@ export default async function PRPage({ params }: PRPageProps) {
           </div>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              Failure Type
+              Failure Type{(trace.metadata.failure?.types?.length ?? 0) > 1 ? 's' : ''}
             </p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 capitalize">
-              {trace.metadata.failure?.type || 'Unknown'}
-            </p>
+            <div className="mt-1">
+              {trace.metadata.failure?.types && trace.metadata.failure.types.length > 1 ? (
+                <div className="flex flex-wrap gap-1">
+                  {trace.metadata.failure.types.map((type, idx) => (
+                    <span
+                      key={idx}
+                      className="text-sm font-bold text-gray-900 dark:text-white px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded capitalize"
+                    >
+                      {type}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900 dark:text-white capitalize">
+                  {trace.metadata.failure?.type || 'Unknown'}
+                </p>
+              )}
+            </div>
           </div>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">

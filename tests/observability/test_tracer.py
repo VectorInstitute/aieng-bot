@@ -326,6 +326,140 @@ class TestAgentExecutionTracer:
 
         assert "Partially fixed" in summary
 
+    def test_extract_file_metrics_no_events(self, tracer):
+        """Test extract_file_metrics with no events."""
+        changes_made, files_modified = tracer.extract_file_metrics()
+
+        assert changes_made == 0
+        assert files_modified == []
+
+    def test_extract_file_metrics_with_edit_calls(self, tracer):
+        """Test extract_file_metrics counts Edit tool calls correctly."""
+        tracer.trace["events"] = [
+            {"type": "REASONING", "content": "Analyzing..."},
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/test.py", "old_string": "a"},
+            },
+            {"type": "TOOL_RESULT", "tool": "Edit", "content": "Success"},
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/main.py", "old_string": "b"},
+            },
+            {"type": "TOOL_RESULT", "tool": "Edit", "content": "Success"},
+        ]
+
+        changes_made, files_modified = tracer.extract_file_metrics()
+
+        assert changes_made == 2
+        assert sorted(files_modified) == ["/src/main.py", "/src/test.py"]
+
+    def test_extract_file_metrics_same_file_multiple_edits(self, tracer):
+        """Test extract_file_metrics handles multiple edits to same file."""
+        tracer.trace["events"] = [
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/test.py", "old_string": "a"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/test.py", "old_string": "b"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/test.py", "old_string": "c"},
+            },
+        ]
+
+        changes_made, files_modified = tracer.extract_file_metrics()
+
+        # Each edit counts as a change
+        assert changes_made == 3
+        # But file should only appear once
+        assert files_modified == ["/src/test.py"]
+
+    def test_extract_file_metrics_ignores_non_edit_tools(self, tracer):
+        """Test extract_file_metrics only counts Edit tools."""
+        tracer.trace["events"] = [
+            {
+                "type": "TOOL_CALL",
+                "tool": "Read",
+                "parameters": {"file_path": "/src/test.py"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Bash",
+                "parameters": {"command": "ls"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Grep",
+                "parameters": {"pattern": "test"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/main.py", "old_string": "a"},
+            },
+        ]
+
+        changes_made, files_modified = tracer.extract_file_metrics()
+
+        # Only the Edit call should be counted
+        assert changes_made == 1
+        assert files_modified == ["/src/main.py"]
+
+    def test_extract_file_metrics_handles_missing_file_path(self, tracer):
+        """Test extract_file_metrics handles Edit calls without file_path."""
+        tracer.trace["events"] = [
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {},  # Missing file_path
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/src/test.py"},
+            },
+        ]
+
+        changes_made, files_modified = tracer.extract_file_metrics()
+
+        # Both edits counted, but only one has a file path
+        assert changes_made == 2
+        assert files_modified == ["/src/test.py"]
+
+    def test_extract_file_metrics_returns_sorted_files(self, tracer):
+        """Test extract_file_metrics returns files in sorted order."""
+        tracer.trace["events"] = [
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/z/file.py"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/a/file.py"},
+            },
+            {
+                "type": "TOOL_CALL",
+                "tool": "Edit",
+                "parameters": {"file_path": "/m/file.py"},
+            },
+        ]
+
+        changes_made, files_modified = tracer.extract_file_metrics()
+
+        assert changes_made == 3
+        assert files_modified == ["/a/file.py", "/m/file.py", "/z/file.py"]
+
 
 class TestCreateTracerFromEnv:
     """Test suite for create_tracer_from_env factory function."""

@@ -53,11 +53,11 @@ class TestFormatExamplesPanel:
 
     def test_format_single_example(self):
         """Test formatting a single example."""
-        examples = [("Classify a PR", "aieng-bot classify --repo owner/repo --pr 1")]
+        examples = [("Fix a PR", "aieng-bot fix --repo owner/repo --pr 1")]
         result = format_examples_panel(examples)
 
-        assert "Classify a PR" in result
-        assert "aieng-bot classify --repo owner/repo --pr 1" in result
+        assert "Fix a PR" in result
+        assert "aieng-bot fix --repo owner/repo --pr 1" in result
         assert "[dim]" in result
         assert "[bold cyan]" in result
 
@@ -106,7 +106,6 @@ class TestRichClickHelp:
         result = runner.invoke(cli, ["--help"])
 
         assert result.exit_code == 0
-        assert "classify" in result.output
         assert "fix" in result.output
 
     @patch.dict(
@@ -122,37 +121,6 @@ class TestRichClickHelp:
         assert result.exit_code == 0
         assert "--version" in result.output
         assert "--no-banner" in result.output
-
-    @patch.dict(
-        os.environ,
-        {"ANTHROPIC_API_KEY": "test-key", "GITHUB_TOKEN": "gh-token"},
-        clear=True,
-    )
-    def test_classify_help_shows_options(self):
-        """Test that classify help shows all options."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["classify", "--help"])
-
-        assert result.exit_code == 0
-        assert "--repo" in result.output
-        assert "--pr" in result.output
-        assert "--json" in result.output
-        assert "--output" in result.output
-        assert "--github-token" in result.output
-        assert "--anthropic-api-key" in result.output
-
-    @patch.dict(
-        os.environ,
-        {"ANTHROPIC_API_KEY": "test-key", "GITHUB_TOKEN": "gh-token"},
-        clear=True,
-    )
-    def test_classify_help_shows_description(self):
-        """Test that classify help shows command description."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["classify", "--help"])
-
-        assert result.exit_code == 0
-        assert "Classify PR failure type" in result.output
 
     @patch.dict(
         os.environ,
@@ -207,7 +175,7 @@ class TestRichClickHelp:
     def test_help_shows_env_vars(self):
         """Test that help output mentions environment variables."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["classify", "--help"])
+        result = runner.invoke(cli, ["fix", "--help"])
 
         assert result.exit_code == 0
         assert "ANTHROPIC_API_KEY" in result.output
@@ -224,34 +192,6 @@ class TestRichClickHelp:
         result = runner.invoke(cli, ["--no-banner", "--help"])
 
         assert result.exit_code == 0
-
-    @patch.dict(
-        os.environ,
-        {"ANTHROPIC_API_KEY": "test-key", "GITHUB_TOKEN": "gh-token"},
-        clear=True,
-    )
-    def test_main_help_mentions_vector_institute(self):
-        """Test that help mentions Vector Institute."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["--help"])
-
-        assert result.exit_code == 0
-        assert "Vector Institute" in result.output
-
-    @patch.dict(
-        os.environ,
-        {"ANTHROPIC_API_KEY": "test-key", "GITHUB_TOKEN": "gh-token"},
-        clear=True,
-    )
-    def test_classify_help_mentions_failure_types(self):
-        """Test that classify help mentions failure types."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["classify", "--help"])
-
-        assert result.exit_code == 0
-        # Check that at least some failure types are mentioned
-        output_lower = result.output.lower()
-        assert "test" in output_lower or "lint" in output_lower
 
     @patch.dict(
         os.environ,

@@ -201,7 +201,7 @@ def _handle_merge_conflict(
     """
     log_warning("PR has merge conflicts")
     result = ClassificationResult(
-        failure_type=FailureType.MERGE_CONFLICT,
+        failure_types=[FailureType.MERGE_CONFLICT],
         confidence=1.0,
         reasoning="PR has merge conflicts with base branch (mergeable=CONFLICTING)",
         failed_check_names=["merge-conflict"],
@@ -228,7 +228,7 @@ def _handle_no_failed_checks(
     """
     log_info("No failed checks found - PR may just need rebase and merge")
     result = ClassificationResult(
-        failure_type=FailureType.MERGE_ONLY,
+        failure_types=[FailureType.MERGE_ONLY],
         confidence=1.0,
         reasoning="No failed CI checks found on this PR. PR is ready for rebase and merge.",
         failed_check_names=[],

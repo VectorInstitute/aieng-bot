@@ -249,6 +249,34 @@ class AgentExecutionTracer:
         self.trace["events"].append(event)
         self.event_logger.log_event(event)
 
+    def extract_file_metrics(self) -> tuple[int, list[str]]:
+        """Extract file modification metrics from captured trace events.
+
+        Analyzes TOOL_CALL events to count Edit operations and collect
+        the unique list of modified file paths.
+
+        Returns
+        -------
+        tuple[int, list[str]]
+            (changes_made, files_modified) - count of Edit calls and list of
+            unique file paths that were edited.
+
+        """
+        changes_made = 0
+        files_modified: set[str] = set()
+
+        for event in self.trace["events"]:
+            # Only count Edit tool calls
+            if event.get("type") == "TOOL_CALL" and event.get("tool") == "Edit":
+                changes_made += 1
+                # Extract file path from parameters
+                params = event.get("parameters", {})
+                file_path = params.get("file_path")
+                if file_path:
+                    files_modified.add(file_path)
+
+        return changes_made, sorted(files_modified)
+
     def finalize(
         self,
         status: str = "SUCCESS",

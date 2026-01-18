@@ -537,7 +537,7 @@ def test_classification_result_invalid_confidence():
     # Test confidence > 1.0
     with pytest.raises(ValueError, match="Confidence must be between 0.0 and 1.0"):
         ClassificationResult(
-            failure_type=FailureType.TEST,
+            failure_types=[FailureType.TEST],
             confidence=1.5,
             reasoning="Test",
             failed_check_names=["check1"],
@@ -547,7 +547,7 @@ def test_classification_result_invalid_confidence():
     # Test confidence < 0.0
     with pytest.raises(ValueError, match="Confidence must be between 0.0 and 1.0"):
         ClassificationResult(
-            failure_type=FailureType.TEST,
+            failure_types=[FailureType.TEST],
             confidence=-0.5,
             reasoning="Test",
             failed_check_names=["check1"],
@@ -565,13 +565,14 @@ def test_classification_result_valid_confidence():
     valid_confidences = [0.0, 0.5, 1.0]
     for conf in valid_confidences:
         result = ClassificationResult(
-            failure_type=FailureType.TEST,
+            failure_types=[FailureType.TEST],
             confidence=conf,
             reasoning="Test",
             failed_check_names=["check1"],
             recommended_action="Fix it",
         )
         assert result.confidence == conf
+        assert result.failure_type == FailureType.TEST  # Test backward compat property
 
 
 class TestExecuteToolUse:
@@ -877,13 +878,14 @@ class TestValidateAndBuildResult:
     """Tests for _validate_and_build_result method."""
 
     def test_invalid_failure_type(self):
-        """Test that invalid failure type raises ValueError."""
+        """Test that invalid failure types are ignored and default to unknown."""
         with patch(
             "aieng_bot.classifier.classifier.anthropic.Anthropic"
         ) as mock_anthropic_class:
             mock_anthropic_class.return_value = MagicMock()
             classifier = PRFailureClassifier(api_key="test-key")
 
+            # Test with legacy format (single invalid type) - should default to unknown
             result_data = {
                 "failure_type": "invalid_type",  # Not a valid FailureType
                 "confidence": 0.9,
@@ -902,8 +904,42 @@ class TestValidateAndBuildResult:
                 )
             ]
 
-            with pytest.raises(ValueError, match="Invalid failure_type"):
-                classifier._validate_and_build_result(result_data, failed_checks)
+            # Invalid types are now logged as warnings and fall back to UNKNOWN
+            result = classifier._validate_and_build_result(result_data, failed_checks)
+            assert result.failure_type == FailureType.UNKNOWN
+            assert result.failure_types == [FailureType.UNKNOWN]
+
+    def test_multiple_failure_types(self):
+        """Test that multiple failure types are properly parsed."""
+        with patch(
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
+        ) as mock_anthropic_class:
+            mock_anthropic_class.return_value = MagicMock()
+            classifier = PRFailureClassifier(api_key="test-key")
+
+            result_data = {
+                "failure_types": ["lint", "test"],  # Multiple valid types
+                "confidence": 0.9,
+                "reasoning": "Found lint and test failures",
+                "recommended_action": "Fix lint first, then tests",
+            }
+
+            failed_checks = [
+                CheckFailure(
+                    name="test",
+                    conclusion="FAILURE",
+                    workflow_name="CI",
+                    details_url="https://github.com/...",
+                    started_at="2025-01-01T00:00:00Z",
+                    completed_at="2025-01-01T00:05:00Z",
+                )
+            ]
+
+            result = classifier._validate_and_build_result(result_data, failed_checks)
+            # Should be sorted by priority: lint (4) < test (5)
+            assert FailureType.LINT in result.failure_types
+            assert FailureType.TEST in result.failure_types
+            assert result.has_multiple_failures
 
     def test_negative_confidence(self):
         """Test that negative confidence raises ValueError."""

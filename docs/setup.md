@@ -1,8 +1,8 @@
-# AI Engineering Maintenance Bot - Setup Guide
+# aieng-bot - Setup Guide
 
 ## Overview
 
-This centralized bot operates from THIS repository and manages bot PRs (Dependabot and pre-commit-ci) across ALL VectorInstitute repositories. No installation needed in individual repos.
+aieng-bot is an AI-powered tool that autonomously fixes CI failures, resolves merge conflicts, and merges GitHub pull requests. It can be used via CLI on any PR, or configured with GitHub workflows to automatically monitor and fix bot PRs (Dependabot, pre-commit-ci) across an organization.
 
 ## Prerequisites
 
@@ -62,15 +62,24 @@ This centralized bot operates from THIS repository and manages bot PRs (Dependab
 
 ### 5. Test the Setup
 
-**Via CLI:**
+**Via CLI (recommended):**
 ```bash
-# Run discovery
-gh workflow run discover-and-dispatch.yml
+# Fix a PR directly
+aieng-bot fix --repo owner/repo --pr 123
 
-# Test fix on specific PR
+# Fix with dashboard logging
+aieng-bot fix --repo owner/repo --pr 123 --log
+```
+
+**Via GitHub Workflow:**
+```bash
+# Trigger fix workflow for a specific PR
 gh workflow run fix-pr-agent.yml \
-  --field target_repo="VectorInstitute/aieng-template-mvp" \
-  --field pr_number="17"
+  --field target_repo="owner/repo" \
+  --field pr_number="123"
+
+# Run bot PR discovery (VectorInstitute org)
+gh workflow run discover-and-dispatch.yml
 ```
 
 **Via GitHub UI:**
@@ -161,4 +170,4 @@ gh api orgs/VectorInstitute/repos -H "Authorization: token $ORG_ACCESS_TOKEN"
 
 ---
 
-🤖 *AI Engineering Maintenance Bot - Maintaining Vector Institute Repositories*
+🤖 *aieng-bot - AI-powered PR maintenance by Vector Institute AI Engineering*
