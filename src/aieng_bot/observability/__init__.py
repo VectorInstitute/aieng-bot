@@ -19,6 +19,12 @@ Public API
 - create_tracer_from_env : Factory function to create tracer from environment variables
 """
 
+from .activity_logger import ActivityLogger, ActivityStatus
 from .tracer import AgentExecutionTracer, create_tracer_from_env
 
-__all__ = ["AgentExecutionTracer", "create_tracer_from_env"]
+__all__ = [
+    "AgentExecutionTracer",
+    "create_tracer_from_env",
+    "ActivityLogger",
+    "ActivityStatus",
+]
