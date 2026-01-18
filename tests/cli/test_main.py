@@ -95,8 +95,8 @@ def test_cli_help_includes_version():
     assert result.exit_code == 0
 
 
-class TestApplyAgentFixCLI:
-    """Test apply-agent-fix CLI command."""
+class TestFixCLI:
+    """Test fix CLI command."""
 
     @pytest.fixture
     def mock_env(self):
@@ -108,24 +108,13 @@ class TestApplyAgentFixCLI:
 
     @pytest.fixture
     def cli_args(self, tmp_path):
-        """Create valid CLI arguments for testing (new simplified interface)."""
-        # Create classification JSON file
-        cls_file = tmp_path / "classification.json"
-        cls_file.write_text(
-            '{"failure_type": "test", "confidence": 0.95, '
-            '"failed_check_names": ["Run Tests"], '
-            '"reasoning": "Test failures detected", '
-            '"recommended_action": "Fix test failures"}'
-        )
-
+        """Create valid CLI arguments for testing."""
         return [
             "fix",
             "--repo",
             "VectorInstitute/test-repo",
             "--pr",
             "123",
-            "--cls",
-            str(cls_file),
             "--cwd",
             str(tmp_path),
         ]
@@ -152,10 +141,10 @@ class TestApplyAgentFixCLI:
             result = runner.invoke(cli, ["fix", "--help"])
 
         output = result.output
-        assert "Apply automated fixes" in output
+        assert "Fix and merge a PR" in output
         assert "--repo" in output
         assert "--pr" in output
-        assert "--cls" in output
+        assert "--max-retries" in output
         assert result.exit_code == 0
 
     def test_cli_success(self, cli_args, mock_env):
@@ -174,10 +163,10 @@ class TestApplyAgentFixCLI:
 
         with (
             patch.dict("os.environ", mock_env),
+            patch("aieng_bot._cli.commands.fix._fetch_pr_details") as mock_fetch,
             patch(
-                "aieng_bot._cli.commands.fix._load_and_validate_classification"
-            ) as mock_load,
-            patch("aieng_bot._cli.commands.fix._fetch_pr_data") as mock_fetch,
+                "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
+            ) as mock_fetch_logs,
             patch(
                 "aieng_bot._cli.commands.fix._prepare_agent_environment"
             ) as mock_prepare,
@@ -188,14 +177,13 @@ class TestApplyAgentFixCLI:
             patch("aieng_bot._cli.commands.fix.asyncio.run") as mock_asyncio_run,
         ):
             # Mock helper function returns
-            mock_load.return_value = ("test", 0.95, ["Run Tests"])
             mock_fetch.return_value = (
                 "Bump pytest",
                 "app/dependabot",
                 "dependabot/pytest-8.0.0",
                 "main",
-                ".failure-logs.txt",
             )
+            mock_fetch_logs.return_value = ".failure-logs.txt"
             mock_prepare.return_value = True
 
             mock_fixer = MagicMock()
@@ -226,10 +214,10 @@ class TestApplyAgentFixCLI:
 
         with (
             patch.dict("os.environ", mock_env),
+            patch("aieng_bot._cli.commands.fix._fetch_pr_details") as mock_fetch,
             patch(
-                "aieng_bot._cli.commands.fix._load_and_validate_classification"
-            ) as mock_load,
-            patch("aieng_bot._cli.commands.fix._fetch_pr_data") as mock_fetch,
+                "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
+            ) as mock_fetch_logs,
             patch(
                 "aieng_bot._cli.commands.fix._prepare_agent_environment"
             ) as mock_prepare,
@@ -240,14 +228,13 @@ class TestApplyAgentFixCLI:
             patch("aieng_bot._cli.commands.fix.asyncio.run") as mock_asyncio_run,
         ):
             # Mock helper function returns
-            mock_load.return_value = ("test", 0.95, ["Run Tests"])
             mock_fetch.return_value = (
                 "Bump pytest",
                 "app/dependabot",
                 "dependabot/pytest-8.0.0",
                 "main",
-                ".failure-logs.txt",
             )
+            mock_fetch_logs.return_value = ".failure-logs.txt"
             mock_prepare.return_value = True
 
             mock_fixer = MagicMock()
@@ -266,37 +253,13 @@ class TestApplyAgentFixCLI:
             "fix",
             "--repo",
             "VectorInstitute/test-repo",
-            # Missing other required args
+            # Missing --pr
         ]
 
         with patch.dict("os.environ", mock_env):
             result = runner.invoke(cli, test_args)
 
         # Should exit with error code
-        assert result.exit_code != 0
-
-    def test_cli_invalid_classification_file(self, tmp_path, mock_env):
-        """Test CLI with invalid classification file."""
-        runner = CliRunner()
-
-        # Create invalid classification file
-        cls_file = tmp_path / "invalid.json"
-        cls_file.write_text('{"invalid": "data"}')
-
-        cli_args = [
-            "fix",
-            "--repo",
-            "VectorInstitute/test-repo",
-            "--pr",
-            "123",
-            "--cls",
-            str(cls_file),
-        ]
-
-        with patch.dict("os.environ", mock_env):
-            result = runner.invoke(cli, cli_args)
-
-        # Should exit with error code due to missing required fields
         assert result.exit_code != 0
 
     def test_cli_no_api_key(self, cli_args):
@@ -306,8 +269,8 @@ class TestApplyAgentFixCLI:
         with patch.dict("os.environ", {}, clear=True):
             result = runner.invoke(cli, cli_args)
 
-        # Should exit with error code
-        assert result.exit_code == 1
+        # Should exit with error code (missing required args or env vars)
+        assert result.exit_code != 0
 
     def test_cli_exception_handling(self, cli_args, mock_env):
         """Test CLI handles unexpected exceptions gracefully."""
@@ -316,18 +279,13 @@ class TestApplyAgentFixCLI:
         with (
             patch.dict("os.environ", mock_env),
             patch(
-                "aieng_bot._cli.commands.fix._load_and_validate_classification"
-            ) as mock_load,
-            patch(
-                "aieng_bot._cli.commands.fix._fetch_pr_data",
+                "aieng_bot._cli.commands.fix._fetch_pr_details",
                 side_effect=RuntimeError("Unexpected error"),
             ),
             patch(
                 "aieng_bot._cli.commands.fix._cleanup_temporary_files"
             ) as mock_cleanup,
         ):
-            mock_load.return_value = ("test", 0.95, ["Run Tests"])
-
             result = runner.invoke(cli, cli_args)
 
             assert result.exit_code == 1

@@ -10,9 +10,6 @@ from ..config import get_model_name
 from ..utils.logging import get_console
 from .commands.classify import classify
 from .commands.fix import fix
-from .commands.metrics import metrics
-from .commands.queue import queue
-from .commands.wait_checks import wait_checks
 from .utils import get_version
 
 
@@ -111,9 +108,6 @@ def cli(ctx: click.Context, no_banner: bool) -> None:
 # Register subcommands
 cli.add_command(classify)
 cli.add_command(fix)
-cli.add_command(metrics)
-cli.add_command(queue)
-cli.add_command(wait_checks)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,6 @@ def sample_activity_log():
     return {
         "activities": [
             {
-                "type": "auto_merge",
                 "repo": "VectorInstitute/test-repo",
                 "pr_number": 41,
                 "pr_title": "Previous PR",
@@ -33,7 +32,10 @@ def sample_activity_log():
                 "timestamp": "2025-12-19T10:00:00Z",
                 "workflow_run_id": "111111",
                 "github_run_url": "https://github.com/.../actions/runs/111111",
-                "was_rebased": False,
+                "status": "SUCCESS",
+                "failure_type": "lint",
+                "trace_path": "traces/2025/12/19/test-repo-pr-41.json",
+                "fix_time_hours": 0.25,
             }
         ],
         "last_updated": "2025-12-19T10:00:00Z",
@@ -198,12 +200,11 @@ class TestSaveActivityLog:
             assert result is False
 
 
-class TestLogAutoMerge:
-    """Tests for log_auto_merge method."""
+class TestLogFix:
+    """Tests for log_fix method."""
 
-    def test_log_auto_merge_without_rebase(self, activity_logger):
-        """Test logging auto-merge activity without rebase."""
-        # Mock the internal methods
+    def test_log_fix_success(self, activity_logger):
+        """Test logging fix activity successfully."""
         with (
             patch.object(
                 activity_logger,
@@ -214,162 +215,7 @@ class TestLogAutoMerge:
                 activity_logger, "_save_activity_log", return_value=True
             ) as mock_save,
         ):
-            result = activity_logger.log_auto_merge(
-                repo="VectorInstitute/test-repo",
-                pr_number=42,
-                pr_title="Bump dependency",
-                pr_author="app/dependabot",
-                pr_url="https://github.com/VectorInstitute/test-repo/pull/42",
-                workflow_run_id="123456789",
-                github_run_url="https://github.com/.../actions/runs/123456789",
-                was_rebased=False,
-                rebase_time_seconds=None,
-            )
-
-            # Verify success
-            assert result is True
-
-            # Verify load was called
-            mock_load.assert_called_once()
-
-            # Verify save was called with correct data
-            mock_save.assert_called_once()
-            saved_data = mock_save.call_args[0][0]
-
-            assert len(saved_data["activities"]) == 1
-            activity = saved_data["activities"][0]
-
-            assert activity["type"] == "auto_merge"
-            assert activity["repo"] == "VectorInstitute/test-repo"
-            assert activity["pr_number"] == 42
-            assert activity["pr_title"] == "Bump dependency"
-            assert activity["pr_author"] == "app/dependabot"
-            assert activity["workflow_run_id"] == "123456789"
-            assert activity["status"] == "SUCCESS"
-            assert activity["was_rebased"] is False
-            assert "rebase_time_seconds" not in activity
-
-    def test_log_auto_merge_with_rebase(self, activity_logger):
-        """Test logging auto-merge activity with rebase."""
-        with (
-            patch.object(
-                activity_logger,
-                "_load_activity_log",
-                return_value={"activities": [], "last_updated": None},
-            ),
-            patch.object(
-                activity_logger, "_save_activity_log", return_value=True
-            ) as mock_save,
-        ):
-            result = activity_logger.log_auto_merge(
-                repo="VectorInstitute/test-repo",
-                pr_number=42,
-                pr_title="Bump dependency",
-                pr_author="app/dependabot",
-                pr_url="https://github.com/VectorInstitute/test-repo/pull/42",
-                workflow_run_id="123456789",
-                github_run_url="https://github.com/.../actions/runs/123456789",
-                was_rebased=True,
-                rebase_time_seconds=300.5,
-            )
-
-            # Verify success
-            assert result is True
-
-            # Verify save was called with rebase time
-            saved_data = mock_save.call_args[0][0]
-            activity = saved_data["activities"][0]
-
-            assert activity["status"] == "SUCCESS"
-            assert activity["was_rebased"] is True
-            assert activity["rebase_time_seconds"] == 300.5
-
-    def test_log_auto_merge_appends_to_existing_log(self, activity_logger):
-        """Test that new activities are appended to existing log."""
-        existing_log = {
-            "activities": [
-                {
-                    "type": "auto_merge",
-                    "repo": "VectorInstitute/other-repo",
-                    "pr_number": 1,
-                    "pr_title": "Old PR",
-                    "pr_author": "app/dependabot",
-                    "pr_url": "https://github.com/VectorInstitute/other-repo/pull/1",
-                    "timestamp": "2025-12-18T10:00:00Z",
-                    "workflow_run_id": "111111",
-                    "github_run_url": "https://github.com/.../actions/runs/111111",
-                    "was_rebased": False,
-                }
-            ],
-            "last_updated": "2025-12-18T10:00:00Z",
-        }
-
-        with (
-            patch.object(
-                activity_logger, "_load_activity_log", return_value=existing_log
-            ),
-            patch.object(
-                activity_logger, "_save_activity_log", return_value=True
-            ) as mock_save,
-        ):
-            activity_logger.log_auto_merge(
-                repo="VectorInstitute/test-repo",
-                pr_number=42,
-                pr_title="New PR",
-                pr_author="app/dependabot",
-                pr_url="https://github.com/VectorInstitute/test-repo/pull/42",
-                workflow_run_id="123456789",
-                github_run_url="https://github.com/.../actions/runs/123456789",
-                was_rebased=False,
-            )
-
-            # Verify both activities are in the log
-            saved_data = mock_save.call_args[0][0]
-            assert len(saved_data["activities"]) == 2
-            assert saved_data["activities"][0]["pr_number"] == 1
-            assert saved_data["activities"][1]["pr_number"] == 42
-
-    def test_log_auto_merge_save_failure(self, activity_logger):
-        """Test logging when save fails."""
-        with (
-            patch.object(
-                activity_logger,
-                "_load_activity_log",
-                return_value={"activities": [], "last_updated": None},
-            ),
-            patch.object(activity_logger, "_save_activity_log", return_value=False),
-        ):
-            result = activity_logger.log_auto_merge(
-                repo="VectorInstitute/test-repo",
-                pr_number=42,
-                pr_title="Bump dependency",
-                pr_author="app/dependabot",
-                pr_url="https://github.com/VectorInstitute/test-repo/pull/42",
-                workflow_run_id="123456789",
-                github_run_url="https://github.com/.../actions/runs/123456789",
-                was_rebased=False,
-            )
-
-            # Verify failure
-            assert result is False
-
-
-class TestLogBotFix:
-    """Tests for log_bot_fix method."""
-
-    def test_log_bot_fix_success(self, activity_logger):
-        """Test logging bot fix activity successfully."""
-        with (
-            patch.object(
-                activity_logger,
-                "_load_activity_log",
-                return_value={"activities": [], "last_updated": None},
-            ),
-            patch.object(
-                activity_logger, "_save_activity_log", return_value=True
-            ) as mock_save,
-        ):
-            result = activity_logger.log_bot_fix(
+            result = activity_logger.log_fix(
                 repo="VectorInstitute/test-repo",
                 pr_number=42,
                 pr_title="Bump dependency",
@@ -386,22 +232,28 @@ class TestLogBotFix:
             # Verify success
             assert result is True
 
+            # Verify load was called
+            mock_load.assert_called_once()
+
             # Verify save was called with correct data
+            mock_save.assert_called_once()
             saved_data = mock_save.call_args[0][0]
             assert len(saved_data["activities"]) == 1
             activity = saved_data["activities"][0]
 
-            assert activity["type"] == "bot_fix"
             assert activity["repo"] == "VectorInstitute/test-repo"
             assert activity["pr_number"] == 42
+            assert activity["pr_title"] == "Bump dependency"
+            assert activity["pr_author"] == "app/dependabot"
+            assert activity["workflow_run_id"] == "123456789"
             assert activity["status"] == "SUCCESS"
             assert activity["failure_type"] == "test"
             assert activity["trace_path"] == "traces/2025/12/19/test-repo-pr-42.json"
             assert activity["fix_time_hours"] == 0.5
 
-    def test_log_bot_fix_all_status_types(self, activity_logger):
-        """Test logging bot fix with different status types."""
-        for status in ["SUCCESS", "FAILED", "PARTIAL"]:
+    def test_log_fix_all_status_types(self, activity_logger):
+        """Test logging fix with different status types."""
+        for status in ["SUCCESS", "FAILED"]:
             with (
                 patch.object(
                     activity_logger,
@@ -412,7 +264,7 @@ class TestLogBotFix:
                     activity_logger, "_save_activity_log", return_value=True
                 ) as mock_save,
             ):
-                result = activity_logger.log_bot_fix(
+                result = activity_logger.log_fix(
                     repo="VectorInstitute/test-repo",
                     pr_number=42,
                     pr_title="Bump dependency",
@@ -430,14 +282,15 @@ class TestLogBotFix:
                 saved_data = mock_save.call_args[0][0]
                 assert saved_data["activities"][0]["status"] == status
 
-    def test_log_bot_fix_all_failure_types(self, activity_logger):
-        """Test logging bot fix with different failure types."""
+    def test_log_fix_all_failure_types(self, activity_logger):
+        """Test logging fix with different failure types."""
         failure_types = [
             "test",
             "lint",
             "security",
             "build",
             "merge_conflict",
+            "merge_only",
             "unknown",
         ]
 
@@ -452,7 +305,7 @@ class TestLogBotFix:
                     activity_logger, "_save_activity_log", return_value=True
                 ) as mock_save,
             ):
-                result = activity_logger.log_bot_fix(
+                result = activity_logger.log_fix(
                     repo="VectorInstitute/test-repo",
                     pr_number=42,
                     pr_title="Bump dependency",
@@ -470,12 +323,11 @@ class TestLogBotFix:
                 saved_data = mock_save.call_args[0][0]
                 assert saved_data["activities"][0]["failure_type"] == failure_type
 
-    def test_log_bot_fix_appends_to_existing_log(self, activity_logger):
-        """Test that bot fix activities are appended to existing log."""
+    def test_log_fix_appends_to_existing_log(self, activity_logger):
+        """Test that fix activities are appended to existing log."""
         existing_log = {
             "activities": [
                 {
-                    "type": "auto_merge",
                     "repo": "VectorInstitute/other-repo",
                     "pr_number": 1,
                     "pr_title": "Old PR",
@@ -484,7 +336,10 @@ class TestLogBotFix:
                     "timestamp": "2025-12-18T10:00:00Z",
                     "workflow_run_id": "111111",
                     "github_run_url": "https://github.com/.../actions/runs/111111",
-                    "was_rebased": False,
+                    "status": "SUCCESS",
+                    "failure_type": "lint",
+                    "trace_path": "traces/2025/12/18/other-repo-pr-1.json",
+                    "fix_time_hours": 0.25,
                 }
             ],
             "last_updated": "2025-12-18T10:00:00Z",
@@ -498,7 +353,7 @@ class TestLogBotFix:
                 activity_logger, "_save_activity_log", return_value=True
             ) as mock_save,
         ):
-            activity_logger.log_bot_fix(
+            activity_logger.log_fix(
                 repo="VectorInstitute/test-repo",
                 pr_number=42,
                 pr_title="New PR",
@@ -515,10 +370,10 @@ class TestLogBotFix:
             # Verify both activities are in the log
             saved_data = mock_save.call_args[0][0]
             assert len(saved_data["activities"]) == 2
-            assert saved_data["activities"][0]["type"] == "auto_merge"
-            assert saved_data["activities"][1]["type"] == "bot_fix"
+            assert saved_data["activities"][0]["pr_number"] == 1
+            assert saved_data["activities"][1]["pr_number"] == 42
 
-    def test_log_bot_fix_save_failure(self, activity_logger):
+    def test_log_fix_save_failure(self, activity_logger):
         """Test logging when save fails."""
         with (
             patch.object(
@@ -528,7 +383,7 @@ class TestLogBotFix:
             ),
             patch.object(activity_logger, "_save_activity_log", return_value=False),
         ):
-            result = activity_logger.log_bot_fix(
+            result = activity_logger.log_fix(
                 repo="VectorInstitute/test-repo",
                 pr_number=42,
                 pr_title="Bump dependency",

@@ -4,6 +4,59 @@ from dataclasses import dataclass
 
 
 @dataclass
+class AgenticLoopRequest:
+    """Request for running the full agentic fix loop.
+
+    This model is used for the new simplified agentic fix flow where Claude
+    handles the entire fix-wait-check-retry loop autonomously.
+
+    Attributes
+    ----------
+    repo : str
+        Repository name (owner/repo).
+    pr_number : int
+        Pull request number.
+    pr_title : str
+        Pull request title.
+    pr_author : str
+        Pull request author username.
+    pr_url : str
+        Full URL to the pull request.
+    head_ref : str
+        PR source branch name (e.g., dependabot/uv/pytest-cov-7.0.0).
+    base_ref : str
+        PR target branch name (e.g., main).
+    failure_logs_file : str
+        Path to file containing initial failure logs.
+    max_retries : int
+        Maximum number of fix attempts before giving up.
+    timeout_minutes : int
+        Maximum time for entire fix loop in minutes.
+    workflow_run_id : str
+        GitHub Actions workflow run ID.
+    github_run_url : str
+        URL to the GitHub Actions run.
+    cwd : str
+        Working directory where agent should operate.
+
+    """
+
+    repo: str
+    pr_number: int
+    pr_title: str
+    pr_author: str
+    pr_url: str
+    head_ref: str
+    base_ref: str
+    failure_logs_file: str
+    max_retries: int
+    timeout_minutes: int
+    workflow_run_id: str
+    github_run_url: str
+    cwd: str
+
+
+@dataclass
 class AgentFixRequest:
     """Request for agent to fix a PR failure.
 

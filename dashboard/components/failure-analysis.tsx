@@ -5,7 +5,7 @@ import { AlertCircle, ChevronDown, ChevronRight, AlertTriangle, Shield, Wrench, 
 
 interface FailureAnalysisProps {
   failure: {
-    type: 'test' | 'lint' | 'security' | 'build' | 'merge_conflict' | 'unknown'
+    type: string
     checks: string[]
   }
 }
@@ -25,6 +25,8 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return <Code className="w-6 h-6 text-orange-600 dark:text-orange-400" />
       case 'merge_conflict':
         return <AlertCircle className="w-6 h-6 text-pink-600 dark:text-pink-400" />
+      case 'merge_only':
+        return <Code className="w-6 h-6 text-green-600 dark:text-green-400" />
       default:
         return <AlertTriangle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
     }
@@ -42,6 +44,8 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/10'
       case 'merge_conflict':
         return 'border-pink-200 dark:border-pink-800 bg-pink-50 dark:bg-pink-900/10'
+      case 'merge_only':
+        return 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10'
       default:
         return 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10'
     }
@@ -59,6 +63,8 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
         return 'Build compilation errors detected. The bot fixed configuration and code issues to restore builds.'
       case 'merge_conflict':
         return 'Merge conflicts detected. The bot analyzed conflicting files and resolved conflicts following best practices.'
+      case 'merge_only':
+        return 'No failures detected. The bot rebased the PR and merged it successfully.'
       default:
         return 'Unclassified failure detected. The bot attempted to diagnose and resolve the issue.'
     }
@@ -209,7 +215,23 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                   </li>
                 </>
               )}
-              {failure.type === 'unknown' && (
+              {failure.type === 'merge_only' && (
+                <>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 dark:text-green-400 mt-0.5">•</span>
+                    <span>Checked if PR branch needed rebasing</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 dark:text-green-400 mt-0.5">•</span>
+                    <span>Rebased onto latest main branch if needed</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 dark:text-green-400 mt-0.5">•</span>
+                    <span>Waited for CI to pass and merged the PR</span>
+                  </li>
+                </>
+              )}
+              {!['test', 'lint', 'security', 'build', 'merge_conflict', 'merge_only'].includes(failure.type) && (
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-yellow-600 dark:text-yellow-400 mt-0.5">•</span>

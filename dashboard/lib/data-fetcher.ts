@@ -54,7 +54,7 @@ export async function fetchBotMetricsHistory(): Promise<BotMetricsHistory | null
 }
 
 /**
- * Fetch bot activity log (unified view of auto-merges and bot fixes)
+ * Fetch bot activity log
  */
 export async function fetchBotActivityLog(): Promise<BotActivityLog | null> {
   try {
@@ -112,7 +112,7 @@ export async function fetchPRTrace(repo: string, prNumber: number): Promise<Agen
     if (activityLog) {
       // Find matching activity entry
       const activity = activityLog.activities
-        .filter(a => a.repo === repo && a.pr_number === prNumber && a.type === 'bot_fix')
+        .filter(a => a.repo === repo && a.pr_number === prNumber)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
 
       if (activity && activity.trace_path) {
@@ -120,7 +120,7 @@ export async function fetchPRTrace(repo: string, prNumber: number): Promise<Agen
       }
     }
 
-    console.warn('Activity log not found or PR has no trace (may be auto-merge)')
+    console.warn('Activity log not found or PR has no trace')
     return null
   } catch (error) {
     console.error('Error fetching PR trace:', error)
@@ -133,7 +133,6 @@ export async function fetchPRTrace(repo: string, prNumber: number): Promise<Agen
  */
 export function activityLogToPRSummaries(log: BotActivityLog): PRSummary[] {
   return log.activities.map(activity => ({
-    type: activity.type,
     repo: activity.repo,
     pr_number: activity.pr_number,
     title: activity.pr_title,
@@ -142,29 +141,25 @@ export function activityLogToPRSummaries(log: BotActivityLog): PRSummary[] {
     timestamp: activity.timestamp,
     pr_url: activity.pr_url,
     workflow_run_url: activity.github_run_url,
-    // Bot fix specific fields
     failure_type: activity.failure_type,
     fix_time_hours: activity.fix_time_hours || null,
     trace_path: activity.trace_path || '',
-    // Auto-merge specific fields
-    was_rebased: activity.was_rebased,
-    rebase_time_seconds: activity.rebase_time_seconds || null,
+    cost_usd: null, // Will be enriched from trace if available
   }))
 }
 
 /**
- * Enrich PR summaries with trace data (only for bot_fix entries that have traces)
- * Auto-merge entries already have all data from activity log
+ * Enrich PR summaries with trace data for detailed execution info
  */
 export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSummary[]> {
   const enriched = await Promise.all(
     summaries.map(async (summary) => {
-      // Skip auto-merges and entries without trace paths
-      if (summary.type === 'auto_merge' || !summary.trace_path) {
+      // Skip entries without trace paths
+      if (!summary.trace_path) {
         return summary
       }
 
-      // Fetch trace for bot_fix entries to get detailed execution info
+      // Fetch trace to get detailed execution info
       const trace = await fetchAgentTrace(summary.trace_path)
 
       if (!trace) {
@@ -195,16 +190,12 @@ export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSumma
 export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetrics {
   const now = new Date().toISOString()
 
-  // Calculate stats - differentiate between auto-merge and bot fixes
+  // Calculate stats
   const totalPRs = prSummaries.length
-  const autoMergedPRs = prSummaries.filter(pr => pr.type === 'auto_merge' && pr.status === 'SUCCESS').length
-  const botFixedPRs = prSummaries.filter(pr => pr.type === 'bot_fix' && pr.status === 'SUCCESS').length
-  const failedFixes = prSummaries.filter(pr => pr.status === 'FAILED').length
-  // Note: PARTIAL is also treated as a failure - bot couldn't fully fix the PR
+  const fixedAndMerged = prSummaries.filter(pr => pr.status === 'SUCCESS').length
+  const failed = prSummaries.filter(pr => pr.status === 'FAILED').length
 
-  // Success rate should only count bot fixes (not auto-merges)
-  const totalAttempts = totalPRs - autoMergedPRs
-  const successRate = totalAttempts > 0 ? botFixedPRs / totalAttempts : 0
+  const successRate = totalPRs > 0 ? fixedAndMerged / totalPRs : 0
 
   const fixTimes = prSummaries
     .filter(pr => pr.fix_time_hours !== null)
@@ -213,30 +204,30 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
     ? fixTimes.reduce((a, b) => a + b, 0) / fixTimes.length
     : 0
 
-  // Calculate cost metrics (bot fixes only)
-  const costsForBotFixes = prSummaries
-    .filter(pr => pr.type === 'bot_fix' && pr.cost_usd !== null && pr.cost_usd !== undefined)
+  // Calculate cost metrics
+  const costsWithData = prSummaries
+    .filter(pr => pr.cost_usd !== null && pr.cost_usd !== undefined)
     .map(pr => pr.cost_usd!)
-  const totalCost = costsForBotFixes.length > 0
-    ? costsForBotFixes.reduce((a, b) => a + b, 0)
+  const totalCost = costsWithData.length > 0
+    ? costsWithData.reduce((a, b) => a + b, 0)
     : 0
 
-  // Average cost per attempt (includes both successful and failed fixes)
-  const avgCostPerAttempt = costsForBotFixes.length > 0
-    ? totalCost / costsForBotFixes.length
+  // Average cost per attempt
+  const avgCostPerAttempt = costsWithData.length > 0
+    ? totalCost / costsWithData.length
     : 0
 
   // Average cost per successful fix only
-  const successfulFixesWithCost = prSummaries
-    .filter(pr => pr.type === 'bot_fix' && pr.status === 'SUCCESS' && pr.cost_usd !== null && pr.cost_usd !== undefined)
-  const avgCostPerSuccess = successfulFixesWithCost.length > 0
-    ? successfulFixesWithCost.reduce((sum, pr) => sum + pr.cost_usd!, 0) / successfulFixesWithCost.length
+  const successfulWithCost = prSummaries
+    .filter(pr => pr.status === 'SUCCESS' && pr.cost_usd !== null && pr.cost_usd !== undefined)
+  const avgCostPerSuccess = successfulWithCost.length > 0
+    ? successfulWithCost.reduce((sum, pr) => sum + pr.cost_usd!, 0) / successfulWithCost.length
     : 0
 
-  // Group by failure type (bot fixes only, auto-merges tracked separately)
+  // Group by failure type
   const byFailureType: Record<string, { count: number; fixed: number; failed: number; success_rate: number; total_cost: number; avg_cost: number }> = {}
   prSummaries.forEach(pr => {
-    if (pr.type === 'bot_fix' && pr.failure_type) {
+    if (pr.failure_type) {
       const type = pr.failure_type
       if (!byFailureType[type]) {
         byFailureType[type] = { count: 0, fixed: 0, failed: 0, success_rate: 0, total_cost: 0, avg_cost: 0 }
@@ -262,37 +253,35 @@ export function computeMetricsFromPRSummaries(prSummaries: PRSummary[]): BotMetr
   })
 
   // Group by repo
-  const byRepo: Record<string, { total_prs: number; auto_merged: number; bot_fixed: number; failed: number; success_rate: number; total_cost: number }> = {}
+  const byRepo: Record<string, { total_prs: number; fixed: number; failed: number; success_rate: number; total_cost: number }> = {}
   prSummaries.forEach(pr => {
     if (!byRepo[pr.repo]) {
-      byRepo[pr.repo] = { total_prs: 0, auto_merged: 0, bot_fixed: 0, failed: 0, success_rate: 0, total_cost: 0 }
+      byRepo[pr.repo] = { total_prs: 0, fixed: 0, failed: 0, success_rate: 0, total_cost: 0 }
     }
     byRepo[pr.repo].total_prs++
-    if (pr.type === 'auto_merge' && pr.status === 'SUCCESS') {
-      byRepo[pr.repo].auto_merged++
-    } else if (pr.type === 'bot_fix' && pr.status === 'SUCCESS') {
-      byRepo[pr.repo].bot_fixed++
+    if (pr.status === 'SUCCESS') {
+      byRepo[pr.repo].fixed++
     }
-    if (pr.status === 'FAILED') byRepo[pr.repo].failed++
-    if (pr.type === 'bot_fix' && pr.cost_usd !== null && pr.cost_usd !== undefined) {
+    if (pr.status === 'FAILED') {
+      byRepo[pr.repo].failed++
+    }
+    if (pr.cost_usd !== null && pr.cost_usd !== undefined) {
       byRepo[pr.repo].total_cost += pr.cost_usd
     }
   })
 
-  // Calculate success rates per repo (only for bot fix attempts, not auto-merges)
+  // Calculate success rates per repo
   Object.keys(byRepo).forEach(repo => {
     const data = byRepo[repo]
-    const fixAttempts = data.total_prs - data.auto_merged
-    data.success_rate = fixAttempts > 0 ? data.bot_fixed / fixAttempts : 0
+    data.success_rate = data.total_prs > 0 ? data.fixed / data.total_prs : 0
   })
 
   return {
     snapshot_date: now,
     stats: {
       total_prs_scanned: totalPRs,
-      prs_auto_merged: autoMergedPRs,
-      prs_bot_fixed: botFixedPRs,
-      prs_failed: failedFixes,
+      prs_fixed_and_merged: fixedAndMerged,
+      prs_failed: failed,
       success_rate: successRate,
       avg_fix_time_hours: avgFixTime,
       total_cost_usd: totalCost,
