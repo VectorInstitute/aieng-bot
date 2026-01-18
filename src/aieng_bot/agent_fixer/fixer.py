@@ -347,6 +347,7 @@ class AgentFixer:
             repo=request.repo,
             pr_number=request.pr_number,
             head_ref=request.head_ref,
+            base_ref=request.base_ref,
             max_retries=request.max_retries,
             timeout_minutes=request.timeout_minutes,
         )
