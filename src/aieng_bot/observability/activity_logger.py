@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Literal
 
-from ..utils.logging import log_error, log_info, log_success
+from aieng_bot.utils.logging import log_error, log_info, log_success
 
 ActivityStatus = Literal["SUCCESS", "FAILED"]
 
