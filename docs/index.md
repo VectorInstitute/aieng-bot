@@ -14,7 +14,7 @@ Centralized maintenance bot that automatically manages bot PRs (Dependabot and p
 
 ## Features
 
-- **Organization-wide monitoring** - Scans all VectorInstitute repos every 6 hours
+- **Organization-wide monitoring** - Scans all VectorInstitute repos daily (00:00 UTC)
 - **Auto-merge** - Merges bot PRs (Dependabot and pre-commit-ci) when all checks pass
 - **Auto-fix** - Fixes test failures, linting issues, security vulnerabilities, and build errors using Claude AI Agent SDK
 - **Centralized operation** - No installation needed in individual repositories
@@ -25,10 +25,10 @@ Centralized maintenance bot that automatically manages bot PRs (Dependabot and p
 
 ```
 ┌─────────────────────────────────┐
-│  aieng-bot Repository  │
+│  aieng-bot Repository           │
 │  (This Repo - Central Bot)      │
 │                                 │
-│  Runs every 6 hours:            │
+│  Runs daily (00:00 UTC):        │
 │  1. Scans VectorInstitute org   │
 │  2. Finds bot PRs               │
 │  3. Checks status               │
@@ -68,10 +68,10 @@ The bot now monitors all VectorInstitute repositories automatically.
 
 ## How It Works
 
-**1. Monitor** (every 6 hours)
+**1. Monitor** (daily at 00:00 UTC)
 - Scans all VectorInstitute repositories for open bot PRs (Dependabot and pre-commit-ci)
-- Checks status of each PR
-- Routes to merge or fix workflow
+- Classifies PR failures using Claude Haiku 4.5
+- Routes to merge or fix workflow based on failure type
 
 **2. Auto-Merge** (when all checks pass)
 - Approves PR and enables auto-merge
@@ -91,9 +91,16 @@ The bot now monitors all VectorInstitute repositories automatically.
 - `ANTHROPIC_API_KEY` - Anthropic API access for Claude
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
+**Model Configuration**
+- Classification: Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) - cost-efficient
+- Fixing: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - agentic capability
+- Override with `CLAUDE_MODEL` environment variable
+
 **Workflows**
-- `monitor-org-bot-prs.yml` - Scans org for bot PRs (Dependabot and pre-commit-ci) every 6 hours
-- `fix-remote-pr.yml` - Fixes failing PRs using AI
+- `discover-and-dispatch.yml` - Daily scan (00:00 UTC) for bot PRs with failures
+- `fix-pr-agent.yml` - Per-PR agent workflow (6-hour timeout)
+- `code_checks.yml` - Ruff + mypy checks
+- `unit_tests.yml` - pytest suite
 
 **AI Prompt Templates** (customize for your needs)
 - `fix-merge-conflicts.md` - Resolve merge conflicts with best practices
@@ -116,15 +123,28 @@ The bot now monitors all VectorInstitute repositories automatically.
 - Breaking changes requiring refactoring
 - Issues requiring architectural decisions
 
+## CLI Usage
+
+```bash
+# Install dependencies
+uv sync
+
+# Classify a PR failure type
+aieng-bot classify <pr-url>
+
+# Run agent to fix a PR
+aieng-bot fix <pr-url>
+```
+
 ## Manual Testing
 
 **Trigger via CLI:**
 ```bash
-# Monitor all repositories
-gh workflow run monitor-org-bot-prs.yml
+# Run discovery workflow
+gh workflow run discover-and-dispatch.yml
 
-# Fix a specific PR (test with aieng-template-mvp#17)
-gh workflow run fix-remote-pr.yml \
+# Fix a specific PR
+gh workflow run fix-pr-agent.yml \
   --field target_repo="VectorInstitute/aieng-template-mvp" \
   --field pr_number="17"
 ```
@@ -164,13 +184,10 @@ Actions → Select workflow → Run workflow → Enter parameters
 **Debug commands:**
 ```bash
 # View recent workflow runs
-gh run list --workflow=monitor-org-bot-prs.yml --limit 5
+gh run list --workflow=discover-and-dispatch.yml --limit 5
 
 # View logs for specific run
 gh run view RUN_ID --log
-
-# Collect metrics manually
-gh workflow run aieng-bot metrics.yml
 ```
 
 ## Documentation
