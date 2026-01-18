@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from aieng_bot.agent_fixer import AgentFixer, AgentFixRequest, AgentFixResult
+from aieng_bot.agent_fixer import (
+    AgentFixer,
+    AgentFixRequest,
+    AgentFixResult,
+    AgenticLoopRequest,
+)
 
 
 class TestAgentFixRequest:
@@ -355,3 +360,188 @@ class TestAgentFixer:
                 assert expected_skill in prompt, (
                     f"Prompt should mention {expected_skill} skill"
                 )
+
+
+class TestAgenticLoopRequest:
+    """Test AgenticLoopRequest dataclass."""
+
+    def test_create_request(self):
+        """Test creating an agentic loop request with all required fields."""
+        request = AgenticLoopRequest(
+            repo="VectorInstitute/test-repo",
+            pr_number=123,
+            pr_title="Bump dependency",
+            pr_author="app/dependabot",
+            pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
+            head_ref="dependabot/pytest-8.0.0",
+            base_ref="main",
+            failure_logs_file=".failure-logs.txt",
+            max_retries=3,
+            timeout_minutes=330,
+            workflow_run_id="1234567890",
+            github_run_url="https://github.com/runs/123",
+            cwd="/path/to/repo",
+        )
+
+        assert request.repo == "VectorInstitute/test-repo"
+        assert request.pr_number == 123
+        assert request.max_retries == 3
+        assert request.timeout_minutes == 330
+        assert request.cwd == "/path/to/repo"
+
+    def test_request_fields(self):
+        """Test that request fields are properly typed."""
+        request = AgenticLoopRequest(
+            repo="test/repo",
+            pr_number=456,
+            pr_title="Fix bug",
+            pr_author="user",
+            pr_url="https://github.com/test/repo/pull/456",
+            head_ref="feature/fix",
+            base_ref="main",
+            failure_logs_file="logs.txt",
+            max_retries=5,
+            timeout_minutes=180,
+            workflow_run_id="999",
+            github_run_url="https://url",
+            cwd="/cwd",
+        )
+
+        # Verify types
+        assert isinstance(request.repo, str)
+        assert isinstance(request.pr_number, int)
+        assert isinstance(request.max_retries, int)
+        assert isinstance(request.timeout_minutes, int)
+
+
+class TestAgenticLoop:
+    """Test agentic loop functionality."""
+
+    @pytest.fixture
+    def agentic_request(self, tmp_path):
+        """Create a test agentic loop request."""
+        logs_file = tmp_path / ".failure-logs.txt"
+        logs_file.write_text("Error: test failed\nAssertion error at line 42")
+
+        return AgenticLoopRequest(
+            repo="VectorInstitute/test-repo",
+            pr_number=123,
+            pr_title="Bump pytest",
+            pr_author="app/dependabot",
+            pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
+            head_ref="dependabot/pytest-8.0.0",
+            base_ref="main",
+            failure_logs_file=str(logs_file),
+            max_retries=3,
+            timeout_minutes=330,
+            workflow_run_id="1234567890",
+            github_run_url="https://github.com/runs/123",
+            cwd=str(tmp_path),
+        )
+
+    def test_write_agentic_context(self, agentic_request, tmp_path):
+        """Test writing agentic loop context to JSON file."""
+        import json  # noqa: PLC0415 - Import after test setup
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            fixer._write_agentic_context(agentic_request)
+
+            context_file = tmp_path / ".pr-context.json"
+            assert context_file.exists()
+
+            with open(context_file) as f:
+                context = json.load(f)
+
+            assert context["repo"] == "VectorInstitute/test-repo"
+            assert context["pr_number"] == 123
+            assert context["pr_title"] == "Bump pytest"
+            assert context["head_ref"] == "dependabot/pytest-8.0.0"
+            assert context["max_retries"] == 3
+            assert context["timeout_minutes"] == 330
+
+    def test_build_agentic_prompt(self, agentic_request):
+        """Test building agentic loop prompt."""
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            prompt = fixer._build_agentic_prompt(agentic_request)
+
+            assert "AI Engineering Maintenance Bot" in prompt
+            assert "FULL AUTONOMY" in prompt
+            assert ".pr-context.json" in prompt
+            assert ".failure-logs.txt" in prompt
+            assert "gh pr checks" in prompt
+            assert "gh pr merge" in prompt
+            assert "3" in prompt  # max_retries
+            assert "330" in prompt  # timeout_minutes
+
+    def test_create_agentic_tracer(self, agentic_request):
+        """Test creating an execution tracer for agentic loop."""
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            tracer = fixer._create_agentic_tracer(agentic_request)
+
+            assert tracer.trace["metadata"]["pr"]["repo"] == "VectorInstitute/test-repo"
+            assert tracer.trace["metadata"]["pr"]["number"] == 123
+            # Failure type starts as "pending" and will be updated by Claude
+            assert tracer.trace["metadata"]["failure"]["type"] == "pending"
+            assert tracer.trace["metadata"]["workflow_run_id"] == "1234567890"
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_success(self, agentic_request, tmp_path):
+        """Test successful agentic loop execution."""
+
+        # Mock agent stream
+        async def mock_stream():
+            yield MagicMock()
+
+        # Create a mock tracer with proper async generator
+        async def mock_capture_stream(stream):
+            async for msg in mock_stream():
+                yield msg
+
+        mock_tracer = MagicMock()
+        mock_tracer.capture_agent_stream = mock_capture_stream
+        mock_tracer.get_summary.return_value = "Fixed and merged PR"
+        mock_tracer.save_trace = MagicMock()
+
+        # Create a regular mock function that returns the async generator
+        def mock_query(*args, **kwargs):
+            return mock_stream()
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch("aieng_bot.agent_fixer.fixer.query", side_effect=mock_query),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+            assert result.status == "SUCCESS"
+            assert result.trace_file == "/tmp/agent-execution-trace.json"
+            assert result.summary_file == "/tmp/fix-summary.txt"
+            assert result.error_message is None
+
+            mock_tracer.finalize.assert_called_once_with(status="SUCCESS")
+            mock_tracer.save_trace.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_failure(self, agentic_request):
+        """Test handling of agentic loop execution failure."""
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.query",
+                side_effect=RuntimeError("Agent failed"),
+            ),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+            assert result.status == "FAILED"
+            assert result.error_message == "Agent failed"
+            assert result.trace_file == ""
+            assert result.summary_file == ""

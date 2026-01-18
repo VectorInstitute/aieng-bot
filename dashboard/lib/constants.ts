@@ -68,11 +68,11 @@ export const FAILURE_TYPES = {
     text: 'text-gray-700 dark:text-gray-400',
     color: '#6b7280',
   },
-  auto_merge: {
-    label: 'Auto-Merge',
-    bg: 'bg-teal-100 dark:bg-teal-900/20',
-    text: 'text-teal-700 dark:text-teal-400',
-    color: '#14b8a6',
+  merge_only: {
+    label: 'Merge Only',
+    bg: 'bg-green-100 dark:bg-green-900/20',
+    text: 'text-green-700 dark:text-green-400',
+    color: '#22c55e',
   },
 } as const
 

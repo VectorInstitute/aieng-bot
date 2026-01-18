@@ -16,9 +16,8 @@ export interface AgentTrace {
       author: string
       url: string
     }
-    merge_type?: 'auto_merge' | 'agent_fix'
     failure?: {
-      type: 'test' | 'lint' | 'security' | 'build' | 'merge_conflict' | 'unknown'
+      type: string
       checks: string[]
     }
   }
@@ -55,12 +54,11 @@ export interface AgentTrace {
   }
   events: AgentEvent[]
   result: {
-    status: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'IN_PROGRESS'
+    status: 'SUCCESS' | 'FAILED'
     changes_made: number
     files_modified: string[]
     commit_sha: string | null
     commit_url: string | null
-    merge_method?: 'auto_merge' | 'agent_fix'
   }
 }
 
@@ -76,13 +74,12 @@ export interface AgentEvent {
   is_error?: boolean
 }
 
-// Bot metrics types
+// Bot metrics types (computed from activity log)
 export interface BotMetrics {
   snapshot_date: string
   stats: {
     total_prs_scanned: number
-    prs_auto_merged: number
-    prs_bot_fixed: number
+    prs_fixed_and_merged: number
     prs_failed: number
     success_rate: number
     avg_fix_time_hours: number
@@ -100,17 +97,15 @@ export interface BotMetrics {
   }>
   by_repo: Record<string, {
     total_prs: number
-    auto_merged: number
-    bot_fixed: number
+    fixed: number
     failed: number
     success_rate: number
     total_cost: number
   }>
 }
 
-// Bot activity log types (unified view of auto-merges and bot fixes)
+// Bot activity log types - single unified activity type
 export interface BotActivity {
-  type: 'auto_merge' | 'bot_fix'
   repo: string
   pr_number: number
   pr_title: string
@@ -119,14 +114,10 @@ export interface BotActivity {
   timestamp: string
   workflow_run_id: string
   github_run_url: string
-  status: 'SUCCESS' | 'FAILED' | 'PARTIAL'
-  // Bot fix fields
-  failure_type?: string
-  trace_path?: string
-  fix_time_hours?: number
-  // Auto-merge fields
-  was_rebased?: boolean
-  rebase_time_seconds?: number
+  status: 'SUCCESS' | 'FAILED'
+  failure_type: string  // lint, test, build, security, merge_conflict, merge_only, unknown
+  trace_path: string
+  fix_time_hours: number
 }
 
 export interface BotActivityLog {
@@ -141,23 +132,18 @@ export interface BotMetricsHistory {
 
 // PR summary for overview table
 export interface PRSummary extends Record<string, unknown> {
-  type: 'auto_merge' | 'bot_fix'
   repo: string
   pr_number: number
   title: string
   author: string
-  status: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'IN_PROGRESS'
+  status: 'SUCCESS' | 'FAILED'
   timestamp: string
   pr_url: string
   workflow_run_url: string
-  // Bot fix specific
-  failure_type?: string
-  fix_time_hours?: number | null
-  trace_path?: string
-  cost_usd?: number | null
-  // Auto-merge specific
-  was_rebased?: boolean
-  rebase_time_seconds?: number | null
+  failure_type: string
+  fix_time_hours: number | null
+  trace_path: string
+  cost_usd: number | null
 }
 
 // Authentication types

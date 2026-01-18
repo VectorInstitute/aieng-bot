@@ -1,0 +1,171 @@
+name: Discover and Dispatch PR Fixes
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Specific repo to check (optional, e.g., VectorInstitute/repo-name)'
+        required: false
+      dry_run:
+        description: 'Dry run - discover PRs but do not dispatch fixes'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  ORG_NAME: VectorInstitute
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      prs: ${{ steps.find-prs.outputs.prs }}
+
+    steps:
+      - name: Checkout bot repository
+        uses: actions/checkout@v6
+
+      - name: Find bot PRs with failing checks
+        id: find-prs
+        run: |
+          # Determine which repos to check
+          if [ -n "${{ github.event.inputs.target_repo }}" ]; then
+            REPOS="${{ github.event.inputs.target_repo }}"
+          else
+            if [ -f repos-to-monitor.csv ]; then
+              REPOS=$(tail -n +2 repos-to-monitor.csv | grep -v '^$' | tr '\n' ' ')
+              echo "Reading repos from repos-to-monitor.csv"
+            else
+              echo "Error: repos-to-monitor.csv not found"
+              exit 1
+            fi
+          fi
+
+          PRS_TO_FIX="[]"
+          BOT_AUTHORS=("app/dependabot" "pre-commit-ci[bot]")
+
+          for REPO in $REPOS; do
+            # Skip the bot repository itself
+            if [ "$REPO" = "VectorInstitute/aieng-bot" ]; then
+              echo "Skipping $REPO (bot repository)"
+              continue
+            fi
+
+            echo "Checking $REPO for bot PRs with failing checks..."
+
+            for BOT_AUTHOR in "${BOT_AUTHORS[@]}"; do
+              # Get open PRs from this bot author
+              REPO_PRS=$(gh pr list --repo "$REPO" \
+                --author "$BOT_AUTHOR" \
+                --state open \
+                --json number,title,url,headRefName,statusCheckRollup 2>/dev/null || echo "[]")
+
+              if [ "$REPO_PRS" != "[]" ] && [ -n "$REPO_PRS" ]; then
+                # Filter to only PRs with failing checks
+                FAILING_PRS=$(echo "$REPO_PRS" | jq -c "[.[] | select(.statusCheckRollup != null) | select(.statusCheckRollup | map(select(.conclusion == \"FAILURE\")) | length > 0) | {repo: \"$REPO\", pr_number: .number, title: .title, head_ref: .headRefName}]")
+
+                if [ "$FAILING_PRS" != "[]" ]; then
+                  echo "Found failing PRs in $REPO from $BOT_AUTHOR:"
+                  echo "$FAILING_PRS" | jq '.'
+                  PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c ". + $FAILING_PRS")
+                fi
+              fi
+            done
+          done
+
+          # Also check for PRs with merge conflicts (CONFLICTING status)
+          for REPO in $REPOS; do
+            if [ "$REPO" = "VectorInstitute/aieng-bot" ]; then
+              continue
+            fi
+
+            for BOT_AUTHOR in "${BOT_AUTHORS[@]}"; do
+              CONFLICT_PRS=$(gh pr list --repo "$REPO" \
+                --author "$BOT_AUTHOR" \
+                --state open \
+                --json number,title,url,headRefName,mergeable 2>/dev/null | \
+                jq -c "[.[] | select(.mergeable == \"CONFLICTING\") | {repo: \"$REPO\", pr_number: .number, title: .title, head_ref: .headRefName}]" || echo "[]")
+
+              if [ "$CONFLICT_PRS" != "[]" ]; then
+                echo "Found conflicting PRs in $REPO from $BOT_AUTHOR:"
+                echo "$CONFLICT_PRS" | jq '.'
+                PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c ". + $CONFLICT_PRS")
+              fi
+            done
+          done
+
+          # Deduplicate PRs (in case a PR has both failures and conflicts)
+          PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c 'unique_by({repo, pr_number})')
+
+          echo "Total PRs to fix: $(echo "$PRS_TO_FIX" | jq 'length')"
+          echo "$PRS_TO_FIX" | jq '.'
+
+          echo "prs=$(echo "$PRS_TO_FIX" | jq -c '.')" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
+
+  dispatch:
+    runs-on: ubuntu-latest
+    needs: discover
+    if: needs.discover.outputs.prs != '[]' && github.event.inputs.dry_run != 'true'
+
+    strategy:
+      matrix:
+        pr: ${{ fromJson(needs.discover.outputs.prs) }}
+      max-parallel: 5
+      fail-fast: false
+
+    steps:
+      - name: Dispatch fix job for ${{ matrix.pr.repo }}#${{ matrix.pr.pr_number }}
+        run: |
+          echo "Dispatching fix job for ${{ matrix.pr.repo }}#${{ matrix.pr.pr_number }}"
+          echo "Title: ${{ matrix.pr.title }}"
+
+          gh workflow run fix-pr-agent.yml \
+            --repo VectorInstitute/aieng-bot \
+            --field target_repo="${{ matrix.pr.repo }}" \
+            --field pr_number="${{ matrix.pr.pr_number }}" \
+            --field max_retries="3"
+
+          echo "Fix job dispatched"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  report-summary:
+    runs-on: ubuntu-latest
+    needs: [discover, dispatch]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          PR_COUNT=$(echo '${{ needs.discover.outputs.prs }}' | jq 'length')
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+
+          echo "## PR Fix Discovery Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Organization**: ${{ env.ORG_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PRs Found**: $PR_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Time**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "- **Mode**: Dry Run (no fixes dispatched)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Mode**: Active (fixes dispatched)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$PR_COUNT" -gt 0 ]; then
+            echo "### PRs Discovered" >> $GITHUB_STEP_SUMMARY
+            echo '${{ needs.discover.outputs.prs }}' | \
+              jq -r '.[] | "- [\(.repo)#\(.pr_number)](https://github.com/\(.repo)/pull/\(.pr_number)) - \(.title)"' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No bot PRs with failing checks or merge conflicts found." >> $GITHUB_STEP_SUMMARY
+          fi

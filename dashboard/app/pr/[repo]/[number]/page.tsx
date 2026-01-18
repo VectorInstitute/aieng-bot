@@ -115,10 +115,10 @@ export default async function PRPage({ params }: PRPageProps) {
           </div>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              {trace.metadata.merge_type === 'auto_merge' ? 'Merge Type' : 'Failure Type'}
+              Failure Type
             </p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 capitalize">
-              {trace.metadata.failure?.type || trace.metadata.merge_type || 'Unknown'}
+              {trace.metadata.failure?.type || 'Unknown'}
             </p>
           </div>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">

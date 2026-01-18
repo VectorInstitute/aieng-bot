@@ -12,6 +12,7 @@ class FailureType(str, Enum):
     SECURITY = "security"
     TEST = "test"
     BUILD = "build"
+    MERGE_ONLY = "merge_only"  # No failures, just needs rebase and merge
     UNKNOWN = "unknown"
 
 

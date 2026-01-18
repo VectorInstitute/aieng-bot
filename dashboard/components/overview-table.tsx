@@ -16,9 +16,6 @@ interface OverviewTableProps {
 type SortField = 'timestamp' | 'repo' | 'status' | 'failure_type' | 'fix_time_hours'
 
 export default function OverviewTable({ prSummaries }: OverviewTableProps) {
-  // Filter to bot fix entries only
-  const botFixesOnly = prSummaries.filter(pr => pr.type === 'bot_fix')
-
   const {
     data: processedData,
     sortField,
@@ -31,7 +28,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
     setFilter,
     totalCount,
     filteredCount,
-  } = useTableData<PRSummary>(botFixesOnly, {
+  } = useTableData<PRSummary>(prSummaries, {
     initialSortField: 'timestamp',
     initialSortDirection: 'desc',
     searchFields: ['repo', 'title', 'author'],
