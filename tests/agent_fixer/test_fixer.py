@@ -483,7 +483,8 @@ class TestAgenticLoop:
             prompt = fixer._build_agentic_prompt(agentic_request)
 
             assert "aieng-bot" in prompt
-            assert "FULL AUTONOMY" in prompt
+            assert "You Are the Orchestrator" in prompt
+            assert "Skills provide domain expertise only" in prompt
             assert ".pr-context.json" in prompt
             assert ".failure-logs.txt" in prompt
             assert "gh pr checks" in prompt
