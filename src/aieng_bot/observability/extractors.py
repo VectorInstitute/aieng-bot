@@ -276,16 +276,113 @@ class ToolInfoExtractor:
 
         """
         msg_str = str(block)
-        input_match = re.search(r"input=(\{[^}]+\})", msg_str)
-        if input_match:
-            try:
-                # Convert Python dict string to JSON-like format
-                input_str = input_match.group(1).replace("'", '"')
-                return json.loads(input_str)
-            except (json.JSONDecodeError, ValueError):
-                # If parsing fails, store as string
-                return {"raw": input_match.group(1)}
-        return {}
+
+        # Find the start of input=
+        input_start = msg_str.find("input={")
+        if input_start == -1:
+            return {}
+
+        # Extract balanced braces content
+        input_content = ToolInfoExtractor._extract_balanced_braces(
+            msg_str, input_start + len("input=")
+        )
+        if not input_content:
+            return {}
+
+        try:
+            # Convert Python dict string to JSON-like format
+            input_str = input_content.replace("'", '"')
+            return json.loads(input_str)
+        except (json.JSONDecodeError, ValueError):
+            # Try extracting key fields directly as fallback
+            result = ToolInfoExtractor._extract_key_fields(input_content)
+            if result:
+                return result
+            # If all parsing fails, store as string
+            return {"raw": input_content}
+
+    @staticmethod
+    def _extract_balanced_braces(text: str, start_pos: int) -> str | None:
+        """Extract content within balanced braces starting at given position.
+
+        Parameters
+        ----------
+        text : str
+            Input text.
+        start_pos : int
+            Position where opening brace is expected.
+
+        Returns
+        -------
+        str or None
+            Content within balanced braces including the braces, or None if invalid.
+
+        """
+        if start_pos >= len(text) or text[start_pos] != "{":
+            return None
+
+        depth = 0
+        in_string = False
+        string_char = None
+        escape_next = False
+
+        for i, char in enumerate(text[start_pos:], start=start_pos):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == "\\":
+                escape_next = True
+                continue
+
+            if char in ('"', "'") and not in_string:
+                in_string = True
+                string_char = char
+            elif char == string_char and in_string:
+                in_string = False
+                string_char = None
+            elif not in_string:
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start_pos : i + 1]
+
+        return None
+
+    @staticmethod
+    def _extract_key_fields(input_content: str) -> dict[str, Any] | None:
+        """Extract key fields from malformed dict string as fallback.
+
+        Parameters
+        ----------
+        input_content : str
+            Input content that couldn't be parsed as JSON.
+
+        Returns
+        -------
+        dict[str, Any] or None
+            Dictionary with extracted fields, or None if extraction failed.
+
+        """
+        result: dict[str, Any] = {}
+
+        # Try to extract file_path which is most important for metrics
+        file_path_match = re.search(
+            r"['\"]file_path['\"]\s*:\s*['\"]([^'\"]+)['\"]", input_content
+        )
+        if file_path_match:
+            result["file_path"] = file_path_match.group(1)
+
+        # Try to extract command for Bash tool
+        command_match = re.search(
+            r"['\"]command['\"]\s*:\s*['\"]([^'\"]+)['\"]", input_content
+        )
+        if command_match:
+            result["command"] = command_match.group(1)
+
+        return result if result else None
 
     @staticmethod
     def _extract_tool_id_from_string(block: Any) -> str | None:

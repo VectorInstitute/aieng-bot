@@ -175,7 +175,9 @@ class TestFixCLI:
 
         with (
             patch.dict("os.environ", mock_env),
+            patch("aieng_bot._cli.commands.fix._check_pr_status") as mock_check_status,
             patch("aieng_bot._cli.commands.fix._fetch_pr_details") as mock_fetch,
+            patch("aieng_bot._cli.commands.fix.GitHubClient") as mock_gh_client,
             patch(
                 "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
             ) as mock_fetch_logs,
@@ -190,12 +192,17 @@ class TestFixCLI:
             patch("aieng_bot._cli.commands.fix.asyncio.run") as mock_asyncio_run,
         ):
             # Mock helper function returns
+            mock_check_status.return_value = (
+                "OPEN",
+                True,
+            )  # PR open with failing checks
             mock_fetch.return_value = (
                 "Bump pytest",
                 "app/dependabot",
                 "dependabot/pytest-8.0.0",
                 "main",
             )
+            mock_gh_client.return_value.check_merge_conflicts.return_value = False
             mock_fetch_logs.return_value = ".failure-logs.txt"
             mock_classify.return_value = mock_classification
             mock_prepare.return_value = True
@@ -240,7 +247,9 @@ class TestFixCLI:
 
         with (
             patch.dict("os.environ", mock_env),
+            patch("aieng_bot._cli.commands.fix._check_pr_status") as mock_check_status,
             patch("aieng_bot._cli.commands.fix._fetch_pr_details") as mock_fetch,
+            patch("aieng_bot._cli.commands.fix.GitHubClient") as mock_gh_client,
             patch(
                 "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
             ) as mock_fetch_logs,
@@ -255,12 +264,17 @@ class TestFixCLI:
             patch("aieng_bot._cli.commands.fix.asyncio.run") as mock_asyncio_run,
         ):
             # Mock helper function returns
+            mock_check_status.return_value = (
+                "OPEN",
+                True,
+            )  # PR open with failing checks
             mock_fetch.return_value = (
                 "Bump pytest",
                 "app/dependabot",
                 "dependabot/pytest-8.0.0",
                 "main",
             )
+            mock_gh_client.return_value.check_merge_conflicts.return_value = False
             mock_fetch_logs.return_value = ".failure-logs.txt"
             mock_classify.return_value = mock_classification
             mock_prepare.return_value = True
@@ -301,20 +315,23 @@ class TestFixCLI:
         assert result.exit_code != 0
 
     def test_cli_exception_handling(self, cli_args, mock_env):
-        """Test CLI handles unexpected exceptions gracefully."""
+        """Test CLI handles unexpected exceptions gracefully.
+
+        When an exception occurs before the fix loop starts (e.g., in _fetch_pr_details),
+        cleanup won't be called since we never enter the try/finally block.
+        """
         runner = CliRunner()
 
         with (
             patch.dict("os.environ", mock_env),
+            patch("aieng_bot._cli.commands.fix._check_pr_status") as mock_check_status,
             patch(
                 "aieng_bot._cli.commands.fix._fetch_pr_details",
                 side_effect=RuntimeError("Unexpected error"),
             ),
-            patch(
-                "aieng_bot._cli.commands.fix._cleanup_temporary_files"
-            ) as mock_cleanup,
         ):
+            mock_check_status.return_value = ("OPEN", True)
             result = runner.invoke(cli, cli_args)
 
+            # Exception before fix loop means exit with error
             assert result.exit_code == 1
-            mock_cleanup.assert_called_once()

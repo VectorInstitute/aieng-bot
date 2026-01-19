@@ -33,9 +33,11 @@ export default function ExecutionMetrics({ trace }: ExecutionMetricsProps) {
   const cacheReadTokens = usage.cache_read_input_tokens || 0
   const cacheCreateTokens = usage.cache_creation_input_tokens || 0
 
-  const totalTokens = inputTokens + outputTokens
+  // Total input tokens = non-cached + cached (what was actually processed)
+  const totalInputTokens = inputTokens + cacheReadTokens
+  const totalTokens = totalInputTokens + outputTokens
   const cacheHitRate = cacheReadTokens
-    ? ((cacheReadTokens / (inputTokens + cacheReadTokens)) * 100)
+    ? ((cacheReadTokens / totalInputTokens) * 100)
     : 0
 
   // Calculate cost breakdown
@@ -122,10 +124,10 @@ export default function ExecutionMetrics({ trace }: ExecutionMetricsProps) {
             </span>
           </div>
           <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-            {(totalTokens / 1000).toFixed(1)}k
+            {totalTokens >= 1000000 ? `${(totalTokens / 1000000).toFixed(1)}M` : `${(totalTokens / 1000).toFixed(1)}k`}
           </p>
           <p className="text-xs text-orange-600/70 dark:text-orange-400/70">
-            {inputTokens.toLocaleString()} in / {outputTokens.toLocaleString()} out
+            {totalInputTokens >= 1000000 ? `${(totalInputTokens / 1000000).toFixed(2)}M` : totalInputTokens.toLocaleString()} in / {outputTokens.toLocaleString()} out
           </p>
         </div>
       </div>
@@ -139,34 +141,40 @@ export default function ExecutionMetrics({ trace }: ExecutionMetricsProps) {
             <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Token Usage</h4>
           </div>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Input tokens:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {inputTokens.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Output tokens:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {outputTokens.toLocaleString()}
+            <div className="flex justify-between font-medium">
+              <span className="text-gray-900 dark:text-white">Total input:</span>
+              <span className="text-gray-900 dark:text-white">
+                {totalInputTokens.toLocaleString()}
               </span>
             </div>
             {cacheReadTokens > 0 && (
-              <div className="flex justify-between text-green-600 dark:text-green-400">
-                <span>Cache read ({cacheHitRate.toFixed(1)}% hit rate):</span>
+              <div className="flex justify-between text-green-600 dark:text-green-400 pl-3">
+                <span>Cached ({cacheHitRate.toFixed(1)}% hit rate):</span>
                 <span className="font-medium">
                   {cacheReadTokens.toLocaleString()}
                 </span>
               </div>
             )}
+            <div className="flex justify-between text-gray-600 dark:text-gray-400 pl-3">
+              <span>Non-cached:</span>
+              <span className="font-medium">
+                {inputTokens.toLocaleString()}
+              </span>
+            </div>
             {cacheCreateTokens > 0 && (
-              <div className="flex justify-between text-blue-600 dark:text-blue-400">
+              <div className="flex justify-between text-blue-600 dark:text-blue-400 pl-3">
                 <span>Cache creation:</span>
                 <span className="font-medium">
                   {cacheCreateTokens.toLocaleString()}
                 </span>
               </div>
             )}
+            <div className="flex justify-between pt-1 border-t border-gray-300 dark:border-gray-600">
+              <span className="text-gray-600 dark:text-gray-400">Output tokens:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {outputTokens.toLocaleString()}
+              </span>
+            </div>
           </div>
         </div>
 
