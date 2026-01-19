@@ -1,35 +1,25 @@
 ---
 name: fix-merge-conflicts
-description: Resolve git merge conflicts in dependency files, source code, and configuration. Use when merge conflicts are detected.
+description: Resolve git merge conflicts in dependency files, source code, and configuration. Use when merge conflicts are detected during rebase.
 allowed-tools: Read, Edit, Bash, Glob, Grep
 ---
 
 # Fix Merge Conflicts
 
-You are the AI Engineering Maintenance Bot resolving merge conflicts in a Vector Institute repository.
+Provides domain expertise for resolving merge conflicts. This skill fixes files only - the main loop handles git operations (commit, push, CI, merge).
 
-## Context
-Read `.pr-context.json` for PR details. Check `git status` for conflicting files.
+## Scope
 
-## ⚠️ CRITICAL: Do Not Commit Bot Files
+**This skill DOES:**
+- Resolve conflict markers in files
+- Regenerate lock files
+- Stage resolved files for the rebase to continue
 
-**NEVER commit these temporary bot files:**
-- `.claude/` directory (bot skills)
-- `.pr-context.json` (bot metadata)
-- `.failure-logs.txt` (bot logs)
-
-These files are automatically excluded from git, but **do not explicitly `git add` them**.
-
-When committing fixes, only add the actual fix files:
-```bash
-# ✅ CORRECT: Add only fix-related files
-git add src/conflicted-file.ts package.json
-
-# ❌ WRONG: Never do this
-git add .  # This might include bot files if exclusion fails
-git add .claude/
-git add .pr-context.json
-```
+**This skill does NOT do (main loop handles these):**
+- ❌ Commit changes
+- ❌ Push to remote
+- ❌ Wait for CI
+- ❌ Merge the PR
 
 ## Process
 
@@ -41,7 +31,7 @@ git diff --name-only --diff-filter=U
 
 ### 2. Resolution Strategy by File Type
 
-**Dependency Files (package.json, requirements.txt)**
+**Dependency Files (package.json, pyproject.toml, requirements.txt)**
 - Prefer newer versions
 - Keep additions from both sides
 - Maintain consistent formatting
@@ -63,12 +53,17 @@ RESOLVE TO:
 ```
 
 **Lock Files (uv.lock, package-lock.json)**
-- DON'T manually edit
+- DON'T manually edit lock files
 - Delete and regenerate:
 ```bash
-unset VIRTUAL_ENV  # Clear any inherited venv
-uv lock            # Python (uv)
-npm install        # npm
+# For Python (uv)
+rm uv.lock
+unset VIRTUAL_ENV
+uv lock
+
+# For npm
+rm package-lock.json
+npm install
 ```
 
 **Source Code**
@@ -77,7 +72,7 @@ npm install        # npm
 - Combine both additions if compatible
 - Follow base formatting
 
-**Configuration Files**
+**Configuration Files (.yml, .toml, .json configs)**
 - Merge both sets of changes logically
 - Preserve workflow improvements
 - Maintain proper syntax
@@ -88,67 +83,36 @@ npm install        # npm
 - Preserve both feature descriptions
 
 ### 3. Resolution Steps
-For each file:
+For each conflicted file:
 1. Read entire file for context
 2. Locate conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
 3. Analyze both versions
-4. Make decision using strategy above
-5. Edit file to remove markers
+4. Apply resolution strategy for file type
+5. Edit file to remove ALL markers
 6. Verify syntax is valid
 
-### 4. Finalize
+### 4. Finalize Resolution
 ```bash
+# Stage resolved files (NOT bot files)
 git add <resolved-files>
-git diff --check  # Verify no markers remain
+
+# Verify no conflict markers remain
+git diff --check
+
+# Continue the rebase
+git rebase --continue
 ```
 
-### 5. Push to Correct Branch
-
-**CRITICAL**: Push changes to the correct PR branch!
-
-```bash
-# Get branch name from .pr-context.json
-HEAD_REF=$(jq -r '.head_ref' .pr-context.json)
-
-# Push to the PR branch (NOT a new branch!)
-git push origin HEAD:refs/heads/$HEAD_REF
-```
-
-**DO NOT**:
-- ❌ Create a new branch name
-- ❌ Push to a different branch
-- ❌ Use `git push origin HEAD` without specifying target
-
-The branch name MUST match `head_ref` from `.pr-context.json`.
-
-## Safety Checklist
-- [ ] All conflict markers removed
-- [ ] File syntax is valid
-- [ ] Dependencies at compatible versions
-- [ ] No functionality lost
-- [ ] Lock files regenerated (not manually edited)
-
-## Important Rules
-- Never leave conflict markers in files
-- Prefer newer over older versions
-- Keep both additions when non-conflicting
-- Regenerate lock files (don't manually resolve)
-- Preserve intent from both sides
-
-## Commit Format
-```
-Resolve merge conflicts
-
-- [File 1]: [Resolution description]
-- [File 2]: [Resolution description]
-
-Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
-```
+**Files to NEVER stage:**
+- `.claude/` directory
+- `.pr-context.json`
+- `.failure-logs.txt`
 
 ## Safety Rules
-- ❌ Don't leave conflict markers
-- ❌ Don't choose older versions
-- ❌ Don't manually edit lock files
-- ❌ Don't discard additions
+- ❌ Don't leave conflict markers in any file
+- ❌ Don't choose older versions over newer
+- ❌ Don't manually edit lock files (regenerate them)
+- ❌ Don't discard additions from either side without reason
 - ✅ Verify syntax after resolution
-- ✅ Regenerate lock files properly
+- ✅ Regenerate lock files using package manager
+- ✅ Test that resolved files are valid
