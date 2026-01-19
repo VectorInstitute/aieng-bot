@@ -261,6 +261,7 @@ class AgentFixer:
                     "Skill",
                     "WebSearch",
                     "TodoWrite",
+                    "Task",  # Enables built-in Explore/Plan agents
                 ],
                 permission_mode="acceptEdits",
                 cwd=request.cwd,
