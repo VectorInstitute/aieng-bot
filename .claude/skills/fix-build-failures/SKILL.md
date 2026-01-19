@@ -6,38 +6,29 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 
 # Fix Build and Compilation Failures
 
-You are the AI Engineering Maintenance Bot fixing build failures in a Vector Institute repository.
+Provides domain expertise for fixing build failures. This skill fixes files only - the main loop handles git operations (commit, push, CI, merge).
+
+## Scope
+
+**This skill DOES:**
+- Analyze build error logs to identify root cause
+- Fix compilation errors (TypeScript, Python, etc.)
+- Update build configuration files
+- Validate fixes by running build locally
+
+**This skill does NOT do (main loop handles these):**
+- ❌ Commit changes
+- ❌ Push to remote
+- ❌ Wait for CI
+- ❌ Merge the PR
 
 ## Context
-Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for build errors (use Grep, don't read entire file).
+Search `.failure-logs.txt` for build errors using Grep (don't read entire file).
 
-## Environment Setup (CRITICAL)
-Before running Python tools, use `uv run` to ensure the project's environment:
-
+## Environment Setup
 ```bash
 unset VIRTUAL_ENV  # Clear any inherited venv
 uv sync            # Install dependencies
-uv run python -m build  # Run build with project's environment
-```
-
-## ⚠️ CRITICAL: Do Not Commit Bot Files
-
-**NEVER commit these temporary bot files:**
-- `.claude/` directory (bot skills)
-- `.pr-context.json` (bot metadata)
-- `.failure-logs.txt` (bot logs)
-
-These files are automatically excluded from git, but **do not explicitly `git add` them**.
-
-When committing fixes, only add the actual fix files:
-```bash
-# ✅ CORRECT: Add only fix-related files
-git add src/ package.json tsconfig.json
-
-# ❌ WRONG: Never do this
-git add .  # This might include bot files if exclusion fails
-git add .claude/
-git add .pr-context.json
 ```
 
 ## Process
@@ -75,49 +66,17 @@ git add .pr-context.json
 - Identify root cause from error messages
 - Check package changelogs for breaking changes
 - Apply targeted fixes
-- Verify build succeeds
 
 ### 4. Validate
 ```bash
+# Python
+uv run python -m build
+
 # Node.js
 npm ci && npm run build
 
-# Python
-pip install -r requirements.txt && python -m build
-
 # Docker
 docker build -t test .
-```
-
-### 5. Push to Correct Branch
-
-**CRITICAL**: Push changes to the correct PR branch!
-
-```bash
-# Get branch name from .pr-context.json
-HEAD_REF=$(jq -r '.head_ref' .pr-context.json)
-
-# Push to the PR branch (NOT a new branch!)
-git push origin HEAD:refs/heads/$HEAD_REF
-```
-
-**DO NOT**:
-- ❌ Create a new branch name
-- ❌ Push to a different branch
-- ❌ Use `git push origin HEAD` without specifying target
-
-The branch name MUST match `head_ref` from `.pr-context.json`.
-
-## Commit Format
-```
-Fix build failures after dependency updates
-
-Build fixes:
-- [What was breaking]
-- [Fix applied]
-- [Configuration changes]
-
-Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
 ```
 
 ## Safety Rules
@@ -126,4 +85,3 @@ Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
 - ❌ Don't remove type checking
 - ✅ Understand and fix root cause
 - ✅ Follow migration guides from packages
-- ✅ Don't introduce technical debt

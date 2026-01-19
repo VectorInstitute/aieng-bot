@@ -6,17 +6,29 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 
 # Fix Test Failures
 
-You are the AI Engineering Maintenance Bot fixing test failures in a Vector Institute repository.
+Provides domain expertise for fixing test failures. This skill fixes files only - the main loop handles git operations (commit, push, CI, merge).
+
+## Scope
+
+**This skill DOES:**
+- Analyze test failure logs to identify root cause
+- Fix test code for API/dependency changes
+- Update test fixtures, mocks, and assertions
+- Validate fixes by running tests locally
+
+**This skill does NOT do (main loop handles these):**
+- ❌ Commit changes
+- ❌ Push to remote
+- ❌ Wait for CI
+- ❌ Merge the PR
 
 ## Context
-Read `.pr-context.json` for PR details. Search `.failure-logs.txt` for error logs (use Grep, don't read entire file).
+Search `.failure-logs.txt` for test errors using Grep (don't read entire file).
 
-## Environment Setup (CRITICAL)
-Before running Python tools, use `uv run` to ensure the project's environment:
-
+## Environment Setup
 ```bash
 unset VIRTUAL_ENV  # Clear any inherited venv
-uv run pytest      # Run tests with project's environment
+uv sync            # Ensure dependencies installed
 ```
 
 ## Process
@@ -28,17 +40,17 @@ uv run pytest      # Run tests with project's environment
 
 ### 2. Fix Strategy by Test Type
 
-**Frontend Tests (Jest, React Testing Library)**
-- Update component APIs changed by dependencies
-- Fix test mocks for updated library interfaces
-- Adjust snapshots if UI changes are valid
-- Update test configuration if framework changed
-
 **Backend Tests (pytest, unittest)**
 - Update for API changes in dependencies
 - Fix test fixtures for changed data structures
 - Adjust import paths if package structure changed
 - Update assertions for new behavior
+
+**Frontend Tests (Jest, React Testing Library)**
+- Update component APIs changed by dependencies
+- Fix test mocks for updated library interfaces
+- Adjust snapshots if UI changes are valid
+- Update test configuration if framework changed
 
 **Integration Tests**
 - Check if API contracts changed
@@ -52,39 +64,15 @@ uv run pytest      # Run tests with project's environment
 - Don't skip tests or add ignore comments
 
 ### 4. Validate
-Run the test suite to verify fixes work.
-
-## Commit Format
-```
-Fix test failures after dependency updates
-
-- [Issue description]
-- [Fix description]
-
-Co-authored-by: AI Engineering Maintenance Bot <aieng-bot@vectorinstitute.ai>
-```
-
-## Push to Correct Branch
-
-**CRITICAL**: Push changes to the correct PR branch!
-
+Run the test suite to verify fixes work:
 ```bash
-# Get branch name from .pr-context.json
-HEAD_REF=$(jq -r '.head_ref' .pr-context.json)
-
-# Push to the PR branch (NOT a new branch!)
-git push origin HEAD:refs/heads/$HEAD_REF
+uv run pytest                    # Python
+npm test                         # JavaScript
 ```
-
-**DO NOT**:
-- ❌ Create a new branch name
-- ❌ Push to a different branch
-- ❌ Use `git push origin HEAD` without specifying target
-
-The branch name MUST match `head_ref` from `.pr-context.json`.
 
 ## Safety Rules
 - ❌ Don't skip tests without understanding failures
 - ❌ Don't make unrelated changes
 - ❌ Don't update other dependencies unnecessarily
 - ✅ Ensure fixes are valid and test the right behavior
+- ✅ Preserve original test intent
