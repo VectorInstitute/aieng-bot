@@ -483,14 +483,15 @@ class TestAgenticLoop:
             prompt = fixer._build_agentic_prompt(agentic_request)
 
             assert "aieng-bot" in prompt
-            assert "You Are the Orchestrator" in prompt
-            assert "Skills provide domain expertise only" in prompt
+            assert "Your job is not done until the PR is merged" in prompt
+            assert "Skills (Context Only)" in prompt
+            assert "/python-conventions" in prompt
+            assert "/merge-resolution" in prompt
             assert ".pr-context.json" in prompt
             assert ".failure-logs.txt" in prompt
             assert "gh pr checks" in prompt
             assert "gh pr merge" in prompt
-            assert "3" in prompt  # max_retries
-            assert "330" in prompt  # timeout_minutes
+            assert "max retries (3)" in prompt
 
     def test_create_agentic_tracer(self, agentic_request):
         """Test creating an execution tracer for agentic loop."""
