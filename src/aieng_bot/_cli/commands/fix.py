@@ -511,8 +511,14 @@ def _log_activity_to_gcs(
     help_config=click.RichHelpConfiguration(
         width=100,
         show_arguments=True,
-        show_metavars_column=True,
-        append_metavars_help=True,
+        options_table_help_sections=[
+            "help",
+            "deprecated",
+            "envvar",
+            "default",
+            "required",
+            "metavar",
+        ],
         style_option=f"bold {VECTOR_TEAL}",
         style_metavar="bold yellow",
         style_usage_command=f"bold {VECTOR_MAGENTA}",

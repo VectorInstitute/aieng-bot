@@ -79,8 +79,14 @@ def version_callback(ctx: click.Context, _param: click.Parameter, value: bool) -
     help_config=click.RichHelpConfiguration(
         width=100,
         show_arguments=True,
-        show_metavars_column=True,
-        append_metavars_help=True,
+        options_table_help_sections=[
+            "help",
+            "deprecated",
+            "envvar",
+            "default",
+            "required",
+            "metavar",
+        ],
         style_option=f"bold {VECTOR_MAGENTA}",
         style_command="bold cyan",
         style_usage_command=f"bold {VECTOR_MAGENTA}",

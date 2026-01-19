@@ -170,7 +170,7 @@ class TestAgentFixer:
             fixer = AgentFixer()
             prompt = fixer._build_prompt(fix_request)
 
-            assert "AI Engineering Maintenance Bot" in prompt
+            assert "aieng-bot" in prompt
             assert "test check failures" in prompt
             assert ".pr-context.json" in prompt
             assert ".failure-logs.txt" in prompt
@@ -297,7 +297,7 @@ class TestAgentFixer:
             call_args = mock_query_func.call_args
 
             # Check prompt argument
-            assert "AI Engineering Maintenance Bot" in call_args.kwargs["prompt"]
+            assert "aieng-bot" in call_args.kwargs["prompt"]
             assert "fix-test-failures skill" in call_args.kwargs["prompt"]
             assert ".pr-context.json" in call_args.kwargs["prompt"]
 
@@ -479,7 +479,7 @@ class TestAgenticLoop:
             fixer = AgentFixer()
             prompt = fixer._build_agentic_prompt(agentic_request)
 
-            assert "AI Engineering Maintenance Bot" in prompt
+            assert "aieng-bot" in prompt
             assert "FULL AUTONOMY" in prompt
             assert ".pr-context.json" in prompt
             assert ".failure-logs.txt" in prompt
