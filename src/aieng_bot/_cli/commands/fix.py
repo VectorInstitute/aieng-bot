@@ -19,6 +19,7 @@ from ...classifier import PRFailureClassifier
 from ...classifier.models import ClassificationResult, FailureType, PRContext
 from ...observability import ActivityLogger, ActivityStatus
 from ...observability.storage import TraceStorage
+from ...utils import RepoWorkspace
 from ...utils.github_client import GitHubClient
 from ...utils.logging import log_error, log_info, log_success, log_warning
 from ..help_config import VECTOR_MAGENTA, VECTOR_TEAL, click
@@ -506,6 +507,133 @@ def _log_activity_to_gcs(
         log_warning(f"Failed to log activity to GCS: {e}")
 
 
+def _run_fix_loop(
+    working_dir: str,
+    repo: str,
+    pr_number: int,
+    pr_title: str,
+    pr_author: str,
+    head_ref: str,
+    base_ref: str,
+    max_retries: int,
+    timeout_minutes: int,
+    workflow_run_id: str,
+    github_run_url: str,
+    github_token: str | None,
+    log_to_gcs: bool,
+    start_time: float,
+) -> None:
+    """Run the fix loop in the specified working directory.
+
+    Parameters
+    ----------
+    working_dir : str
+        Working directory for the fix operation.
+    repo : str
+        Repository in format owner/repo.
+    pr_number : int
+        Pull request number.
+    pr_title : str
+        PR title.
+    pr_author : str
+        PR author.
+    head_ref : str
+        Head branch reference.
+    base_ref : str
+        Base branch reference.
+    max_retries : int
+        Maximum number of fix attempts.
+    timeout_minutes : int
+        Maximum time for fix loop in minutes.
+    workflow_run_id : str
+        GitHub workflow run ID.
+    github_run_url : str
+        GitHub workflow run URL.
+    github_token : str | None
+        GitHub token for API access.
+    log_to_gcs : bool
+        Whether to log activity to GCS.
+    start_time : float
+        Start time of the fix operation (for elapsed time calculation).
+
+    """
+    failure_logs_file = None
+    bot_skills_copied = False
+
+    try:
+        # 1. Fetch initial failure logs
+        failure_logs_file = _fetch_initial_failure_logs(
+            repo, pr_number, working_dir, github_token
+        )
+
+        # 2. Run classifier to determine failure type
+        classification = _classify_failure(
+            repo=repo,
+            pr_number=pr_number,
+            pr_title=pr_title,
+            pr_author=pr_author,
+            head_ref=head_ref,
+            base_ref=base_ref,
+            failure_logs_file=failure_logs_file,
+            github_token=github_token,
+        )
+        failure_types = classification.failure_type_values
+
+        # 3. Prepare agent environment
+        bot_skills_copied = _prepare_agent_environment(working_dir)
+
+        # 4. Create agentic loop request and run agent
+        log_info("Initializing AgentFixer for agentic loop...")
+        pr_url = f"https://github.com/{repo}/pull/{pr_number}"
+
+        request = AgenticLoopRequest(
+            repo=repo,
+            pr_number=pr_number,
+            pr_title=pr_title,
+            pr_author=pr_author,
+            pr_url=pr_url,
+            head_ref=head_ref,
+            base_ref=base_ref,
+            failure_types=failure_types,
+            failed_check_names=classification.failed_check_names,
+            failure_logs_file=failure_logs_file,
+            max_retries=max_retries,
+            timeout_minutes=timeout_minutes,
+            workflow_run_id=workflow_run_id,
+            github_run_url=github_run_url,
+            cwd=working_dir,
+        )
+
+        fixer = AgentFixer()
+        result = asyncio.run(fixer.run_agentic_loop(request))
+
+        elapsed_hours = (time.time() - start_time) / 3600
+
+        _handle_result(
+            result=result,
+            repo=repo,
+            pr_number=pr_number,
+            pr_title=pr_title,
+            pr_author=pr_author,
+            workflow_run_id=workflow_run_id,
+            github_run_url=github_run_url,
+            elapsed_hours=elapsed_hours,
+            failure_types=failure_types,
+            log_to_gcs=log_to_gcs,
+        )
+
+    except (ValueError, FileNotFoundError) as e:
+        log_error(f"Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        log_error(f"Unexpected error: {e}")
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        # 5. Cleanup temporary files
+        _cleanup_temporary_files(working_dir, failure_logs_file, bot_skills_copied)
+
+
 @click.command("fix")
 @click.rich_config(
     help_config=click.RichHelpConfiguration(
@@ -551,8 +679,13 @@ def _log_activity_to_gcs(
 @click.option(
     "--cwd",
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
-    default=".",
-    help="Working directory for agent.",
+    default=None,
+    help="Working directory (disables isolated mode).",
+)
+@click.option(
+    "--isolated/--no-isolated",
+    default=True,
+    help="Clone repo to isolated temp directory (default: enabled).",
 )
 @click.option(
     "--workflow-run-id",
@@ -586,7 +719,8 @@ def fix(
     pr_number: int,
     max_retries: int,
     timeout_minutes: int,
-    cwd: str,
+    cwd: str | None,
+    isolated: bool,
     workflow_run_id: str,
     github_run_url: str,
     github_token: str | None,
@@ -605,9 +739,23 @@ def fix(
       4. Merge    - Automatically merge when ready
 
     \b
+    Isolated Mode (default):
+      By default, the repo is cloned to an isolated temp directory to avoid
+      polluting your local workspace. Use --no-isolated or --cwd to disable.
+      Automatically disabled when running in GitHub Actions.
+
+    \b
     Examples:
-      # Basic usage - fix and merge
+      # Basic usage - fix and merge (uses isolated temp directory)
       $ aieng-bot fix --repo VectorInstitute/repo --pr 123
+
+    \b
+      # Work in current directory instead
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 123 --no-isolated
+
+    \b
+      # Work in specific directory
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 123 --cwd /path/to/repo
 
     \b
       # With dashboard logging
@@ -660,82 +808,73 @@ def fix(
             f"PR #{pr_number} has no failing checks. Will check for rebase and merge."
         )
 
-    failure_logs_file = None
-    bot_skills_copied = False
+    # Determine whether to use isolated workspace
+    is_github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+    use_isolation = isolated and cwd is None and not is_github_actions
 
-    try:
-        # 1. Fetch PR details
-        pr_title, pr_author, head_ref, base_ref = _fetch_pr_details(
-            repo, pr_number, github_token
-        )
+    # Fetch PR details early (needed for both isolated and non-isolated modes)
+    pr_title, pr_author, head_ref, base_ref = _fetch_pr_details(
+        repo, pr_number, github_token
+    )
 
-        # 2. Fetch initial failure logs
-        failure_logs_file = _fetch_initial_failure_logs(
-            repo, pr_number, cwd, github_token
-        )
+    # Check for merge conflicts (needed for isolated workspace setup)
+    github_client = GitHubClient(github_token=github_token)
+    has_merge_conflicts = github_client.check_merge_conflicts(repo, pr_number)
 
-        # 3. Run classifier to determine failure type
-        classification = _classify_failure(
+    if use_isolation:
+        log_info("Using isolated workspace mode")
+        workspace = RepoWorkspace(
             repo=repo,
             pr_number=pr_number,
-            pr_title=pr_title,
-            pr_author=pr_author,
             head_ref=head_ref,
             base_ref=base_ref,
-            failure_logs_file=failure_logs_file,
             github_token=github_token,
+            has_merge_conflicts=has_merge_conflicts,
         )
-        failure_types = classification.failure_type_values
+        try:
+            with workspace as working_dir:
+                _run_fix_loop(
+                    working_dir=working_dir,
+                    repo=repo,
+                    pr_number=pr_number,
+                    pr_title=pr_title,
+                    pr_author=pr_author,
+                    head_ref=head_ref,
+                    base_ref=base_ref,
+                    max_retries=max_retries,
+                    timeout_minutes=timeout_minutes,
+                    workflow_run_id=workflow_run_id,
+                    github_run_url=github_run_url,
+                    github_token=github_token,
+                    log_to_gcs=log_to_gcs,
+                    start_time=start_time,
+                )
+        except RuntimeError as e:
+            log_error(f"Workspace setup failed: {e}")
+            sys.exit(1)
+    else:
+        # Use specified cwd or current directory
+        working_dir = cwd if cwd is not None else "."
+        if is_github_actions:
+            log_info("Running in GitHub Actions - using working directory")
+        elif cwd is not None:
+            log_info(f"Using specified working directory: {cwd}")
+        else:
+            log_info("Isolated mode disabled - using current directory")
 
-        # 4. Prepare agent environment
-        bot_skills_copied = _prepare_agent_environment(cwd)
-
-        # 5. Create agentic loop request and run agent
-        log_info("Initializing AgentFixer for agentic loop...")
-        pr_url = f"https://github.com/{repo}/pull/{pr_number}"
-
-        request = AgenticLoopRequest(
+        _run_fix_loop(
+            working_dir=working_dir,
             repo=repo,
             pr_number=pr_number,
             pr_title=pr_title,
             pr_author=pr_author,
-            pr_url=pr_url,
             head_ref=head_ref,
             base_ref=base_ref,
-            failure_types=failure_types,
-            failure_logs_file=failure_logs_file,
             max_retries=max_retries,
             timeout_minutes=timeout_minutes,
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
-            cwd=cwd,
-        )
-
-        fixer = AgentFixer()
-        result = asyncio.run(fixer.run_agentic_loop(request))
-
-        elapsed_hours = (time.time() - start_time) / 3600
-
-        _handle_result(
-            result=result,
-            repo=repo,
-            pr_number=pr_number,
-            pr_title=pr_title,
-            pr_author=pr_author,
-            workflow_run_id=workflow_run_id,
-            github_run_url=github_run_url,
-            elapsed_hours=elapsed_hours,
-            failure_types=failure_types,
+            github_token=github_token,
             log_to_gcs=log_to_gcs,
+            start_time=start_time,
         )
-
-    except (ValueError, FileNotFoundError) as e:
-        log_error(f"Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        log_error(f"Unexpected error: {e}")
-        traceback.print_exc()
-        sys.exit(1)
-    finally:
-        # 5. Cleanup temporary files
-        _cleanup_temporary_files(cwd, failure_logs_file, bot_skills_copied)

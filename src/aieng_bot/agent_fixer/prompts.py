@@ -70,6 +70,13 @@ Fix the PR (if needed) and get it merged. You have FULL AUTONOMY to:
 7. If CI passes, merge the PR
 8. If CI fails, fetch new logs and retry (up to {max_retries} times)
 
+**CRITICAL: DO NOT STOP UNTIL THE PR IS MERGED OR MAX RETRIES EXHAUSTED**
+Your job is NOT complete when you push a fix. After EVERY push, you MUST:
+1. Wait for CI to complete (poll `gh pr checks` every 30-60 seconds)
+2. If CI passes → Merge the PR using `gh pr merge`
+3. If CI fails → Fetch new logs and apply another fix (if retries remain)
+4. Only exit when: PR is merged, max retries exhausted, or timeout approaching
+
 **IMPORTANT**: The pre-classified failure types may be STALE. After rebasing, the failures might:
 - Be already fixed (if the fix was merged to main)
 - Change to different failures
@@ -202,4 +209,7 @@ Poll every 30-60 seconds until all checks complete. **Do NOT read failure logs u
 
 ### Step 5: Iterate Until Success or Max Retries
 After each fix, push changes, wait for CI, and repeat until CI passes or you've exhausted {max_retries} retries.
+
+**REMEMBER: Your job is only complete when the PR is MERGED. Do not stop after pushing a fix!**
+The success criteria is: PR merged OR max retries exhausted with clear summary of attempts.
 """

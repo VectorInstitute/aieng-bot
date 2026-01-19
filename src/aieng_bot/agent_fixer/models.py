@@ -29,6 +29,8 @@ class AgenticLoopRequest:
     failure_types : list[str]
         Pre-classified failure types (lint, test, build, security, merge_conflict, merge_only, unknown).
         Multiple types can be present for PRs with multiple issues.
+    failed_check_names : list[str]
+        List of names of failed CI checks.
     failure_logs_file : str
         Path to file containing initial failure logs.
     max_retries : int
@@ -52,6 +54,7 @@ class AgenticLoopRequest:
     head_ref: str
     base_ref: str
     failure_types: list[str]
+    failed_check_names: list[str]
     failure_logs_file: str
     max_retries: int
     timeout_minutes: int

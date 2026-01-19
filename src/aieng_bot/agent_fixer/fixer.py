@@ -402,7 +402,7 @@ class AgentFixer:
         failure_info = {
             "type": request.failure_type,  # Primary type for backward compatibility
             "types": request.failure_types,  # Full list of failure types
-            "checks": [],
+            "checks": request.failed_check_names,
         }
 
         return AgentExecutionTracer(

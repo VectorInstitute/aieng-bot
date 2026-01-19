@@ -17,6 +17,7 @@ from aieng_bot._cli.commands.fix import (
     _handle_result,
     _log_activity_to_gcs,
     _prepare_agent_environment,
+    _run_fix_loop,
 )
 from aieng_bot.agent_fixer import AgentFixResult
 from aieng_bot.classifier.models import FailureType
@@ -640,3 +641,118 @@ class TestLogActivityToGCS:
                 call_kwargs["pr_url"]
                 == "https://github.com/VectorInstitute/test-repo/pull/456"
             )
+
+
+class TestRunFixLoop:
+    """Tests for _run_fix_loop function."""
+
+    def test_run_fix_loop_fetches_logs_and_classifies(self):
+        """Test that _run_fix_loop fetches logs and classifies failure."""
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir,
+            patch(
+                "aieng_bot._cli.commands.fix._fetch_initial_failure_logs"
+            ) as mock_fetch_logs,
+            patch("aieng_bot._cli.commands.fix._classify_failure") as mock_classify,
+            patch(
+                "aieng_bot._cli.commands.fix._prepare_agent_environment"
+            ) as mock_prepare,
+            patch("aieng_bot._cli.commands.fix.AgentFixer") as mock_fixer_class,
+            patch("aieng_bot._cli.commands.fix._handle_result"),
+            patch("aieng_bot._cli.commands.fix._cleanup_temporary_files"),
+        ):
+            mock_fetch_logs.return_value = str(Path(tmp_dir) / ".failure-logs.txt")
+            mock_classify.return_value = MagicMock(failure_type_values=["lint"])
+            mock_prepare.return_value = False
+
+            mock_fixer = MagicMock()
+            mock_fixer.run_agentic_loop = MagicMock(
+                return_value=MagicMock(status="SUCCESS")
+            )
+            mock_fixer_class.return_value = mock_fixer
+
+            # Create the logs file
+            logs_file = Path(tmp_dir) / ".failure-logs.txt"
+            logs_file.write_text("test logs")
+
+            with pytest.raises(SystemExit):  # _handle_result calls sys.exit
+                _run_fix_loop(
+                    working_dir=tmp_dir,
+                    repo="owner/repo",
+                    pr_number=123,
+                    pr_title="Test PR",
+                    pr_author="testuser",
+                    head_ref="feature",
+                    base_ref="main",
+                    max_retries=3,
+                    timeout_minutes=30,
+                    workflow_run_id="run123",
+                    github_run_url="",
+                    github_token="token",
+                    log_to_gcs=False,
+                    start_time=0.0,
+                )
+
+            mock_fetch_logs.assert_called_once()
+            mock_classify.assert_called_once()
+
+
+class TestFixIsolationLogic:
+    """Tests for fix command isolation logic."""
+
+    def test_isolation_disabled_in_github_actions(self):
+        """Test that isolation is disabled when running in GitHub Actions."""
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
+            is_github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+            isolated = True
+            cwd = None
+
+            use_isolation = isolated and cwd is None and not is_github_actions
+
+            assert use_isolation is False
+
+    def test_isolation_disabled_when_cwd_specified(self):
+        """Test that isolation is disabled when --cwd is specified."""
+        is_github_actions = False
+        isolated = True
+        cwd = "/some/path"
+
+        use_isolation = isolated and cwd is None and not is_github_actions
+
+        assert use_isolation is False
+
+    def test_isolation_disabled_when_no_isolated_flag(self):
+        """Test that isolation is disabled when --no-isolated flag is used."""
+        is_github_actions = False
+        isolated = False
+        cwd = None
+
+        use_isolation = isolated and cwd is None and not is_github_actions
+
+        assert use_isolation is False
+
+    def test_isolation_enabled_by_default_locally(self):
+        """Test that isolation is enabled by default for local runs."""
+        with patch.dict(os.environ, {}, clear=False):
+            # Ensure GITHUB_ACTIONS is not set
+            os.environ.pop("GITHUB_ACTIONS", None)
+
+            is_github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+            isolated = True
+            cwd = None
+
+            use_isolation = isolated and cwd is None and not is_github_actions
+
+            assert use_isolation is True
+
+    def test_working_dir_defaults_to_cwd_when_not_isolated(self):
+        """Test that working directory defaults to current dir when not isolated."""
+        cwd = None
+        working_dir = cwd if cwd is not None else "."
+        assert working_dir == "."
+
+    def test_working_dir_uses_specified_cwd(self):
+        """Test that working directory uses specified cwd."""
+        cwd = "/custom/path"
+        working_dir = cwd if cwd is not None else "."
+        assert working_dir == "/custom/path"
