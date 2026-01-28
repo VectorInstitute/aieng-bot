@@ -366,6 +366,29 @@ class AgentFixer:
             if len(request.failure_types) > 1
             else request.failure_types[0]
         )
+
+        # Build mission and CI pass instructions based on merge_pr flag
+        if request.merge_pr:
+            mission = (
+                "Fix this PR and merge it. "
+                "**Your job is not done until the PR is merged or max retries exhausted.**"
+            )
+            on_ci_pass = f"""**If CI passes:**
+```bash
+gh pr merge {request.pr_number} --repo {request.repo} --squash --delete-branch
+```
+Exit with success."""
+            critical_rule_suffix = ", then merge or fix"
+        else:
+            mission = (
+                "Fix this PR and ensure CI passes. "
+                "**Your job is not done until CI passes or max retries exhausted.** "
+                "Do NOT merge the PR - only fix and push."
+            )
+            on_ci_pass = """**If CI passes:**
+Exit with success. Do NOT merge the PR."""
+            critical_rule_suffix = ", then exit or fix"
+
         return AGENTIC_LOOP_PROMPT.format(
             repo=request.repo,
             pr_number=request.pr_number,
@@ -374,6 +397,9 @@ class AgentFixer:
             failure_types=failure_types_display,
             max_retries=request.max_retries,
             timeout_minutes=request.timeout_minutes,
+            mission=mission,
+            on_ci_pass=on_ci_pass,
+            critical_rule_suffix=critical_rule_suffix,
         )
 
     def _create_agentic_tracer(
