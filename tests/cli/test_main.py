@@ -141,7 +141,7 @@ class TestFixCLI:
             result = runner.invoke(cli, ["fix", "--help"])
 
         output = result.output
-        assert "Fix and merge a PR" in output
+        assert "Fix and optionally merge a PR" in output
         assert "--repo" in output
         assert "--pr" in output
         assert "--max-retries" in output

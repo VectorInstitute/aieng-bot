@@ -151,7 +151,7 @@ class TestRichClickHelp:
         result = runner.invoke(cli, ["fix", "--help"])
 
         assert result.exit_code == 0
-        assert "Fix and merge a PR" in result.output
+        assert "Fix and optionally merge a PR" in result.output
 
     @patch.dict(
         os.environ,

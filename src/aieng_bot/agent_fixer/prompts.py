@@ -45,7 +45,7 @@ AGENTIC_LOOP_PROMPT = r"""You are aieng-bot, an AI-powered tool that fixes CI fa
 
 ## Mission
 
-Fix this PR and merge it. **Your job is not done until the PR is merged or max retries exhausted.**
+{mission}
 
 ## Pre-classified Failure Types: {failure_types}
 
@@ -86,11 +86,7 @@ Poll every 30-60 seconds until all checks complete. **Do not proceed until CI fi
 
 ### Step 4: Evaluate Results
 
-**If CI passes:**
-```bash
-gh pr merge {pr_number} --repo {repo} --squash --delete-branch
-```
-Exit with success.
+{on_ci_pass}
 
 **If CI fails:**
 1. Fetch fresh logs:
@@ -113,7 +109,7 @@ Exit with success.
 
 ## Critical Rules
 
-1. **NEVER stop after pushing** - always wait for CI, then merge or fix
+1. **NEVER stop after pushing** - always wait for CI{critical_rule_suffix}
 2. **NEVER stop after fixing files** - always commit, push, wait for CI
 3. **Fetch fresh logs** after each CI failure
 4. **Never commit**: `.claude/`, `.pr-context.json`, `.failure-logs.txt`

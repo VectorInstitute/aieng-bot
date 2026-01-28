@@ -43,6 +43,9 @@ class AgenticLoopRequest:
         URL to the GitHub Actions run.
     cwd : str
         Working directory where agent should operate.
+    merge_pr : bool
+        Whether to merge the PR after fixes pass CI (default: True).
+        When False, the agent will fix and push but not merge.
 
     """
 
@@ -61,6 +64,7 @@ class AgenticLoopRequest:
     workflow_run_id: str
     github_run_url: str
     cwd: str
+    merge_pr: bool = True
 
     @property
     def failure_type(self) -> str:
