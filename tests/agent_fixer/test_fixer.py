@@ -493,6 +493,22 @@ class TestAgenticLoop:
             assert "gh pr merge" in prompt
             assert "max retries (3)" in prompt
 
+    def test_build_agentic_prompt_no_merge(self, agentic_request):
+        """Test building agentic loop prompt with merge disabled."""
+        # Set merge_pr to False
+        agentic_request.merge_pr = False
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            prompt = fixer._build_agentic_prompt(agentic_request)
+
+            assert "aieng-bot" in prompt
+            assert "Do NOT merge the PR" in prompt
+            assert "gh pr merge" not in prompt
+            assert "Your job is not done until CI passes" in prompt
+            assert "gh pr checks" in prompt
+            assert "max retries (3)" in prompt
+
     def test_create_agentic_tracer(self, agentic_request):
         """Test creating an execution tracer for agentic loop."""
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):

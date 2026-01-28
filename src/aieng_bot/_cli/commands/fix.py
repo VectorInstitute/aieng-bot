@@ -372,6 +372,7 @@ def _handle_result(
     elapsed_hours: float,
     failure_types: list[str],
     log_to_gcs: bool,
+    merge_pr: bool = True,
 ) -> None:
     """Handle the result of the agentic loop and optionally log to GCS.
 
@@ -397,6 +398,8 @@ def _handle_result(
         Types of failures that were fixed.
     log_to_gcs : bool
         Whether to log activity to GCS.
+    merge_pr : bool
+        Whether merging was enabled (default: True).
 
     Raises
     ------
@@ -406,7 +409,10 @@ def _handle_result(
     """
     failure_types_str = ",".join(failure_types)
     if result.status == "SUCCESS":
-        log_success("PR fixed and merged successfully!")
+        if merge_pr:
+            log_success("PR fixed and merged successfully!")
+        else:
+            log_success("PR fixed successfully! (merge skipped per --no-merge)")
         log_info(f"Trace saved to: {result.trace_file}")
         log_info(f"Summary saved to: {result.summary_file}")
         log_info(f"Failure types: {failure_types_str}")
@@ -522,6 +528,7 @@ def _run_fix_loop(
     github_token: str | None,
     log_to_gcs: bool,
     start_time: float,
+    merge_pr: bool = True,
 ) -> None:
     """Run the fix loop in the specified working directory.
 
@@ -555,6 +562,8 @@ def _run_fix_loop(
         Whether to log activity to GCS.
     start_time : float
         Start time of the fix operation (for elapsed time calculation).
+    merge_pr : bool
+        Whether to merge the PR after CI passes (default: True).
 
     """
     failure_logs_file = None
@@ -602,6 +611,7 @@ def _run_fix_loop(
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
             cwd=working_dir,
+            merge_pr=merge_pr,
         )
 
         fixer = AgentFixer()
@@ -620,6 +630,7 @@ def _run_fix_loop(
             elapsed_hours=elapsed_hours,
             failure_types=failure_types,
             log_to_gcs=log_to_gcs,
+            merge_pr=merge_pr,
         )
 
     except (ValueError, FileNotFoundError) as e:
@@ -714,6 +725,13 @@ def _run_fix_loop(
     default=False,
     help="Log activity to GCS for dashboard.",
 )
+@click.option(
+    "--no-merge",
+    "no_merge",
+    is_flag=True,
+    default=False,
+    help="Fix PR but do not merge (only fix and push).",
+)
 def fix(
     repo: str,
     pr_number: int,
@@ -726,8 +744,9 @@ def fix(
     github_token: str | None,
     anthropic_api_key: str | None,  # noqa: ARG001 - used by env var loading
     log_to_gcs: bool,
+    no_merge: bool,
 ) -> None:
-    """Fix and merge a PR.
+    """Fix and optionally merge a PR.
 
     Runs an autonomous agent loop to analyze, fix, and merge GitHub PRs.
 
@@ -736,7 +755,7 @@ def fix(
       1. Analyze  - Classify the failure type
       2. Fix      - Apply appropriate fixes
       3. Test     - Wait for CI to pass
-      4. Merge    - Automatically merge when ready
+      4. Merge    - Automatically merge when ready (unless --no-merge)
 
     \b
     Isolated Mode (default):
@@ -760,6 +779,10 @@ def fix(
     \b
       # With dashboard logging
       $ aieng-bot fix --repo VectorInstitute/repo --pr 123 --log
+
+    \b
+      # Fix only (no merge) - useful for review before merging
+      $ aieng-bot fix --repo VectorInstitute/repo --pr 123 --no-merge
 
     \b
       # Custom retries and timeout
@@ -848,6 +871,7 @@ def fix(
                     github_token=github_token,
                     log_to_gcs=log_to_gcs,
                     start_time=start_time,
+                    merge_pr=not no_merge,
                 )
         except RuntimeError as e:
             log_error(f"Workspace setup failed: {e}")
@@ -877,4 +901,5 @@ def fix(
             github_token=github_token,
             log_to_gcs=log_to_gcs,
             start_time=start_time,
+            merge_pr=not no_merge,
         )
