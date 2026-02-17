@@ -70,7 +70,7 @@ class ResultMessageParser:
             ("is_error", bool, lambda x: x == "True"),
             ("num_turns", int, lambda x: int(x) if x.isdigit() else None),
             ("session_id", str, lambda x: x),
-            ("total_cost_usd", float, lambda x: _safe_float(x)),
+            ("total_cost_usd", float, _safe_float),
         ]
 
         for field, _, converter in field_configs:
