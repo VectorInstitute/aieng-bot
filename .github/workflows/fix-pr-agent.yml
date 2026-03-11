@@ -13,10 +13,9 @@ on:
         description: 'Maximum number of fix attempts'
         default: '3'
 
-# One PR per repo at a time to prevent conflicts
 concurrency:
-  group: fix-pr-${{ inputs.target_repo }}
-  cancel-in-progress: false
+  group: fix-pr-${{ inputs.target_repo }}-${{ inputs.pr_number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
