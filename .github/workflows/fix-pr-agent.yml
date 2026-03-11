@@ -150,7 +150,8 @@ jobs:
             --max-retries ${{ github.event.inputs.max_retries }} \
             --timeout-minutes 330 \
             --workflow-run-id "${{ github.run_id }}" \
-            --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            --github-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --log
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
