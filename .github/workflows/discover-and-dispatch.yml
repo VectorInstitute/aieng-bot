@@ -57,50 +57,24 @@ jobs:
               continue
             fi
 
-            echo "Checking $REPO for bot PRs with failing checks..."
+            echo "Checking $REPO for open bot PRs..."
 
             for BOT_AUTHOR in "${BOT_AUTHORS[@]}"; do
-              # Get open PRs from this bot author
+              # Get all open PRs from this bot author
               REPO_PRS=$(gh pr list --repo "$REPO" \
                 --author "$BOT_AUTHOR" \
                 --state open \
-                --json number,title,url,headRefName,statusCheckRollup 2>/dev/null || echo "[]")
+                --json number,title,url,headRefName 2>/dev/null || echo "[]")
 
               if [ "$REPO_PRS" != "[]" ] && [ -n "$REPO_PRS" ]; then
-                # Filter to only PRs with failing checks
-                FAILING_PRS=$(echo "$REPO_PRS" | jq -c "[.[] | select(.statusCheckRollup != null) | select(.statusCheckRollup | map(select(.conclusion == \"FAILURE\")) | length > 0) | {repo: \"$REPO\", pr_number: .number, title: .title, head_ref: .headRefName}]")
-
-                if [ "$FAILING_PRS" != "[]" ]; then
-                  echo "Found failing PRs in $REPO from $BOT_AUTHOR:"
-                  echo "$FAILING_PRS" | jq '.'
-                  PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c ". + $FAILING_PRS")
-                fi
+                BOT_PRS=$(echo "$REPO_PRS" | jq -c "[.[] | {repo: \"$REPO\", pr_number: .number, title: .title, head_ref: .headRefName}]")
+                echo "Found open PRs in $REPO from $BOT_AUTHOR:"
+                echo "$BOT_PRS" | jq '.'
+                PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c ". + $BOT_PRS")
               fi
             done
           done
 
-          # Also check for PRs with merge conflicts (CONFLICTING status)
-          for REPO in $REPOS; do
-            if [ "$REPO" = "VectorInstitute/aieng-bot" ]; then
-              continue
-            fi
-
-            for BOT_AUTHOR in "${BOT_AUTHORS[@]}"; do
-              CONFLICT_PRS=$(gh pr list --repo "$REPO" \
-                --author "$BOT_AUTHOR" \
-                --state open \
-                --json number,title,url,headRefName,mergeable 2>/dev/null | \
-                jq -c "[.[] | select(.mergeable == \"CONFLICTING\") | {repo: \"$REPO\", pr_number: .number, title: .title, head_ref: .headRefName}]" || echo "[]")
-
-              if [ "$CONFLICT_PRS" != "[]" ]; then
-                echo "Found conflicting PRs in $REPO from $BOT_AUTHOR:"
-                echo "$CONFLICT_PRS" | jq '.'
-                PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c ". + $CONFLICT_PRS")
-              fi
-            done
-          done
-
-          # Deduplicate PRs (in case a PR has both failures and conflicts)
           PRS_TO_FIX=$(echo "$PRS_TO_FIX" | jq -c 'unique_by({repo, pr_number})')
 
           echo "Total PRs to fix: $(echo "$PRS_TO_FIX" | jq 'length')"
@@ -167,5 +141,5 @@ jobs:
             echo '${{ needs.discover.outputs.prs }}' | \
               jq -r '.[] | "- [\(.repo)#\(.pr_number)](https://github.com/\(.repo)/pull/\(.pr_number)) - \(.title)"' >> $GITHUB_STEP_SUMMARY
           else
-            echo "No bot PRs with failing checks or merge conflicts found." >> $GITHUB_STEP_SUMMARY
+            echo "No open bot PRs found." >> $GITHUB_STEP_SUMMARY
           fi
