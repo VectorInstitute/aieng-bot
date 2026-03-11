@@ -377,7 +377,8 @@ class AgentFixer:
 ```bash
 gh pr merge {request.pr_number} --repo {request.repo} --squash --delete-branch
 ```
-Exit with success."""
+A zero exit code means the PR was merged successfully. Exit with success.
+Note: `gh pr view` does not have a `merged` JSON field — use `state` and `mergedAt` if you need to verify."""
             critical_rule_suffix = ", then merge or fix"
         else:
             mission = (
