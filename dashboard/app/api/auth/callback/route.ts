@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     await session.save()
 
     // Clean up temporary cookies and redirect
-    const redirectResponse = NextResponse.redirect(new URL('/aieng-bot', baseUrl))
+    const redirectResponse = NextResponse.redirect(new URL('/aieng-bot/analytics', baseUrl))
     redirectResponse.cookies.delete('pkce_verifier')
     redirectResponse.cookies.delete('oauth_state')
 
