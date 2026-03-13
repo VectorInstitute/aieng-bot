@@ -53,14 +53,15 @@ class ActivityLogger:
         self.log_path = log_path
         self.gcs_uri = f"gs://{bucket}/{log_path}"
 
-    def _load_activity_log(self) -> dict:
+    def _load_activity_log(self) -> dict | None:  # noqa: PYI041
         """Load existing activity log from GCS.
 
         Returns
         -------
-        dict
+        dict | None
             Activity log with 'activities' list and 'last_updated' timestamp.
-            Returns empty structure if file doesn't exist.
+            Returns empty structure if file doesn't exist (404).
+            Returns None if load failed for any other reason (caller must not save).
 
         """
         try:
@@ -71,12 +72,23 @@ class ActivityLogger:
                 check=True,
             )
             return json.loads(result.stdout)
-        except subprocess.CalledProcessError:
-            # File doesn't exist yet
-            return {"activities": [], "last_updated": None}
+        except subprocess.CalledProcessError as e:
+            # Distinguish "not found" from auth/network failures.
+            # gcloud storage cat prints "No URLs matched" or "NotFound" for missing objects.
+            stderr = e.stderr or ""
+            stdout = e.stdout or ""
+            not_found_signals = ("No URLs matched", "NotFound", "does not exist", "404")
+            if any(s in stderr or s in stdout for s in not_found_signals):
+                # File doesn't exist yet — safe to create
+                return {"activities": [], "last_updated": None}
+            # Any other failure (auth, network, permissions) — do NOT overwrite
+            log_error(
+                f"Failed to load activity log from GCS (aborting save): {stderr or stdout}"
+            )
+            return None
         except json.JSONDecodeError as e:
             log_error(f"Failed to parse activity log: {e}")
-            return {"activities": [], "last_updated": None}
+            return None
 
     def _save_activity_log(self, log_data: dict) -> bool:
         """Save activity log to GCS.
@@ -171,8 +183,14 @@ class ActivityLogger:
         """
         log_info(f"Recording fix activity for {repo}#{pr_number}")
 
-        # Load existing log
+        # Load existing log — returns None if load failed (auth/network error)
         log_data = self._load_activity_log()
+        if log_data is None:
+            log_error(
+                f"Aborting activity log write for {repo}#{pr_number} "
+                "to prevent overwriting existing data after a GCS read failure"
+            )
+            return False
 
         # Create activity entry with both failure_types (new) and failure_type (backward compat)
         activity = {

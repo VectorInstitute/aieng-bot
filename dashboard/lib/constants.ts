@@ -112,7 +112,7 @@ export const CLASSES = {
   badge: 'px-2 py-1 text-xs font-medium rounded-full',
   link: 'text-blue-600 dark:text-blue-400 hover:underline',
   divider: 'border-t border-gray-200 dark:border-gray-700',
-  hoverRow: 'hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors',
+  hoverRow: 'hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors',
   tableHeader: 'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider',
   tableCell: 'px-6 py-4 whitespace-nowrap',
 } as const
