@@ -109,7 +109,7 @@ jobs:
 
           echo "Fix job dispatched"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
   report-summary:
     runs-on: ubuntu-latest
