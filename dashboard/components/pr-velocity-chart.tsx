@@ -122,7 +122,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
           <div className="group relative">
             <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
             <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-48 px-3 py-2 text-xs bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg">
-              Showing PRs from the last 30 days
+              Showing PRs from the last 90 days
               <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
             </div>
           </div>
@@ -144,7 +144,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
         <div className="group relative">
           <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
           <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-48 px-3 py-2 text-xs bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg">
-            Showing PRs from the last 30 days
+            Showing PRs from the last 90 days
             <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
           </div>
         </div>

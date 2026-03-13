@@ -23,6 +23,7 @@ export default async function DashboardPage() {
   // Fetch activity log from GCS
   let allPRSummaries: PRSummary[] = []
   let recentPRSummaries: PRSummary[] = []
+  let velocityPRSummaries: PRSummary[] = []
   let metrics: BotMetrics | null = null
 
   try {
@@ -37,12 +38,17 @@ export default async function DashboardPage() {
       // Compute metrics from all activities
       metrics = computeMetricsFromPRSummaries(allPRSummaries)
 
-      // Filter to last 30 days for tables only
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
       recentPRSummaries = allPRSummaries
         .filter(s => new Date(s.timestamp) >= thirtyDaysAgo)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+      const ninetyDaysAgo = new Date()
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+      velocityPRSummaries = allPRSummaries
+        .filter(s => new Date(s.timestamp) >= ninetyDaysAgo)
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     }
   } catch (error) {
     console.error('Error fetching activity data:', error)
@@ -151,7 +157,7 @@ export default async function DashboardPage() {
       <PerformanceMetrics metrics={metrics} />
 
       {/* PR Velocity Chart */}
-      <PRVelocityChart prSummaries={recentPRSummaries} />
+      <PRVelocityChart prSummaries={velocityPRSummaries} />
 
       {/* Cost Analytics */}
       <CostAnalytics metrics={metrics} prSummaries={allPRSummaries} />
