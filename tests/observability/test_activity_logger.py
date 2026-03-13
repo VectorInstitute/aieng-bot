@@ -92,7 +92,9 @@ class TestLoadActivityLog:
     def test_load_nonexistent_log(self, activity_logger):
         """Test loading when log file doesn't exist (404 / no URLs matched)."""
         error = subprocess.CalledProcessError(1, "gcloud")
-        error.stderr = "ERROR: No URLs matched: gs://test-bucket/data/test_activity_log.json"
+        error.stderr = (
+            "ERROR: No URLs matched: gs://test-bucket/data/test_activity_log.json"
+        )
         error.stdout = ""
         with patch("subprocess.run", side_effect=error):
             result = activity_logger._load_activity_log()
@@ -103,7 +105,9 @@ class TestLoadActivityLog:
     def test_load_gcs_auth_failure(self, activity_logger):
         """Test loading when gcloud fails due to auth/permission error."""
         error = subprocess.CalledProcessError(1, "gcloud")
-        error.stderr = "ERROR: (gcloud.storage.cat) User does not have storage.objects.get access"
+        error.stderr = (
+            "ERROR: (gcloud.storage.cat) User does not have storage.objects.get access"
+        )
         error.stdout = ""
         with patch("subprocess.run", side_effect=error):
             result = activity_logger._load_activity_log()
