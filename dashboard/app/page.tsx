@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BarChart2, Wrench, GitMerge, GitPullRequestArrow } from 'lucide-react'
+import { BarChart2, Wrench, GitMerge, GitPullRequestArrow, BookOpen, MessageCircleQuestion } from 'lucide-react'
 
 export default function LandingPage() {
   return (
@@ -25,40 +25,59 @@ export default function LandingPage() {
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             aieng-bot
           </h1>
-          <p className="text-slate-400 text-base leading-relaxed max-w-sm mx-auto">
-            Autonomously fixes CI failures, resolves merge conflicts, and merges
-            Dependabot PRs across Vector Institute repositories.
-          </p>
+
         </div>
 
         {/* Divider */}
         <div className="w-full border-t border-slate-800" />
 
         {/* Features */}
-        <ul className="w-full space-y-2">
-          {[
-            { Icon: Wrench,              label: 'Fixes lint, test & build failures', color: 'text-vector-magenta' },
-            { Icon: GitMerge,            label: 'Resolves merge conflicts',           color: 'text-vector-violet' },
-            { Icon: GitPullRequestArrow, label: 'Auto-merges passing PRs',            color: 'text-vector-cobalt'  },
-          ].map(({ Icon, label, color }) => (
-            <li
-              key={label}
-              className="flex items-center gap-3.5 px-4 py-3 rounded-lg text-slate-400 text-sm"
+        <div className="w-full">
+          <div className="text-xs font-mono tracking-widest text-slate-500 uppercase mb-2 px-4">Maintenance</div>
+          <ul className="space-y-0.5">
+            {[
+              { Icon: Wrench,              label: 'Fixes lint, test & build failures', color: 'text-vector-magenta' },
+              { Icon: GitMerge,            label: 'Resolves merge conflicts',           color: 'text-vector-violet' },
+              { Icon: GitPullRequestArrow, label: 'Auto-merges passing PRs',            color: 'text-vector-cobalt'  },
+            ].map(({ Icon, label, color }) => (
+              <li
+                key={label}
+                className="flex items-center gap-3 px-4 py-2 rounded-lg text-slate-400 text-sm"
+              >
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${color}`} strokeWidth={1.75} />
+                <span>{label}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="px-4 pt-3">
+            <Link
+              href="/analytics"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt hover:opacity-90 transition-opacity w-fit"
             >
-              <Icon className={`w-4 h-4 shrink-0 ${color}`} strokeWidth={1.75} />
-              <span>{label}</span>
-            </li>
-          ))}
-        </ul>
+              <BarChart2 className="w-3.5 h-3.5" />
+              View Analytics
+            </Link>
+          </div>
+        </div>
 
-        {/* CTA */}
-        <Link
-          href="/analytics"
-          className="flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt hover:opacity-90 transition-opacity"
-        >
-          <BarChart2 className="w-4 h-4" />
-          View Analytics
-        </Link>
+        {/* Documentation */}
+        <div className="w-full">
+          <div className="text-xs font-mono tracking-widest text-slate-500 uppercase mb-2 px-4">Documentation</div>
+          <ul className="space-y-0.5">
+            {[
+              { Icon: BookOpen,              label: 'Keeps docs up to date',          color: 'text-vector-magenta' },
+              { Icon: MessageCircleQuestion, label: 'Answers questions from internal documentation', color: 'text-vector-violet' },
+            ].map(({ Icon, label, color }) => (
+              <li
+                key={label}
+                className="flex items-center gap-3 px-4 py-2 rounded-lg text-slate-400 text-sm"
+              >
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${color}`} strokeWidth={1.75} />
+                <span>{label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
       </div>
     </div>
