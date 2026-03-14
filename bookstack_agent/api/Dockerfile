@@ -8,13 +8,12 @@ RUN pip install --no-cache-dir uv
 # Copy dependency manifests first — installs deps without the project itself
 # so this layer is only invalidated when pyproject.toml / uv.lock change.
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-dev --no-install-project && \
-    uv pip install "fastapi>=0.115.0" "uvicorn[standard]>=0.32.0"
+RUN uv sync --frozen --no-dev --group bookstack-api --no-install-project
 
 # Copy source then install the project package
 COPY src/ ./src/
 COPY bookstack_agent/ ./bookstack_agent/
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --frozen --no-dev --group bookstack-api --no-editable
 
 ENV PYTHONUNBUFFERED=1
 
