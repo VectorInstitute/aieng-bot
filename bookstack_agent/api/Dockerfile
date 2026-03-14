@@ -6,7 +6,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 # Copy dependency manifests first for layer caching
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install main package deps (no dev extras) + FastAPI/uvicorn
 RUN uv sync --frozen --no-dev && \
