@@ -103,6 +103,10 @@ strict_equality = true
 extra_checks = true
 mypy_path = "src:slack_bot/stubs"
 
+[[tool.mypy.overrides]]
+module = "bookstack_agent.api.main"
+allow_untyped_decorators = true
+
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
 line-length = 88
