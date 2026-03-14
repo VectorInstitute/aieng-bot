@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Send, Trash2, Search, FileText, List } from 'lucide-react'
+import { BookOpen, Send, Trash2, Search, FileText, List, LogOut } from 'lucide-react'
 import { MarkdownRenderer } from './markdown-renderer'
+import type { User } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,7 +118,7 @@ const SUGGESTED = [
   'What steps should I complete before open-sourcing a new project?',
 ]
 
-export default function ChatPage() {
+export default function ChatPage({ user }: { user: User | null }) {
   const [messages, setMessages]   = useState<Message[]>([])
   const [input, setInput]         = useState('')
   const [loading, setLoading]     = useState(false)
@@ -287,15 +288,36 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {!isEmpty && (
-          <button
-            onClick={clearConversation}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-slate-800"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            New chat
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {!isEmpty && (
+            <button
+              onClick={clearConversation}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-slate-800"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              New chat
+            </button>
+          )}
+
+          {user && (
+            <div className="flex items-center gap-2.5">
+              <div className="text-right hidden sm:block">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide leading-none mb-0.5">Signed in as</p>
+                <p className="text-xs font-semibold bg-gradient-to-r from-vector-magenta to-vector-violet bg-clip-text text-transparent leading-none">
+                  {user.email}
+                </p>
+              </div>
+              <a
+                href="/aieng-bot/api/auth/logout"
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-slate-800"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign out</span>
+              </a>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Messages */}

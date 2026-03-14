@@ -50,7 +50,7 @@ class BookstackQAAgent:
 
     """
 
-    MAX_TURNS = 10
+    MAX_TURNS = 16
 
     def __init__(
         self,
