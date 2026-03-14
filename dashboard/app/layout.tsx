@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Maintenance Analytics - Vector Institute',
+  title: 'aieng-bot - Vector Institute',
   description: 'Monitor and analyze automated PR maintenance across Vector Institute repositories',
 }
 
