@@ -297,8 +297,7 @@ export default function ChatPage({ user }: { user: User | null }) {
             <BookOpen className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold text-white leading-none">BookStack QA</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Vector Institute internal docs</p>
+            <p className="text-sm text-slate-400">Vector AI Engineering internal docs</p>
           </div>
         </div>
 

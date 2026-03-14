@@ -132,7 +132,7 @@ class BookstackQAAgent:
         for _ in range(self.MAX_TURNS):
             response = self._sync_client.messages.create(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=8192,
                 system=SYSTEM_PROMPT,
                 tools=ALL_TOOLS,
                 messages=cast(list[MessageParam], messages),
@@ -214,7 +214,7 @@ class BookstackQAAgent:
                 # Use the streaming API so text tokens flow to the client immediately
                 async with self._async_client.messages.stream(
                     model=self.model,
-                    max_tokens=4096,
+                    max_tokens=8192,
                     system=SYSTEM_PROMPT,
                     tools=ALL_TOOLS,
                     messages=cast(list[MessageParam], messages),
