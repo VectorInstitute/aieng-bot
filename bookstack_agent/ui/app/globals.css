@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --vector-magenta: #EB088A;
+  --vector-violet:  #8A25C9;
+  --vector-cobalt:  #313CFF;
+}
+
+body {
+  background: #020617;
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+/* Prose overrides for markdown rendering */
+.prose pre  { background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+.prose code { background: rgba(255,255,255,0.08); border-radius: 4px; padding: 2px 5px; font-size: 0.85em; }
+.prose code::before, .prose code::after { content: "" !important; }
+.prose a    { color: #a78bfa; text-decoration: underline; text-underline-offset: 2px; }
+.prose a:hover { color: #c4b5fd; }
+.prose blockquote { border-left-color: var(--vector-violet); }
+
+@layer utilities {
+  .bg-vector-gradient {
+    background: linear-gradient(135deg, #EB088A 0%, #8A25C9 50%, #313CFF 100%);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #EB088A 0%, #8A25C9 60%, #313CFF 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
