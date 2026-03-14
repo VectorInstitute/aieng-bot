@@ -1,6 +1,7 @@
 """BookStack QA agent — sync and async (streaming) interfaces."""
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncGenerator
 from typing import Any, cast
@@ -258,6 +259,20 @@ class BookstackQAAgent:
                     result = await asyncio.to_thread(
                         execute_tool, tu.name, ti, self.bookstack
                     )
+                    # For get_page, emit the resolved page title so the UI can
+                    # display it instead of the raw numeric ID.
+                    if tu.name == "get_page":
+                        try:
+                            page_data = json.loads(result)
+                            page_title = str(page_data.get("name") or "")
+                            if page_title:
+                                yield {
+                                    "type": "tool_resolve",
+                                    "page_id": ti.get("page_id"),
+                                    "page_title": page_title,
+                                }
+                        except (json.JSONDecodeError, KeyError, ValueError):
+                            pass
                     tool_results.append(
                         {"type": "tool_result", "tool_use_id": tu.id, "content": result}
                     )

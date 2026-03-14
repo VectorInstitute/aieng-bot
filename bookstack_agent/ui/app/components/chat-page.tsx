@@ -12,6 +12,8 @@ import type { User } from '@/lib/types'
 type ToolStep = {
   tool: 'search_bookstack' | 'get_page' | 'list_books'
   input: Record<string, unknown>
+  /** Resolved page title for get_page (populated after the API call returns). */
+  page_title?: string
 }
 
 type UserMessage = {
@@ -36,7 +38,7 @@ type Message = UserMessage | AssistantMessage
 
 function toolLabel(step: ToolStep): string {
   if (step.tool === 'search_bookstack') return `Searching: "${step.input.query}"`
-  if (step.tool === 'get_page')         return `Reading page #${step.input.page_id}`
+  if (step.tool === 'get_page')         return step.page_title ? `Reading: "${step.page_title}"` : `Reading page #${step.input.page_id}`
   return 'Listing all books'
 }
 
@@ -233,6 +235,18 @@ export default function ChatPage({ user }: { user: User | null }) {
               patchLast((msg) => ({
                 ...msg,
                 content: (msg.content ?? '') + (event.chunk as string),
+              }))
+              break
+
+            case 'tool_resolve':
+              // Update the matching get_page step with the resolved title
+              patchLast((msg) => ({
+                ...msg,
+                toolSteps: msg.toolSteps.map((s) =>
+                  s.tool === 'get_page' && s.input.page_id === event.page_id
+                    ? { ...s, page_title: event.page_title as string }
+                    : s
+                ),
               }))
               break
 
