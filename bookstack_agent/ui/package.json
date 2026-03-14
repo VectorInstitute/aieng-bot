@@ -1,0 +1,37 @@
+{
+  "name": "bookstack-agent-ui",
+  "version": "1.0.0",
+  "description": "BookStack QA Agent — chat UI",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 8080",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "iron-session": "^8.0.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "lucide-react": "^0.511.0",
+    "next": "^15.4.9",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^9.0.1",
+    "react-syntax-highlighter": "^16.1.1",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.3",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.27.0",
+    "eslint-config-next": "^15.4.9",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  }
+}
