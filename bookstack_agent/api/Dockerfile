@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock README.md ./
 
 # Install main package deps (no dev extras) + FastAPI/uvicorn
-RUN uv sync --frozen --no-dev && \
+RUN uv sync --frozen --no-dev --no-editable && \
     uv pip install "fastapi>=0.115.0" "uvicorn[standard]>=0.32.0"
 
 # Copy source
