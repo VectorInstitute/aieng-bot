@@ -273,6 +273,36 @@ class TestAskStream:
         assert history[2] == {"role": "user", "content": "Next question?"}
 
     @pytest.mark.asyncio
+    async def test_stream_get_page_emits_tool_resolve(
+        self, agent: BookstackQAAgent
+    ) -> None:
+        """get_page tool call emits a tool_resolve event with the page title."""
+        tool_final = _make_sync_response(
+            [_make_tool_use_block("get_page", "tu_1", {"page_id": 7})]
+        )
+        ctx1 = _make_stream_ctx([], tool_final)
+
+        answer_final = _make_sync_response(
+            [_make_text_block("See the onboarding page.")]
+        )
+        ctx2 = _make_stream_ctx([], answer_final)
+
+        agent._async_client.messages.stream.side_effect = [ctx1, ctx2]  # type: ignore[attr-defined]
+
+        page_result = json.dumps(
+            {"id": 7, "name": "Onboarding Guide", "markdown": "# Hi"}
+        )
+        with patch("aieng_bot.bookstack.agent.execute_tool", return_value=page_result):
+            events = []
+            async for evt in agent.ask_stream("What is onboarding?"):
+                events.append(evt)
+
+        resolve_events = [e for e in events if e["type"] == "tool_resolve"]
+        assert len(resolve_events) == 1
+        assert resolve_events[0]["page_id"] == 7
+        assert resolve_events[0]["page_title"] == "Onboarding Guide"
+
+    @pytest.mark.asyncio
     async def test_stream_no_history_starts_fresh(
         self, agent: BookstackQAAgent
     ) -> None:
