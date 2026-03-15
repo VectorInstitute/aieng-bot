@@ -5,10 +5,18 @@
  * Using a server-side proxy keeps BOOKSTACK_API_URL out of the browser and
  * avoids CORS issues between the UI and the Python backend.
  */
+import { getCurrentUser } from '@/lib/session'
+
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request): Promise<Response> {
   const body = await req.json()
+
+  // Inject the authenticated user's email so the backend can log it.
+  const user = await getCurrentUser()
+  if (user?.email) {
+    body.user_email = user.email
+  }
 
   const backendUrl = process.env.BOOKSTACK_API_URL ?? 'http://localhost:8000'
 
