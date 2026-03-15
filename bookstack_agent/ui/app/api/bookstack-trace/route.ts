@@ -1,54 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/session'
 
-const GCS_BUCKET_URL = 'https://storage.googleapis.com/bot-dashboard-vectorinstitute'
-
 /**
- * Sanitize a user-supplied trace path.
+ * Expected trace path format:
+ *   data/bookstack/traces/YYYY-MM-DD/XXXXXXXX-HHMMSS.json
  *
- * Accepts only relative paths (no leading slash, no absolute URLs), rejects
- * traversal segments (. and ..), and enforces the required prefix so only
- * objects under data/bookstack/traces/ can ever be fetched.
- *
- * Returns the normalized path, or null if the input is invalid.
+ * Groups: (1) date segment, (2) filename segment.
+ * Matching strictly here means we never interpolate raw user input into the URL —
+ * only regex-captured, URL-encoded segments are used.
  */
-function sanitizeTracePath(rawPath: string | null): string | null {
-  if (!rawPath) return null
+const TRACE_PATH_RE =
+  /^data\/bookstack\/traces\/(\d{4}-\d{2}-\d{2})\/([a-zA-Z0-9]{1,8}-\d{6}\.json)$/
 
-  const trimmed = rawPath.trim()
-  const lower = trimmed.toLowerCase()
-
-  // Reject absolute URLs or absolute-style paths
-  if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('\\') ||
-    lower.startsWith('http://') ||
-    lower.startsWith('https://')
-  ) {
-    return null
-  }
-
-  // Split, drop empty segments, reject traversal and backslash-containing segments
-  const segments = trimmed.split('/').filter((s) => s.length > 0)
-  for (const seg of segments) {
-    if (seg === '.' || seg === '..' || seg.includes('\\')) {
-      return null
-    }
-  }
-
-  const normalized = segments.join('/')
-
-  if (!normalized.startsWith('data/bookstack/traces/')) {
-    return null
-  }
-
-  return normalized
-}
+const GCS_BASE =
+  'https://storage.googleapis.com/bot-dashboard-vectorinstitute/data/bookstack/traces'
 
 /**
  * Proxy authenticated requests for per-query trace files from GCS.
  *
- * GET /api/bookstack-trace?path=data/bookstack/traces/...
+ * GET /api/bookstack-trace?path=data/bookstack/traces/YYYY-MM-DD/SESSION-HHMMSS.json
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const authenticated = await isAuthenticated()
@@ -61,13 +31,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Missing path parameter' }, { status: 400 })
   }
 
-  const safePath = sanitizeTracePath(rawPath)
-  if (!safePath) {
+  // Parse the path with a strict regex — only the captured groups are used below.
+  // encodeURIComponent on each segment prevents any residual injection.
+  const match = rawPath.trim().match(TRACE_PATH_RE)
+  if (!match) {
     return NextResponse.json({ error: 'Invalid trace path' }, { status: 400 })
   }
 
+  const date = encodeURIComponent(match[1])
+  const filename = encodeURIComponent(match[2])
+  const url = `${GCS_BASE}/${date}/${filename}`
+
   try {
-    const res = await fetch(`${GCS_BUCKET_URL}/${safePath}`, { cache: 'no-store' })
+    const res = await fetch(url, { cache: 'no-store' })
     if (!res.ok) {
       return NextResponse.json({ error: 'Trace not found' }, { status: res.status })
     }
