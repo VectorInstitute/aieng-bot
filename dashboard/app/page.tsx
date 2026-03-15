@@ -1,4 +1,6 @@
+import Image from 'next/image'
 import Link from 'next/link'
+import vectorLogo from '@/public/vector-institute-logo.png'
 import { BarChart2, Wrench, GitMerge, GitPullRequestArrow, BookOpen, MessageCircleQuestion } from 'lucide-react'
 
 export default function LandingPage() {
@@ -9,23 +11,35 @@ export default function LandingPage() {
 
       <div className="max-w-xl w-full flex flex-col items-center gap-12 animate-fade-in">
 
-        {/* ASCII art */}
-        <pre className="font-mono text-base leading-6 select-none" aria-hidden="true">{
+        {/* ASCII art + Identity grouped */}
+        <div className="flex flex-col items-center gap-3">
+          <pre className="font-mono text-base leading-6 select-none" aria-hidden="true">{
 `  ◦   ◦
  ┌─────┐
  │ ◉ ◉ │
  └──‿──┘`
-        }</pre>
+          }</pre>
 
         {/* Identity */}
         <div className="text-center space-y-4">
-          <div className="inline-block text-xs font-mono tracking-widest text-slate-500 uppercase mb-1">
-            Vector Institute AI Engineering
+          <div className="flex justify-center mb-2">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+              <Image
+                src={vectorLogo}
+                alt="Vector Institute"
+                width={120}
+                height={44}
+                priority
+              />
+            </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             aieng-bot
           </h1>
-
+          <div className="inline-block text-xs font-mono tracking-widest text-slate-500 uppercase">
+            Vector Institute AI Engineering
+          </div>
+        </div>
         </div>
 
         {/* Divider */}
