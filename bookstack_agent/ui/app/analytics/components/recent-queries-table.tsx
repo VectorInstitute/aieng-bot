@@ -64,15 +64,15 @@ function TraceModal({
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className="text-xs text-slate-500">#{tc.seq}</span>
                       <ToolBadge tool={tc.tool} />
-                      {tc.tool === 'get_page' && tc.input.page_title && (
+                      {tc.tool === 'get_page' && typeof tc.input.page_title === 'string' && tc.input.page_title && (
                         <span className="text-xs text-slate-300 font-medium truncate">
-                          {String(tc.input.page_title)}
+                          {tc.input.page_title}
                         </span>
                       )}
                     </div>
                     <pre className="text-xs text-slate-500 whitespace-pre-wrap break-words font-mono leading-relaxed">
                       {tc.tool === 'get_page'
-                        ? `page_id: ${tc.input.page_id}`
+                        ? `page_id: ${String(tc.input.page_id)}`
                         : JSON.stringify(tc.input, null, 2)}
                     </pre>
                   </div>
