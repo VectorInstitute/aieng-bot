@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, Send, Trash2, Search, FileText, List, LogOut } from 'lucide-react'
+import Image from 'next/image'
 import { MarkdownRenderer } from './markdown-renderer'
 import type { User } from '@/lib/types'
+import vectorLogo from '@/public/vector-institute-logo.png'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -339,12 +341,25 @@ export default function ChatPage({ user }: { user: User | null }) {
 
           {isEmpty && (
             <div className="flex flex-col items-center gap-8 pt-10 animate-fade-in">
-              <pre className="font-mono text-base leading-6 select-none text-slate-500" aria-hidden="true">{
+              <div className="flex flex-col items-center gap-3">
+                <pre className="font-mono text-base leading-6 select-none" aria-hidden="true">{
 `  ◦   ◦
  ┌─────┐
  │ ◉ ◉ │
  └──‿──┘`
-              }</pre>
+                }</pre>
+                <div className="flex justify-center">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+                    <Image
+                      src={vectorLogo}
+                      alt="Vector Institute"
+                      width={120}
+                      height={44}
+                      priority
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="text-center space-y-3">
                 <div className="text-xs font-mono tracking-widest text-slate-500 uppercase">
                   Vector Institute AI Engineering
