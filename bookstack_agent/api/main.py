@@ -179,6 +179,7 @@ async def _log_query_bg(
     answer: str,
     duration_seconds: float,
     status: str,
+    user_email: str | None,
 ) -> None:
     """Run analytics logging in a thread pool (non-blocking)."""
     try:
@@ -190,6 +191,7 @@ async def _log_query_bg(
             answer,
             duration_seconds,
             status,
+            user_email,
         )
     except Exception as exc:  # noqa: BLE001
         api_logger.warning("Analytics logging failed (non-fatal): %s", exc)
@@ -208,6 +210,11 @@ class AskRequest(BaseModel):
         default=None,
         description="Opaque session token returned by a previous response. "
         "Omit to start a new conversation.",
+    )
+    user_email: str | None = Field(
+        default=None,
+        description="Email of the authenticated user. Injected by the Next.js "
+        "proxy from the server-side session; ignored if sent directly.",
     )
 
 
@@ -261,8 +268,26 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
 
                 if event_type == "tool_use":
                     query_tool_calls.append(
-                        {"tool": event.get("tool", ""), "input": event.get("input", {})}
+                        {
+                            "tool": event.get("tool", ""),
+                            "input": dict(event.get("input", {})),
+                        }
                     )
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                elif event_type == "tool_resolve":
+                    # Enrich the matching get_page tool call with the resolved title
+                    page_id = event.get("page_id")
+                    page_title = event.get("page_title")
+                    if page_id is not None and page_title:
+                        for tc in reversed(query_tool_calls):
+                            if (
+                                tc["tool"] == "get_page"
+                                and tc["input"].get("page_id") == page_id
+                                and "page_title" not in tc["input"]
+                            ):
+                                tc["input"]["page_title"] = page_title
+                                break
                     yield f"data: {json.dumps(event)}\n\n"
 
                 elif event_type == "answer":
@@ -292,6 +317,7 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
                 answer=final_answer,
                 duration_seconds=duration,
                 status=final_status,
+                user_email=request.user_email,
             )
         )
 

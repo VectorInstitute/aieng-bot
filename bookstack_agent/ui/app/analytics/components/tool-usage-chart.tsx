@@ -42,18 +42,19 @@ export default function ToolUsageChart({ metrics }: { metrics: BookstackMetrics 
 
   return (
     <div className="rounded-xl border border-white/10 bg-slate-800/60 p-6">
-      <div className="mb-5">
+      <div className="mb-6">
         <h2 className="text-xl font-bold text-white">Tool Usage</h2>
         <p className="text-sm text-slate-400 mt-0.5">
           {total.toLocaleString()} total calls across all queries
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Full-width horizontal layout: bar chart left, breakdown cards right */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
         {/* Bar chart */}
-        <div className="h-56">
+        <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+            <BarChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} />
               <XAxis
                 dataKey="label"
@@ -75,6 +76,7 @@ export default function ToolUsageChart({ metrics }: { metrics: BookstackMetrics 
                   color: '#fff',
                 }}
                 labelStyle={{ color: '#94a3b8' }}
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
               />
               <Bar dataKey="count" name="Calls" radius={[4, 4, 0, 0]}>
                 {data.map((entry) => (
@@ -85,31 +87,33 @@ export default function ToolUsageChart({ metrics }: { metrics: BookstackMetrics 
           </ResponsiveContainer>
         </div>
 
-        {/* Tool breakdown list */}
-        <div className="flex flex-col justify-center gap-3">
+        {/* Breakdown cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {data.map((entry) => {
             const pct = total > 0 ? Math.round((entry.count / total) * 100) : 0
             return (
-              <div key={entry.tool}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    <span className="text-sm font-medium text-slate-200">{entry.label}</span>
-                  </div>
-                  <span className="text-sm text-slate-400">
-                    {entry.count.toLocaleString()} ({pct}%)
+              <div
+                key={entry.tool}
+                className="rounded-lg border border-white/10 bg-slate-700/40 p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <span className="text-sm font-semibold text-slate-200 truncate">
+                    {entry.label}
                   </span>
                 </div>
-                <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                <p className="text-2xl font-bold text-white">{entry.count.toLocaleString()}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{pct}% of calls</p>
+                <div className="mt-2 h-1 rounded-full bg-slate-600 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{ width: `${pct}%`, backgroundColor: entry.color }}
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">{TOOL_DESC[entry.tool]}</p>
+                <p className="text-xs text-slate-500 mt-2 leading-snug">{TOOL_DESC[entry.tool]}</p>
               </div>
             )
           })}

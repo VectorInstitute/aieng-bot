@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, ChevronDown, ChevronUp, Clock, CheckCircle, XCircle, Wrench } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Clock, CheckCircle, XCircle, Wrench, User } from 'lucide-react'
 import type { BookstackActivity, BookstackTrace } from '@/lib/bookstack-types'
 
 const TOOL_COLORS: Record<string, string> = {
@@ -64,9 +64,16 @@ function TraceModal({
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className="text-xs text-slate-500">#{tc.seq}</span>
                       <ToolBadge tool={tc.tool} />
+                      {tc.tool === 'get_page' && tc.input.page_title && (
+                        <span className="text-xs text-slate-300 font-medium truncate">
+                          {String(tc.input.page_title)}
+                        </span>
+                      )}
                     </div>
-                    <pre className="text-xs text-slate-300 whitespace-pre-wrap break-words font-mono leading-relaxed">
-                      {JSON.stringify(tc.input, null, 2)}
+                    <pre className="text-xs text-slate-500 whitespace-pre-wrap break-words font-mono leading-relaxed">
+                      {tc.tool === 'get_page'
+                        ? `page_id: ${tc.input.page_id}`
+                        : JSON.stringify(tc.input, null, 2)}
                     </pre>
                   </div>
                 ))}
@@ -179,6 +186,7 @@ export default function RecentQueriesTable({ activities }: RecentQueriesTablePro
                 <tr className="border-b border-white/10">
                   <th className="pb-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Question</th>
                   <th className="pb-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider hidden md:table-cell">Tools</th>
+                  <th className="pb-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider hidden lg:table-cell">User</th>
                   <th className="pb-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:table-cell">Duration</th>
                   <th className="pb-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
                   <th className="pb-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Timestamp</th>
@@ -208,6 +216,16 @@ export default function RecentQueriesTable({ activities }: RecentQueriesTablePro
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="py-3 pr-4 hidden lg:table-cell">
+                      {activity.user_email ? (
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
+                          <User className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[140px]">{activity.user_email}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-600">—</span>
+                      )}
                     </td>
                     <td className="py-3 pr-4 text-right hidden sm:table-cell">
                       <span className="flex items-center justify-end gap-1 text-slate-400 text-xs">

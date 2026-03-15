@@ -95,15 +95,11 @@ export default async function BookstackAnalyticsPage() {
         {/* Metrics row */}
         <QueryMetrics metrics={metrics} />
 
-        {/* Velocity + Tool usage side by side on large screens */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <QueryVelocityChart data={velocityData} />
-          </div>
-          <div>
-            <ToolUsageChart metrics={metrics} />
-          </div>
-        </div>
+        {/* Velocity chart — full width */}
+        <QueryVelocityChart data={velocityData} />
+
+        {/* Tool usage — full width below velocity */}
+        <ToolUsageChart metrics={metrics} />
 
         {/* Recent queries */}
         <RecentQueriesTable activities={recentActivities} />

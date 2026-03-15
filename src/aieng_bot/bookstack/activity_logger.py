@@ -166,6 +166,7 @@ class BookstackActivityLogger:
         answer: str,
         duration_seconds: float,
         status: str,
+        user_email: str | None = None,
     ) -> bool:
         """Record a completed BookStack QA query to GCS.
 
@@ -193,6 +194,8 @@ class BookstackActivityLogger:
             Wall-clock time from question receipt to answer emission.
         status : str
             ``"success"`` or ``"error"``.
+        user_email : str or None
+            Email of the authenticated user who asked the question, if available.
 
         Returns
         -------
@@ -244,6 +247,7 @@ class BookstackActivityLogger:
             "session_id": session_id,
             "timestamp": timestamp,
             "question": question[:300],  # keep activity log compact
+            "user_email": user_email,
             "tools_used": tools_used,
             "tool_call_counts": tool_call_counts,
             "num_tool_calls": len(tool_calls),

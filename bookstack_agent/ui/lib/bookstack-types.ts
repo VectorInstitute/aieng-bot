@@ -8,6 +8,8 @@ export interface BookstackActivity {
   timestamp: string
   /** Question text, truncated to 300 chars in the log. */
   question: string
+  /** Email of the authenticated user who asked the question, if available. */
+  user_email?: string | null
   /** Unique tool names used during this query (e.g. ["search_bookstack", "get_page"]). */
   tools_used: string[]
   /** Total number of individual tool invocations. */
