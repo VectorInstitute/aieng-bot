@@ -27,7 +27,9 @@ Session management
 
 import asyncio
 import json
+import logging
 import os
+import time
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncGenerator
@@ -41,7 +43,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from aieng_bot.bookstack import BookstackQAAgent
+from aieng_bot.bookstack.activity_logger import BookstackActivityLogger
 from aieng_bot.bookstack.agent import MessageHistory
+
+api_logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -77,6 +82,9 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # OrderedDict preserves insertion order for LRU-style eviction
     application.state.sessions = OrderedDict()
     application.state.session_locks = {}
+
+    # Analytics logger — initialised lazily; failures are non-fatal
+    application.state.activity_logger = BookstackActivityLogger()
 
     yield
 
@@ -159,6 +167,35 @@ def _get_session_lock(session_id: str) -> asyncio.Lock:
 
 
 # ---------------------------------------------------------------------------
+# Analytics helpers
+# ---------------------------------------------------------------------------
+
+
+async def _log_query_bg(
+    activity_logger: BookstackActivityLogger,
+    session_id: str,
+    question: str,
+    tool_calls: list[dict[str, Any]],
+    answer: str,
+    duration_seconds: float,
+    status: str,
+) -> None:
+    """Run analytics logging in a thread pool (non-blocking)."""
+    try:
+        await asyncio.to_thread(
+            activity_logger.log_query,
+            session_id,
+            question,
+            tool_calls,
+            answer,
+            duration_seconds,
+            status,
+        )
+    except Exception as exc:  # noqa: BLE001
+        api_logger.warning("Analytics logging failed (non-fatal): %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
 
@@ -207,6 +244,12 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
         sid, history = _get_or_create_session(request.session_id)
         lock = _get_session_lock(sid)
 
+        # Analytics accumulators
+        start_time = time.monotonic()
+        query_tool_calls: list[dict[str, Any]] = []
+        final_answer = ""
+        final_status = "error"
+
         # Emit the session ID immediately so the client can store it
         yield f"data: {json.dumps({'type': 'session', 'session_id': sid})}\n\n"
 
@@ -216,17 +259,41 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
             async for event in agent.ask_stream(request.question, history=history):
                 event_type = event.get("type")
 
-                if event_type == "answer":
+                if event_type == "tool_use":
+                    query_tool_calls.append(
+                        {"tool": event.get("tool", ""), "input": event.get("input", {})}
+                    )
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                elif event_type == "answer":
                     updated_history = event.pop("history", history)
+                    final_answer = event.get("text", "")
+                    final_status = "success"
                     yield f"data: {json.dumps(event)}\n\n"
 
                 elif event_type == "error":
+                    final_status = "error"
                     yield f"data: {json.dumps(event)}\n\n"
 
                 else:
                     yield f"data: {json.dumps(event)}\n\n"
 
             _save_session(sid, updated_history)
+
+        # Fire analytics logging asynchronously — does not block the stream
+        duration = time.monotonic() - start_time
+        activity_logger: BookstackActivityLogger = app.state.activity_logger
+        asyncio.create_task(
+            _log_query_bg(
+                activity_logger=activity_logger,
+                session_id=sid,
+                question=request.question,
+                tool_calls=query_tool_calls,
+                answer=final_answer,
+                duration_seconds=duration,
+                status=final_status,
+            )
+        )
 
         yield "data: [DONE]\n\n"
 
