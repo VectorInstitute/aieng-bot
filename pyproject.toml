@@ -75,6 +75,7 @@ docs = [
 
 bookstack-api = [
     "fastapi>=0.115.0",
+    "google-cloud-storage>=2.0.0",
     "httptools>=0.6.0",
     "uvicorn[standard]>=0.32.0",
     "uvloop>=0.21.0",
@@ -109,6 +110,10 @@ mypy_path = "src:slack_bot/stubs"
 [[tool.mypy.overrides]]
 module = "bookstack_agent.api.main"
 allow_untyped_decorators = true
+
+[[tool.mypy.overrides]]
+module = "aieng_bot.bookstack.activity_logger"
+ignore_missing_imports = true
 
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
