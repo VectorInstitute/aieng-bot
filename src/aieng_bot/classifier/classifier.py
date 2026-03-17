@@ -25,10 +25,9 @@ from .prompts import CLASSIFICATION_PROMPT_WITH_TOOLS
 
 
 class PRFailureClassifier:
-    """Classifies PR failures using Claude Haiku 4.5.
+    """Classifies PR failures using Claude Sonnet 4.6.
 
-    This classifier uses Claude Haiku 4.5 for cost-effective classification
-    while maintaining high accuracy (67% cost savings vs Sonnet 4).
+    This classifier uses Claude Sonnet 4.6 for accurate classification
 
     Attributes
     ----------
@@ -197,7 +196,7 @@ class PRFailureClassifier:
 
         for _turn in range(max_turns):
             response = self.client.messages.create(
-                model="claude-haiku-4-5",
+                model="claude-sonnet-4-6",
                 max_tokens=8192,
                 temperature=0.0,
                 tools=[bash_tool],
@@ -394,7 +393,7 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         )
 
         # Call Claude API with tools to search log file
-        # Using Haiku 4.5 for cost-effective classification with tools
+        # Using Sonnet 4.6 for classification with tools
         try:
             log_info(f"Calling Claude API with tools (log file: {failure_logs_file})")
             log_info(f"Prompt length: {len(prompt)} chars")
