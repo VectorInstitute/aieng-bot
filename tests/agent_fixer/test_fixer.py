@@ -487,6 +487,7 @@ class TestAgenticLoop:
             assert "Skills (Context Only)" in prompt
             assert "/python-conventions" in prompt
             assert "/merge-resolution" in prompt
+            assert "/fix-security-failures" in prompt
             assert ".pr-context.json" in prompt
             assert ".failure-logs.txt" in prompt
             assert "gh pr checks" in prompt

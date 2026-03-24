@@ -66,7 +66,7 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
       case 'lint':
         return 'Code style and linting issues detected. The bot automatically reformatted and fixed code quality issues.'
       case 'security':
-        return 'Security vulnerabilities detected. The bot analyzed and resolved security issues in dependencies.'
+        return 'Security vulnerabilities detected. The bot analyzed dependencies for CVE/GHSA findings. If a patched version was available on PyPI, the bot bumped the version constraint and regenerated the lock file. If no patch exists yet, the bot left a PR comment explaining the issue and exited without changes.'
       case 'build':
         return 'Build compilation errors detected. The bot fixed configuration and code issues to restore builds.'
       case 'merge_conflict':
@@ -200,15 +200,15 @@ export default function FailureAnalysis({ failure }: FailureAnalysisProps) {
                 <>
                   <li className="flex items-start space-x-2">
                     <span className="text-red-600 dark:text-red-400 mt-0.5">•</span>
-                    <span>Identified vulnerable dependencies</span>
+                    <span>Parsed pip-audit output for CVE/GHSA IDs and affected package versions</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <span className="text-red-600 dark:text-red-400 mt-0.5">•</span>
-                    <span>Updated to patched versions or applied workarounds</span>
+                    <span>Checked PyPI for a patched release; bumped version constraint in pyproject.toml and regenerated uv.lock if a fix was available</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <span className="text-red-600 dark:text-red-400 mt-0.5">•</span>
-                    <span>Verified security scans pass</span>
+                    <span>If no patch exists upstream, left a PR comment listing the unresolved CVEs and exited without modifying files — requires human review</span>
                   </li>
                 </>
               )}
