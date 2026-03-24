@@ -10,7 +10,7 @@ description: Fix pip-audit security vulnerability failures. Use when CI fails du
 Search the failure logs for pip-audit findings:
 
 ```bash
-grep -i "CVE-\|GHSA-\|vulnerability\|Found.*vulnerabilit\|pip-audit" .failure-logs.txt | head -100
+grep -i "CVE-\|GHSA-\|vulnerability\|Found.*vulnerability\|pip-audit" .failure-logs.txt | head -100
 ```
 
 Extract for each finding:
