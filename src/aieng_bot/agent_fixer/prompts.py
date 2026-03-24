@@ -54,6 +54,7 @@ AGENTIC_LOOP_PROMPT = r"""You are aieng-bot, an AI-powered tool that fixes CI fa
 Skills provide conventions and context - use them for reference when needed:
 - `/python-conventions` - uv, ruff, mypy conventions
 - `/merge-resolution` - How to resolve merge conflicts
+- `/fix-security-failures` - pip-audit vulnerability triage: bump fixable packages, gracefully exit when no patch exists upstream
 
 **You handle ALL workflow steps directly** - skills don't do git operations.
 
@@ -98,7 +99,7 @@ Poll every 30-60 seconds until all checks complete. **Do not proceed until CI fi
    ```bash
    grep -i "error\|fail\|exception" .failure-logs.txt | head -50
    ```
-3. Fix the issues (use `/python-conventions` for guidance)
+3. Fix the issues (use `/python-conventions` for general guidance; use `/fix-security-failures` for pip-audit/CVE failures)
 4. Commit and go to Step 2:
    ```bash
    git add -A
