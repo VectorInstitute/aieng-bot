@@ -77,9 +77,9 @@ export default function QueryMetrics({ metrics }: QueryMetricsProps) {
           accent="from-amber-500 to-orange-600"
         />
         <MetricCard
-          label="Tool Calls"
-          value={metrics.total_tool_calls.toLocaleString()}
-          sub={`${metrics.avg_tool_calls_per_query.toFixed(1)} avg / query`}
+          label="Avg Tools / Query"
+          value={metrics.avg_tool_calls_per_query.toFixed(1)}
+          sub="tool calls per query"
           icon={<Wrench className="w-4 h-4 text-white" />}
           accent="from-purple-500 to-pink-600"
         />
