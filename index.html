@@ -479,61 +479,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#manual-testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Manual Testing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dashboard" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dashboard
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#monitoring" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Monitoring
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -716,61 +661,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#manual-testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Manual Testing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dashboard" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dashboard
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#monitoring" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Monitoring
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -810,17 +700,16 @@
 <li><strong>Transparent</strong> - Comments on PRs with status updates</li>
 </ul>
 <h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────────────────────────┐
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  aieng-bot                                                  │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│                                                             │
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  CLI Usage (any PR):                                        │
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│    aieng-bot fix --repo owner/repo --pr 123                 │
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│                                                             │
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  Automated Workflows (bot PRs only):                        │
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│    Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs  │
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│    with failing checks across VectorInstitute org           │
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>└─────────────────────────────────────────────────────────────┘
-</span></code></pre></div>
+<p><code>┌─────────────────────────────────────────────────────────────┐
+│  aieng-bot                                                  │
+│                                                             │
+│  CLI Usage (any PR):                                        │
+│    aieng-bot fix --repo owner/repo --pr 123                 │
+│                                                             │
+│  Automated Workflows (bot PRs only):                        │
+│    Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs  │
+│    with failing checks across VectorInstitute org           │
+└─────────────────────────────────────────────────────────────┘</code></p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <h3 id="setup-in-this-repository">Setup (in this repository)<a class="headerlink" href="#setup-in-this-repository" title="Permanent link">&para;</a></h3>
 <p><strong>1. Create Anthropic API Key</strong>
@@ -882,31 +771,28 @@
 - Breaking changes requiring refactoring
 - Issues requiring architectural decisions</p>
 <h2 id="cli-usage">CLI Usage<a class="headerlink" href="#cli-usage" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install dependencies</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>sync
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Fix and merge a PR</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Fix with dashboard logging</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span><span class="w"> </span>--log
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Custom retries and timeout</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span><span class="w"> </span>--max-retries<span class="w"> </span><span class="m">5</span><span class="w"> </span>--timeout-minutes<span class="w"> </span><span class="m">180</span>
-</span></code></pre></div>
+<p>```bash</p>
+<h1 id="install-dependencies">Install dependencies<a class="headerlink" href="#install-dependencies" title="Permanent link">&para;</a></h1>
+<p>uv sync</p>
+<h1 id="fix-and-merge-a-pr">Fix and merge a PR<a class="headerlink" href="#fix-and-merge-a-pr" title="Permanent link">&para;</a></h1>
+<p>aieng-bot fix --repo owner/repo --pr 123</p>
+<h1 id="fix-with-dashboard-logging">Fix with dashboard logging<a class="headerlink" href="#fix-with-dashboard-logging" title="Permanent link">&para;</a></h1>
+<p>aieng-bot fix --repo owner/repo --pr 123 --log</p>
+<h1 id="custom-retries-and-timeout">Custom retries and timeout<a class="headerlink" href="#custom-retries-and-timeout" title="Permanent link">&para;</a></h1>
+<p>aieng-bot fix --repo owner/repo --pr 123 --max-retries 5 --timeout-minutes 180
+```</p>
 <h2 id="manual-testing">Manual Testing<a class="headerlink" href="#manual-testing" title="Permanent link">&para;</a></h2>
 <p><strong>Trigger via CLI:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Fix a PR using the CLI (recommended)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aieng-bot<span class="w"> </span>fix<span class="w"> </span>--repo<span class="w"> </span>owner/repo<span class="w"> </span>--pr<span class="w"> </span><span class="m">123</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Or trigger via GitHub workflow</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>fix-pr-agent.yml<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">target_repo</span><span class="o">=</span><span class="s2">&quot;owner/repo&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>--field<span class="w"> </span><span class="nv">pr_number</span><span class="o">=</span><span class="s2">&quot;123&quot;</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Run the bot PR discovery workflow (VectorInstitute org only)</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>discover-and-dispatch.yml
-</span></code></pre></div></p>
+```bash</p>
+<h1 id="fix-a-pr-using-the-cli-recommended">Fix a PR using the CLI (recommended)<a class="headerlink" href="#fix-a-pr-using-the-cli-recommended" title="Permanent link">&para;</a></h1>
+<p>aieng-bot fix --repo owner/repo --pr 123</p>
+<h1 id="or-trigger-via-github-workflow">Or trigger via GitHub workflow<a class="headerlink" href="#or-trigger-via-github-workflow" title="Permanent link">&para;</a></h1>
+<p>gh workflow run fix-pr-agent.yml \
+  --field target_repo="owner/repo" \
+  --field pr_number="123"</p>
+<h1 id="run-the-bot-pr-discovery-workflow-vectorinstitute-org-only">Run the bot PR discovery workflow (VectorInstitute org only)<a class="headerlink" href="#run-the-bot-pr-discovery-workflow-vectorinstitute-org-only" title="Permanent link">&para;</a></h1>
+<p>gh workflow run discover-and-dispatch.yml
+```</p>
 <p><strong>Trigger via GitHub UI:</strong>
 Actions → Select workflow → Run workflow → Enter parameters</p>
 <h2 id="dashboard">Dashboard<a class="headerlink" href="#dashboard" title="Permanent link">&para;</a></h2>
@@ -933,12 +819,12 @@ Actions → Select workflow → Run workflow → Enter parameters</p>
 - PR comments - Detailed status updates on each PR
 - Run summary - PR count and actions taken per run</p>
 <p><strong>Debug commands:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># View recent workflow runs</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span>discover-and-dispatch.yml<span class="w"> </span>--limit<span class="w"> </span><span class="m">5</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># View logs for specific run</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>RUN_ID<span class="w"> </span>--log
-</span></code></pre></div></p>
+```bash</p>
+<h1 id="view-recent-workflow-runs">View recent workflow runs<a class="headerlink" href="#view-recent-workflow-runs" title="Permanent link">&para;</a></h1>
+<p>gh run list --workflow=discover-and-dispatch.yml --limit 5</p>
+<h1 id="view-logs-for-specific-run">View logs for specific run<a class="headerlink" href="#view-logs-for-specific-run" title="Permanent link">&para;</a></h1>
+<p>gh run view RUN_ID --log
+```</p>
 <h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="docs/setup.md">Setup Guide</a> - Configuration and permissions</li>
