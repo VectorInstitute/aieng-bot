@@ -70,7 +70,7 @@ export default async function DashboardPage() {
                     Maintenance Analytics
                   </h1>
                   <p className="text-slate-700 dark:text-slate-300 text-lg">
-                    Automated CI fix and merge for GitHub pull requests
+                    Automated CI fix and merge for Dependabot and pre-commit CI pull requests
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
@@ -129,7 +129,7 @@ export default async function DashboardPage() {
                   Maintenance Analytics
                 </h1>
                 <p className="text-slate-700 dark:text-slate-300 text-lg">
-                  Automated CI fix and merge for GitHub pull requests
+                  Automated CI fix and merge for Dependabot and pre-commit CI pull requests
                 </p>
               </div>
               <div className="flex items-center gap-4">
