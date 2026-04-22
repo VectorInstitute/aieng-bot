@@ -79,6 +79,7 @@ bookstack-api = [
     "fastapi>=0.115.0",
     "google-cloud-storage>=2.0.0",
     "httptools>=0.6.0",
+    "python-multipart>=0.0.26", # Pinning version to address vulnerability CVE-2026-40347
     "uvicorn[standard]>=0.32.0",
     "uvloop>=0.21.0",
 ]
