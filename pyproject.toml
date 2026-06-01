@@ -78,6 +78,7 @@ docs = [
 
 bookstack-api = [
     "fastapi>=0.115.0",
+    "starlette>=1.0.1", # Pinning version to address PYSEC-2026-161
     "google-cloud-storage>=2.0.0",
     "httptools>=0.6.0",
     "python-multipart>=0.0.27", # Pinning version to address vulnerabilities CVE-2026-40347, CVE-2026-42561
