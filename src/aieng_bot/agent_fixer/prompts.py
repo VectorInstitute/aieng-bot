@@ -38,6 +38,13 @@ Fix this PR's {failure_type} failures using the appropriate skill.
 Read the PR context, search the failure logs strategically, then apply the fix-{failure_type}-failures skill to resolve the issues.
 
 Make minimal, targeted changes following the skill's guidance.
+
+## Constraints
+- Only modify files directly implicated by the CI failure. Do not touch unrelated code.
+- Never delete existing functions, classes, or logic. Never change application behavior.
+- After applying fixes, run `uv run pytest` to confirm existing tests still pass.
+- Stage only the files you intentionally changed (`git add <file>`), never `git add -A`.
+- Review `git diff --staged` before committing.
 """
 
 
@@ -115,6 +122,14 @@ Poll every 30-60 seconds until all checks complete. **Do not proceed until CI fi
 3. **Fetch fresh logs** after each CI failure
 4. **Never commit**: `.claude/`, `.pr-context.json`, `.failure-logs.txt`
 5. **Use uv for Python**: `uv sync`, `uv run pytest`, `uv run pre-commit run --all-files`
+6. **Minimal scope**: Only modify files directly implicated by the CI failure logs. Do not touch unrelated files, refactor code, or make "improvements" outside the failure's scope.
+7. **Preserve functionality**: Never delete existing functions, classes, or logic. Never change behavior of application code. Fixes must be limited to: dependency versions, lock files, lint/format issues, and conflict markers.
+8. **Verify before committing**: Run `uv run pytest` after applying fixes to confirm existing tests still pass. If tests fail after your changes, revert and re-examine the failure logs.
+9. **Stage explicitly**: Never use `git add -A`. Stage only the specific files you intentionally modified:
+   ```bash
+   git add <file1> <file2> ...
+   ```
+   Review `git diff --staged` before committing to confirm the diff is appropriate.
 
 ## Context Files
 - `.pr-context.json` - PR metadata
