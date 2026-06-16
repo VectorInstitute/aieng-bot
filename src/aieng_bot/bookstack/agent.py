@@ -21,6 +21,23 @@ from .tools import ALL_TOOLS, execute_tool
 # MessageParam[content] constraints; cast to list[MessageParam] at call sites.
 MessageHistory = list[Any]
 
+# Thinking models (Qwen3, DeepSeek-R1, …) embed chain-of-thought reasoning in
+# the text stream before this marker.  Text before it is buffered silently;
+# only what follows is forwarded as answer content.
+_THINK_END = "</think>"
+
+
+class _TurnState:
+    """Mutable container for the results of one LLM streaming turn."""
+
+    __slots__ = ("accumulated_text", "thinking_done", "text_streamed", "final_response")
+
+    def __init__(self) -> None:
+        self.accumulated_text: str = ""
+        self.thinking_done: bool = False
+        self.text_streamed: bool = False
+        self.final_response: Any = None
+
 
 class BookstackQAAgent:
     """Answer questions from the BookStack wiki using Claude with tool use.
@@ -201,6 +218,98 @@ class BookstackQAAgent:
     # Async streaming path (API)
     # ------------------------------------------------------------------
 
+    async def _stream_llm_turn(
+        self,
+        messages: MessageHistory,
+        state: _TurnState,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Run one LLM streaming call; yield ``text_chunk``/``text_clear`` events.
+
+        Populates *state* with the accumulated answer text, whether ``</think>``
+        was seen, and the final message object.
+        """
+        skip_leading_nl = False
+
+        async with self._async_client.messages.stream(
+            model=self.model,
+            max_tokens=8192,
+            system=SYSTEM_PROMPT,
+            tools=ALL_TOOLS,
+            messages=cast(list[MessageParam], messages),
+        ) as stream:
+            async for event in stream:
+                event_type = getattr(event, "type", None)
+
+                if (
+                    event_type == "content_block_delta"
+                    and getattr(getattr(event, "delta", None), "type", None)
+                    == "text_delta"
+                ):
+                    chunk: str = event.delta.text  # type: ignore[union-attr]
+                    if not state.thinking_done:
+                        state.accumulated_text += chunk
+                        idx = state.accumulated_text.find(_THINK_END)
+                        if idx >= 0:
+                            state.thinking_done = True
+                            skip_leading_nl = True
+                            post = state.accumulated_text[idx + len(_THINK_END) :].lstrip("\n")
+                            state.accumulated_text = post
+                            if post:
+                                skip_leading_nl = False
+                                yield {"type": "text_chunk", "chunk": post}
+                                state.text_streamed = True
+                    else:
+                        if skip_leading_nl:
+                            chunk = chunk.lstrip("\n")
+                            if not chunk:
+                                continue
+                            skip_leading_nl = False
+                        state.accumulated_text += chunk
+                        yield {"type": "text_chunk", "chunk": chunk}
+                        state.text_streamed = True
+
+                elif event_type == "content_block_start":
+                    block = getattr(event, "content_block", None)
+                    if getattr(block, "type", None) == "tool_use":
+                        if state.text_streamed:
+                            yield {"type": "text_clear"}
+                            state.text_streamed = False
+                        state.accumulated_text = ""
+                        state.thinking_done = False
+                        skip_leading_nl = False
+
+            state.final_response = await stream.get_final_message()
+
+    async def _execute_tool_calls(
+        self,
+        tool_uses: list[Any],
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Execute tool calls sequentially; yield ``tool_use`` / ``tool_resolve`` events.
+
+        After iterating, read ``self._tool_results`` for the list of
+        ``tool_result`` dicts to append to the message history.
+        """
+        self._tool_results: list[dict[str, Any]] = []
+        for tu in tool_uses:
+            ti = dict(tu.input) if isinstance(tu.input, dict) else {}
+            yield {"type": "tool_use", "tool": tu.name, "input": ti}
+            result = await asyncio.to_thread(execute_tool, tu.name, ti, self.bookstack)
+            if tu.name == "get_page":
+                try:
+                    page_data = json.loads(result)
+                    page_title = str(page_data.get("name") or "")
+                    if page_title:
+                        yield {
+                            "type": "tool_resolve",
+                            "page_id": ti.get("page_id"),
+                            "page_title": page_title,
+                        }
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    pass
+            self._tool_results.append(
+                {"type": "tool_result", "tool_use_id": tu.id, "content": result}
+            )
+
     async def ask_stream(
         self,
         question: str,
@@ -241,138 +350,44 @@ class BookstackQAAgent:
             Structured event dictionaries.
 
         """
-        _THINK_END = "</think>"
-
         messages: MessageHistory = list(history or [])
         messages.append({"role": "user", "content": question})
 
         try:
             for _ in range(self.MAX_TURNS):
-                accumulated_text = ""
-                thinking_done = False  # True once </think> has been seen
-                skip_leading_nl = (
-                    False  # True briefly after </think> to drop \n\n separators
-                )
-                text_streamed = False  # True once any text_chunk was emitted
-                final_response: Any = None
+                state = _TurnState()
+                async for event in self._stream_llm_turn(messages, state):
+                    yield event
 
-                async with self._async_client.messages.stream(
-                    model=self.model,
-                    max_tokens=8192,
-                    system=SYSTEM_PROMPT,
-                    tools=ALL_TOOLS,
-                    messages=cast(list[MessageParam], messages),
-                ) as stream:
-                    async for event in stream:
-                        event_type = getattr(event, "type", None)
-
-                        if (
-                            event_type == "content_block_delta"
-                            and getattr(getattr(event, "delta", None), "type", None)
-                            == "text_delta"
-                        ):
-                            chunk: str = event.delta.text  # type: ignore[union-attr]
-
-                            if not thinking_done:
-                                # Still inside (or before) the think block — buffer silently.
-                                accumulated_text += chunk
-                                idx = accumulated_text.find(_THINK_END)
-                                if idx >= 0:
-                                    # End of thinking found — switch to real-time streaming.
-                                    thinking_done = True
-                                    skip_leading_nl = True
-                                    post = accumulated_text[
-                                        idx + len(_THINK_END) :
-                                    ].lstrip("\n")
-                                    accumulated_text = post
-                                    if post:
-                                        skip_leading_nl = False
-                                        yield {"type": "text_chunk", "chunk": post}
-                                        text_streamed = True
-                            else:
-                                # Post-think: emit, but drop any leading newline separators
-                                # that arrive as separate chunks right after </think>.
-                                if skip_leading_nl:
-                                    content = chunk.lstrip("\n")
-                                    if not content:
-                                        continue
-                                    skip_leading_nl = False
-                                    chunk = content
-                                accumulated_text += chunk
-                                yield {"type": "text_chunk", "chunk": chunk}
-                                text_streamed = True
-
-                        elif event_type == "content_block_start":
-                            block = getattr(event, "content_block", None)
-                            if getattr(block, "type", None) == "tool_use":
-                                if text_streamed:
-                                    # Post-think text was streamed before this tool call
-                                    yield {"type": "text_clear"}
-                                    text_streamed = False
-                                accumulated_text = ""
-                                thinking_done = False
-                                skip_leading_nl = False
-
-                    final_response = await stream.get_final_message()
-
+                final_response = state.final_response
                 tool_uses = [b for b in final_response.content if b.type == "tool_use"]
 
                 if not tool_uses:
-                    if thinking_done:
-                        # Thinking model: answer already streamed token-by-token.
-                        answer = accumulated_text.strip() or self._extract_text(
+                    if state.thinking_done:
+                        answer = state.accumulated_text.strip() or self._extract_text(
                             final_response
                         )
                     else:
-                        # Non-thinking model: buffer contains the full answer — emit as
-                        # fast chunks so the UI still renders progressively.
-                        raw = accumulated_text or self._extract_text(final_response)
+                        # Non-thinking model: burst-emit buffer in small chunks.
+                        raw = state.accumulated_text or self._extract_text(final_response)
                         answer = raw.strip()
                         chunk_size = 20
                         for i in range(0, len(answer), chunk_size):
-                            yield {
-                                "type": "text_chunk",
-                                "chunk": answer[i : i + chunk_size],
-                            }
+                            yield {"type": "text_chunk", "chunk": answer[i : i + chunk_size]}
                             await asyncio.sleep(0)
                     messages.append({"role": "assistant", "content": answer})
                     yield {"type": "answer", "text": answer, "history": messages}
                     return
 
-                # Tool-use turn: persist content and execute tools
                 messages.append(
                     {
                         "role": "assistant",
                         "content": self._content_from_response(final_response),
                     }
                 )
-
-                tool_results: list[dict[str, Any]] = []
-                for tu in tool_uses:
-                    ti = dict(tu.input) if isinstance(tu.input, dict) else {}
-                    yield {"type": "tool_use", "tool": tu.name, "input": ti}
-                    result = await asyncio.to_thread(
-                        execute_tool, tu.name, ti, self.bookstack
-                    )
-                    # For get_page, emit the resolved page title so the UI can
-                    # display it instead of the raw numeric ID.
-                    if tu.name == "get_page":
-                        try:
-                            page_data = json.loads(result)
-                            page_title = str(page_data.get("name") or "")
-                            if page_title:
-                                yield {
-                                    "type": "tool_resolve",
-                                    "page_id": ti.get("page_id"),
-                                    "page_title": page_title,
-                                }
-                        except (json.JSONDecodeError, KeyError, ValueError):
-                            pass
-                    tool_results.append(
-                        {"type": "tool_result", "tool_use_id": tu.id, "content": result}
-                    )
-
-                messages.append({"role": "user", "content": tool_results})
+                async for event in self._execute_tool_calls(tool_uses):
+                    yield event
+                messages.append({"role": "user", "content": self._tool_results})
 
             yield {
                 "type": "error",
