@@ -53,6 +53,11 @@ class BookstackQAAgent:
         ``https://proxy.vectorinstitute.ai``) instead of the Anthropic API
         directly. Defaults to ``LLM_BASE_URL`` env var, or the Anthropic API
         if unset.
+    llm_api_key : str, optional
+        Bearer token for the LLM gateway. Required when ``llm_base_url`` is
+        set; ignored otherwise. The gateway expects ``Authorization: Bearer``
+        rather than the Anthropic ``x-api-key`` header. Defaults to
+        ``LLM_API_KEY`` env var.
 
     """
 
@@ -66,20 +71,35 @@ class BookstackQAAgent:
         api_key: str | None = None,
         model: str | None = None,
         llm_base_url: str | None = None,
+        llm_api_key: str | None = None,
     ) -> None:
         """Initialise the agent."""
-        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not resolved_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable not set")
-
         resolved_llm_base_url = llm_base_url or os.environ.get("LLM_BASE_URL")
 
-        self._sync_client = anthropic.Anthropic(
-            api_key=resolved_key, base_url=resolved_llm_base_url
-        )
-        self._async_client = anthropic.AsyncAnthropic(
-            api_key=resolved_key, base_url=resolved_llm_base_url
-        )
+        if resolved_llm_base_url:
+            # Gateway mode: the gateway requires Authorization: Bearer, not x-api-key.
+            # LLM_API_KEY is the gateway-issued bearer token; ANTHROPIC_API_KEY is not used.
+            resolved_llm_api_key = llm_api_key or os.environ.get("LLM_API_KEY")
+            if not resolved_llm_api_key:
+                raise ValueError("LLM_API_KEY must be set when LLM_BASE_URL is configured")
+            self._sync_client = anthropic.Anthropic(
+                api_key=resolved_llm_api_key,
+                base_url=resolved_llm_base_url,
+                default_headers={"Authorization": f"Bearer {resolved_llm_api_key}"},
+            )
+            self._async_client = anthropic.AsyncAnthropic(
+                api_key=resolved_llm_api_key,
+                base_url=resolved_llm_base_url,
+                default_headers={"Authorization": f"Bearer {resolved_llm_api_key}"},
+            )
+        else:
+            # Direct Anthropic mode: standard x-api-key authentication.
+            resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+            if not resolved_key:
+                raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+            self._sync_client = anthropic.Anthropic(api_key=resolved_key)
+            self._async_client = anthropic.AsyncAnthropic(api_key=resolved_key)
+
         self.bookstack = BookStackClient(base_url, token_id, token_secret)
         self.model = model or get_model_name()
 
