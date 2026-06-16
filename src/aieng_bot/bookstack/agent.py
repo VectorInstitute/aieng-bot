@@ -208,21 +208,24 @@ class BookstackQAAgent:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Answer a question, yielding structured SSE events as they occur.
 
-        Uses the Anthropic streaming API so text tokens are forwarded to the
-        client as they are generated.
+        Handles thinking models (e.g. Qwen3) that embed reasoning inside
+        ``</think>`` tags in the regular text stream.  Text before ``</think>``
+        is silently discarded; text after it streams token-by-token.  Models
+        that never emit ``</think>`` (Claude, GPT) have their text buffered
+        and emitted as fast chunks once the response is complete.
 
         Event types (dict with ``type`` key):
 
         - ``{"type": "text_chunk", "chunk": "<text>"}``
-          — incremental text token streamed in real time.
+          — incremental text token (post-think, or burst-emit for non-thinking
+          models).
         - ``{"type": "text_clear"}``
-          — the text streamed so far was reasoning/planning text that preceded
-          a tool call; the UI should discard it.
+          — discard streamed text; only emitted if post-think text was already
+          streamed and a tool call follows.
         - ``{"type": "tool_use", "tool": "<name>", "input": {...}}``
           — emitted before each tool call.
         - ``{"type": "answer", "text": "<markdown>", "history": [...]}``
-          — emitted once at the end confirming the complete answer and updated
-          history. The caller must persist ``history`` for the next turn.
+          — final answer; caller must persist ``history`` for the next turn.
         - ``{"type": "error", "message": "<msg>"}``
 
         Parameters
@@ -238,13 +241,17 @@ class BookstackQAAgent:
             Structured event dictionaries.
 
         """
+        _THINK_END = "</think>"
+
         messages: MessageHistory = list(history or [])
         messages.append({"role": "user", "content": question})
 
         try:
             for _ in range(self.MAX_TURNS):
                 accumulated_text = ""
-                text_streamed = False
+                thinking_done = False      # True once </think> has been seen
+                skip_leading_nl = False    # True briefly after </think> to drop \n\n separators
+                text_streamed = False      # True once any text_chunk was emitted
                 final_response: Any = None
 
                 async with self._async_client.messages.stream(
@@ -263,30 +270,69 @@ class BookstackQAAgent:
                             == "text_delta"
                         ):
                             chunk: str = event.delta.text  # type: ignore[union-attr]
-                            accumulated_text += chunk
-                            yield {"type": "text_chunk", "chunk": chunk}
-                            text_streamed = True
+
+                            if not thinking_done:
+                                # Still inside (or before) the think block — buffer silently.
+                                accumulated_text += chunk
+                                idx = accumulated_text.find(_THINK_END)
+                                if idx >= 0:
+                                    # End of thinking found — switch to real-time streaming.
+                                    thinking_done = True
+                                    skip_leading_nl = True
+                                    post = accumulated_text[
+                                        idx + len(_THINK_END) :
+                                    ].lstrip("\n")
+                                    accumulated_text = post
+                                    if post:
+                                        skip_leading_nl = False
+                                        yield {"type": "text_chunk", "chunk": post}
+                                        text_streamed = True
+                            else:
+                                # Post-think: emit, but drop any leading newline separators
+                                # that arrive as separate chunks right after </think>.
+                                if skip_leading_nl:
+                                    content = chunk.lstrip("\n")
+                                    if not content:
+                                        continue
+                                    skip_leading_nl = False
+                                    chunk = content
+                                accumulated_text += chunk
+                                yield {"type": "text_chunk", "chunk": chunk}
+                                text_streamed = True
 
                         elif event_type == "content_block_start":
                             block = getattr(event, "content_block", None)
-                            if (
-                                getattr(block, "type", None) == "tool_use"
-                                and text_streamed
-                            ):
-                                # Reasoning/planning text preceded this tool call — discard it
-                                yield {"type": "text_clear"}
+                            if getattr(block, "type", None) == "tool_use":
+                                if text_streamed:
+                                    # Post-think text was streamed before this tool call
+                                    yield {"type": "text_clear"}
+                                    text_streamed = False
                                 accumulated_text = ""
-                                text_streamed = False
+                                thinking_done = False
+                                skip_leading_nl = False
 
                     final_response = await stream.get_final_message()
 
                 tool_uses = [b for b in final_response.content if b.type == "tool_use"]
 
                 if not tool_uses:
-                    # Final answer — text was already streamed via text_chunk events.
-                    answer = accumulated_text.strip() or self._extract_text(
-                        final_response
-                    )
+                    if thinking_done:
+                        # Thinking model: answer already streamed token-by-token.
+                        answer = accumulated_text.strip() or self._extract_text(
+                            final_response
+                        )
+                    else:
+                        # Non-thinking model: buffer contains the full answer — emit as
+                        # fast chunks so the UI still renders progressively.
+                        raw = accumulated_text or self._extract_text(final_response)
+                        answer = raw.strip()
+                        chunk_size = 20
+                        for i in range(0, len(answer), chunk_size):
+                            yield {
+                                "type": "text_chunk",
+                                "chunk": answer[i : i + chunk_size],
+                            }
+                            await asyncio.sleep(0)
                     messages.append({"role": "assistant", "content": answer})
                     yield {"type": "answer", "text": answer, "history": messages}
                     return

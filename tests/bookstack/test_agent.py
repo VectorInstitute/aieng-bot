@@ -332,19 +332,19 @@ class TestAskStream:
         assert history[0] == {"role": "user", "content": "Fresh start?"}
 
     @pytest.mark.asyncio
-    async def test_stream_text_clear_emitted_when_text_precedes_tool_call(
+    async def test_stream_thinking_text_buffered_not_emitted_before_tool_call(
         self, agent: BookstackQAAgent
     ) -> None:
-        """text_clear is emitted when reasoning text appears before a tool call."""
-        # Turn 1: reasoning text streamed, then a tool_use block starts
-        text_event = _make_text_delta_event("Let me search for that.")
+        """Text before </think> is buffered silently — no text_chunk or text_clear emitted."""
+        # Qwen3 pattern: turn 1 has thinking text + </think> + (empty) + tool_use block
+        think_event = _make_text_delta_event("Let me search.\n</think>\n\n")
         tool_start_event = _make_tool_use_block_start_event("search_bookstack")
         tool_final = _make_sync_response(
             [_make_tool_use_block("search_bookstack", "tu_1", {"query": "policy"})]
         )
-        ctx1 = _make_stream_ctx([text_event, tool_start_event], tool_final)
+        ctx1 = _make_stream_ctx([think_event, tool_start_event], tool_final)
 
-        # Turn 2: actual answer
+        # Turn 2: actual answer (no thinking)
         answer_final = _make_sync_response([_make_text_block("The policy says…")])
         ctx2 = _make_stream_ctx([], answer_final)
 
@@ -359,11 +359,63 @@ class TestAskStream:
                 events.append(evt)
 
         types = [e["type"] for e in events]
-        # text_chunk from the reasoning text
-        assert types[0] == "text_chunk"
-        # text_clear follows to discard the reasoning text
-        assert "text_clear" in types
-        text_clear_idx = types.index("text_clear")
-        # tool_use comes after text_clear
-        assert "tool_use" in types[text_clear_idx:]
+        # Thinking text must never appear as a text_chunk
+        assert "text_clear" not in types, "no text was streamed so text_clear is unnecessary"
+        assert "tool_use" in types
+        assert types[-1] == "answer"
+
+    @pytest.mark.asyncio
+    async def test_stream_thinking_model_final_answer_streams_post_think(
+        self, agent: BookstackQAAgent
+    ) -> None:
+        """For a thinking model, only text after </think> is emitted as text_chunk."""
+        # </think> splits from thinking; answer follows in real time
+        think_chunk = _make_text_delta_event("Thinking...\n</think>\n\n")
+        answer_chunk = _make_text_delta_event("Paris.")
+        final_msg = _make_sync_response([_make_text_block("Paris.")])
+        ctx = _make_stream_ctx([think_chunk, answer_chunk], final_msg)
+        agent._async_client.messages.stream.return_value = ctx  # type: ignore[attr-defined]
+
+        events = []
+        async for evt in agent.ask_stream("Capital of France?"):
+            events.append(evt)
+
+        types = [e["type"] for e in events]
+        chunks = [e["chunk"] for e in events if e["type"] == "text_chunk"]
+        # Only post-think text should appear
+        assert all("think" not in c.lower() for c in chunks)
+        assert "Paris." in chunks
+        assert types[-1] == "answer"
+        assert events[-1]["text"] == "Paris."
+
+    @pytest.mark.asyncio
+    async def test_stream_text_clear_emitted_when_post_think_text_precedes_tool_call(
+        self, agent: BookstackQAAgent
+    ) -> None:
+        """text_clear fires only when text *after* </think> was already streamed."""
+        # Model generates thinking + </think> + "Let me search." + tool_use
+        think_event  = _make_text_delta_event("Thinking...\n</think>\n\n")
+        bridge_event = _make_text_delta_event("Let me search.")
+        tool_start   = _make_tool_use_block_start_event("search_bookstack")
+        tool_final   = _make_sync_response(
+            [_make_tool_use_block("search_bookstack", "tu_1", {"query": "policy"})]
+        )
+        ctx1 = _make_stream_ctx([think_event, bridge_event, tool_start], tool_final)
+
+        answer_final = _make_sync_response([_make_text_block("The policy says…")])
+        ctx2 = _make_stream_ctx([], answer_final)
+        agent._async_client.messages.stream.side_effect = [ctx1, ctx2]  # type: ignore[attr-defined]
+
+        with patch(
+            "aieng_bot.bookstack.agent.execute_tool",
+            return_value=json.dumps({"data": [], "total": 0}),
+        ):
+            events = []
+            async for evt in agent.ask_stream("What is the leave policy?"):
+                events.append(evt)
+
+        types = [e["type"] for e in events]
+        assert "text_chunk" in types           # "Let me search." was streamed
+        assert "text_clear" in types           # then discarded when tool_use detected
+        assert "tool_use" in types
         assert types[-1] == "answer"
