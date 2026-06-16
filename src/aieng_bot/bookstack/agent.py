@@ -208,17 +208,18 @@ class BookstackQAAgent:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Answer a question, yielding structured SSE events as they occur.
 
-        Uses the Anthropic streaming API so final-answer text tokens are
-        forwarded to the client as they are generated.
+        Uses the Anthropic streaming API so text tokens are forwarded to the
+        client as they are generated.
 
         Event types (dict with ``type`` key):
 
-        - ``{"type": "tool_use", "tool": "<name>", "input": {...}}``
-          — emitted before each tool call (clears any in-progress text in UI).
         - ``{"type": "text_chunk", "chunk": "<text>"}``
-          — incremental text token from the current turn's response.
-          When a ``tool_use`` event follows, the UI should discard these
-          (they were planning/thinking text, not the final answer).
+          — incremental text token streamed in real time.
+        - ``{"type": "text_clear"}``
+          — the text streamed so far was reasoning/planning text that preceded
+          a tool call; the UI should discard it.
+        - ``{"type": "tool_use", "tool": "<name>", "input": {...}}``
+          — emitted before each tool call.
         - ``{"type": "answer", "text": "<markdown>", "history": [...]}``
           — emitted once at the end confirming the complete answer and updated
           history. The caller must persist ``history`` for the next turn.
@@ -243,6 +244,7 @@ class BookstackQAAgent:
         try:
             for _ in range(self.MAX_TURNS):
                 accumulated_text = ""
+                text_streamed = False
                 final_response: Any = None
 
                 async with self._async_client.messages.stream(
@@ -253,33 +255,38 @@ class BookstackQAAgent:
                     messages=cast(list[MessageParam], messages),
                 ) as stream:
                     async for event in stream:
-                        # Accumulate text silently — we only forward it to the
-                        # UI once we know this is a final-answer turn (no tool
-                        # use).  On-prem models like Qwen emit reasoning text
-                        # before tool calls; streaming it and then clearing it
-                        # is not reliable because the gateway may flush all
-                        # text deltas before the tool-use block start event.
+                        event_type = getattr(event, "type", None)
+
                         if (
-                            getattr(event, "type", None) == "content_block_delta"
+                            event_type == "content_block_delta"
                             and getattr(getattr(event, "delta", None), "type", None)
                             == "text_delta"
                         ):
                             chunk: str = event.delta.text  # type: ignore[union-attr]
                             accumulated_text += chunk
+                            yield {"type": "text_chunk", "chunk": chunk}
+                            text_streamed = True
+
+                        elif event_type == "content_block_start":
+                            block = getattr(event, "content_block", None)
+                            if (
+                                getattr(block, "type", None) == "tool_use"
+                                and text_streamed
+                            ):
+                                # Reasoning/planning text preceded this tool call — discard it
+                                yield {"type": "text_clear"}
+                                accumulated_text = ""
+                                text_streamed = False
 
                     final_response = await stream.get_final_message()
 
                 tool_uses = [b for b in final_response.content if b.type == "tool_use"]
 
                 if not tool_uses:
-                    # Final answer — no tool use, so it is safe to surface the
-                    # accumulated text.  Stream it chunk-by-chunk so the UI
-                    # still renders progressively.
+                    # Final answer — text was already streamed via text_chunk events.
                     answer = accumulated_text.strip() or self._extract_text(
                         final_response
                     )
-                    for char in answer:
-                        yield {"type": "text_chunk", "chunk": char}
                     messages.append({"role": "assistant", "content": answer})
                     yield {"type": "answer", "text": answer, "history": messages}
                     return
@@ -295,7 +302,6 @@ class BookstackQAAgent:
                 tool_results: list[dict[str, Any]] = []
                 for tu in tool_uses:
                     ti = dict(tu.input) if isinstance(tu.input, dict) else {}
-                    # Signal UI to clear any in-progress text and show tool status
                     yield {"type": "tool_use", "tool": tu.name, "input": ti}
                     result = await asyncio.to_thread(
                         execute_tool, tu.name, ti, self.bookstack

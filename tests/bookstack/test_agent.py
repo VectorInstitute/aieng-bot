@@ -49,6 +49,18 @@ def _make_text_delta_event(text: str) -> MagicMock:
     return event
 
 
+def _make_tool_use_block_start_event(name: str) -> MagicMock:
+    """Build a fake content_block_start event with a tool_use block."""
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = name
+
+    event = MagicMock()
+    event.type = "content_block_start"
+    event.content_block = block
+    return event
+
+
 def _make_stream_ctx(
     events: list[MagicMock],
     final_message: MagicMock,
@@ -318,3 +330,40 @@ class TestAskStream:
         answer_event = next(e for e in events if e["type"] == "answer")
         history = answer_event["history"]
         assert history[0] == {"role": "user", "content": "Fresh start?"}
+
+    @pytest.mark.asyncio
+    async def test_stream_text_clear_emitted_when_text_precedes_tool_call(
+        self, agent: BookstackQAAgent
+    ) -> None:
+        """text_clear is emitted when reasoning text appears before a tool call."""
+        # Turn 1: reasoning text streamed, then a tool_use block starts
+        text_event = _make_text_delta_event("Let me search for that.")
+        tool_start_event = _make_tool_use_block_start_event("search_bookstack")
+        tool_final = _make_sync_response(
+            [_make_tool_use_block("search_bookstack", "tu_1", {"query": "policy"})]
+        )
+        ctx1 = _make_stream_ctx([text_event, tool_start_event], tool_final)
+
+        # Turn 2: actual answer
+        answer_final = _make_sync_response([_make_text_block("The policy says…")])
+        ctx2 = _make_stream_ctx([], answer_final)
+
+        agent._async_client.messages.stream.side_effect = [ctx1, ctx2]  # type: ignore[attr-defined]
+
+        with patch(
+            "aieng_bot.bookstack.agent.execute_tool",
+            return_value=json.dumps({"data": [], "total": 0}),
+        ):
+            events = []
+            async for evt in agent.ask_stream("What is the leave policy?"):
+                events.append(evt)
+
+        types = [e["type"] for e in events]
+        # text_chunk from the reasoning text
+        assert types[0] == "text_chunk"
+        # text_clear follows to discard the reasoning text
+        assert "text_clear" in types
+        text_clear_idx = types.index("text_clear")
+        # tool_use comes after text_clear
+        assert "tool_use" in types[text_clear_idx:]
+        assert types[-1] == "answer"
