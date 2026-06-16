@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next'
 
+// CSP is set dynamically per-request (with a nonce) in middleware.ts.
+// Only static headers that don't need a per-request value live here.
 const securityHeaders = [
   {
     key: 'Strict-Transport-Security',
@@ -20,24 +22,6 @@ const securityHeaders = [
   {
     key: 'Permissions-Policy',
     value: 'camera=(), microphone=(), geolocation=(), payment=()',
-  },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      // Next.js App Router requires unsafe-inline for hydration scripts
-      "script-src 'self' 'unsafe-inline'",
-      // Tailwind utilities and react-syntax-highlighter inject inline styles
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data:",
-      "font-src 'self'",
-      // All API/SSE calls are same-origin (/aieng-bot/api/*)
-      "connect-src 'self'",
-      "frame-ancestors 'self'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join('; '),
   },
 ]
 
