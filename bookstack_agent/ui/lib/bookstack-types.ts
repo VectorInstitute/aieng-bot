@@ -54,6 +54,7 @@ export interface BookstackMetrics {
   error_queries: number
   success_rate: number
   unique_sessions: number
+  unique_users: number
   avg_duration_seconds: number
   avg_tool_calls_per_query: number
   total_tool_calls: number
