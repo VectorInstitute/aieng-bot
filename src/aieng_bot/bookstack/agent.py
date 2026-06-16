@@ -252,7 +252,9 @@ class BookstackQAAgent:
                         if idx >= 0:
                             state.thinking_done = True
                             skip_leading_nl = True
-                            post = state.accumulated_text[idx + len(_THINK_END) :].lstrip("\n")
+                            post = state.accumulated_text[
+                                idx + len(_THINK_END) :
+                            ].lstrip("\n")
                             state.accumulated_text = post
                             if post:
                                 skip_leading_nl = False
@@ -369,11 +371,16 @@ class BookstackQAAgent:
                         )
                     else:
                         # Non-thinking model: burst-emit buffer in small chunks.
-                        raw = state.accumulated_text or self._extract_text(final_response)
+                        raw = state.accumulated_text or self._extract_text(
+                            final_response
+                        )
                         answer = raw.strip()
                         chunk_size = 20
                         for i in range(0, len(answer), chunk_size):
-                            yield {"type": "text_chunk", "chunk": answer[i : i + chunk_size]}
+                            yield {
+                                "type": "text_chunk",
+                                "chunk": answer[i : i + chunk_size],
+                            }
                             await asyncio.sleep(0)
                     messages.append({"role": "assistant", "content": answer})
                     yield {"type": "answer", "text": answer, "history": messages}
