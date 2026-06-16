@@ -81,7 +81,9 @@ class BookstackQAAgent:
             # LLM_API_KEY is the gateway-issued bearer token; ANTHROPIC_API_KEY is not used.
             resolved_llm_api_key = llm_api_key or os.environ.get("LLM_API_KEY")
             if not resolved_llm_api_key:
-                raise ValueError("LLM_API_KEY must be set when LLM_BASE_URL is configured")
+                raise ValueError(
+                    "LLM_API_KEY must be set when LLM_BASE_URL is configured"
+                )
             self._sync_client = anthropic.Anthropic(
                 api_key=resolved_llm_api_key,
                 base_url=resolved_llm_base_url,
