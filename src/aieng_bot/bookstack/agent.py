@@ -244,11 +244,6 @@ class BookstackQAAgent:
             for _ in range(self.MAX_TURNS):
                 accumulated_text = ""
                 final_response: Any = None
-                # Set to True the moment a tool_use content block starts so we
-                # can immediately clear the UI and stop forwarding text chunks.
-                # On-prem models (e.g. Qwen) emit reasoning text before tool
-                # calls; we must not show that transient text to the user.
-                tool_use_started = False
 
                 async with self._async_client.messages.stream(
                     model=self.model,
@@ -258,39 +253,33 @@ class BookstackQAAgent:
                     messages=cast(list[MessageParam], messages),
                 ) as stream:
                     async for event in stream:
-                        event_type = getattr(event, "type", None)
-
-                        if event_type == "content_block_start":
-                            block = getattr(event, "content_block", None)
-                            if (
-                                getattr(block, "type", None) == "tool_use"
-                                and not tool_use_started
-                            ):
-                                tool_use_started = True
-                                # Immediately tell the UI to discard any text
-                                # it has already rendered for this turn.
-                                if accumulated_text:
-                                    yield {"type": "text_clear"}
-
-                        elif (
-                            not tool_use_started
-                            and event_type == "content_block_delta"
+                        # Accumulate text silently — we only forward it to the
+                        # UI once we know this is a final-answer turn (no tool
+                        # use).  On-prem models like Qwen emit reasoning text
+                        # before tool calls; streaming it and then clearing it
+                        # is not reliable because the gateway may flush all
+                        # text deltas before the tool-use block start event.
+                        if (
+                            getattr(event, "type", None) == "content_block_delta"
                             and getattr(getattr(event, "delta", None), "type", None)
                             == "text_delta"
                         ):
                             chunk: str = event.delta.text  # type: ignore[union-attr]
                             accumulated_text += chunk
-                            yield {"type": "text_chunk", "chunk": chunk}
 
                     final_response = await stream.get_final_message()
 
                 tool_uses = [b for b in final_response.content if b.type == "tool_use"]
 
                 if not tool_uses:
-                    # Final answer — text was already streamed chunk-by-chunk above
+                    # Final answer — no tool use, so it is safe to surface the
+                    # accumulated text.  Stream it chunk-by-chunk so the UI
+                    # still renders progressively.
                     answer = accumulated_text.strip() or self._extract_text(
                         final_response
                     )
+                    for char in answer:
+                        yield {"type": "text_chunk", "chunk": char}
                     messages.append({"role": "assistant", "content": answer})
                     yield {"type": "answer", "text": answer, "history": messages}
                     return

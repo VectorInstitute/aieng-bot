@@ -34,11 +34,11 @@ export default function LoginPage() {
         {/* Identity */}
         <div className="flex flex-col items-center gap-3">
           <div className="flex flex-col items-center gap-1.5">
-            <pre className="font-mono text-base leading-6 select-none text-slate-400" aria-hidden="true">{
-`  ◦   ◦
- ┌─────┐
- │ ◉ ◉ │
- └──‿──┘`
+            <pre className="font-mono text-base leading-6 select-none text-slate-400 text-center" aria-hidden="true">{
+`◦     ◦
+┌─────┐
+│ ◉ ◉ │
+└──‿──┘`
             }</pre>
             <div className="w-12 h-12 rounded-2xl bg-vector-gradient flex items-center justify-center shadow-lg shadow-vector-violet/20">
               <BookOpen className="w-6 h-6 text-white" />
