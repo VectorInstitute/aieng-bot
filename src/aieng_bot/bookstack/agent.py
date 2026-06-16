@@ -249,9 +249,11 @@ class BookstackQAAgent:
         try:
             for _ in range(self.MAX_TURNS):
                 accumulated_text = ""
-                thinking_done = False      # True once </think> has been seen
-                skip_leading_nl = False    # True briefly after </think> to drop \n\n separators
-                text_streamed = False      # True once any text_chunk was emitted
+                thinking_done = False  # True once </think> has been seen
+                skip_leading_nl = (
+                    False  # True briefly after </think> to drop \n\n separators
+                )
+                text_streamed = False  # True once any text_chunk was emitted
                 final_response: Any = None
 
                 async with self._async_client.messages.stream(

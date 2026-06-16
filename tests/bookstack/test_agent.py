@@ -360,7 +360,9 @@ class TestAskStream:
 
         types = [e["type"] for e in events]
         # Thinking text must never appear as a text_chunk
-        assert "text_clear" not in types, "no text was streamed so text_clear is unnecessary"
+        assert "text_clear" not in types, (
+            "no text was streamed so text_clear is unnecessary"
+        )
         assert "tool_use" in types
         assert types[-1] == "answer"
 
@@ -394,10 +396,10 @@ class TestAskStream:
     ) -> None:
         """text_clear fires only when text *after* </think> was already streamed."""
         # Model generates thinking + </think> + "Let me search." + tool_use
-        think_event  = _make_text_delta_event("Thinking...\n</think>\n\n")
+        think_event = _make_text_delta_event("Thinking...\n</think>\n\n")
         bridge_event = _make_text_delta_event("Let me search.")
-        tool_start   = _make_tool_use_block_start_event("search_bookstack")
-        tool_final   = _make_sync_response(
+        tool_start = _make_tool_use_block_start_event("search_bookstack")
+        tool_final = _make_sync_response(
             [_make_tool_use_block("search_bookstack", "tu_1", {"query": "policy"})]
         )
         ctx1 = _make_stream_ctx([think_event, bridge_event, tool_start], tool_final)
@@ -415,7 +417,7 @@ class TestAskStream:
                 events.append(evt)
 
         types = [e["type"] for e in events]
-        assert "text_chunk" in types           # "Let me search." was streamed
-        assert "text_clear" in types           # then discarded when tool_use detected
+        assert "text_chunk" in types  # "Let me search." was streamed
+        assert "text_clear" in types  # then discarded when tool_use detected
         assert "tool_use" in types
         assert types[-1] == "answer"
