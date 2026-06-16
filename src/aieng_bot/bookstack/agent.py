@@ -244,8 +244,12 @@ class BookstackQAAgent:
             for _ in range(self.MAX_TURNS):
                 accumulated_text = ""
                 final_response: Any = None
+                # Set to True the moment a tool_use content block starts so we
+                # can immediately clear the UI and stop forwarding text chunks.
+                # On-prem models (e.g. Qwen) emit reasoning text before tool
+                # calls; we must not show that transient text to the user.
+                tool_use_started = False
 
-                # Use the streaming API so text tokens flow to the client immediately
                 async with self._async_client.messages.stream(
                     model=self.model,
                     max_tokens=8192,
@@ -254,9 +258,23 @@ class BookstackQAAgent:
                     messages=cast(list[MessageParam], messages),
                 ) as stream:
                     async for event in stream:
-                        # Yield text tokens as they arrive (only TextDelta has .text)
-                        if (
-                            getattr(event, "type", None) == "content_block_delta"
+                        event_type = getattr(event, "type", None)
+
+                        if event_type == "content_block_start":
+                            block = getattr(event, "content_block", None)
+                            if (
+                                getattr(block, "type", None) == "tool_use"
+                                and not tool_use_started
+                            ):
+                                tool_use_started = True
+                                # Immediately tell the UI to discard any text
+                                # it has already rendered for this turn.
+                                if accumulated_text:
+                                    yield {"type": "text_clear"}
+
+                        elif (
+                            not tool_use_started
+                            and event_type == "content_block_delta"
                             and getattr(getattr(event, "delta", None), "type", None)
                             == "text_delta"
                         ):

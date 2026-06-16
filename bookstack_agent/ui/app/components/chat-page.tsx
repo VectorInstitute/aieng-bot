@@ -220,8 +220,12 @@ export default function ChatPage({ user }: { user: User | null }) {
               setSessionId(event.session_id as string)
               break
 
+            case 'text_clear':
+              // Model emitted reasoning/thinking text before a tool call — discard it
+              patchLast((msg) => ({ ...msg, content: null }))
+              break
+
             case 'tool_use':
-              // Clear any in-progress streamed text (it was planning text, not the answer)
               patchLast((msg) => ({
                 ...msg,
                 content:   null,
