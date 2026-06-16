@@ -45,9 +45,14 @@ class BookstackQAAgent:
     token_secret : str
         BookStack API token secret.
     api_key : str, optional
-        Anthropic API key. Defaults to ``ANTHROPIC_API_KEY`` env var.
+        API key for the LLM backend. Defaults to ``ANTHROPIC_API_KEY`` env var.
     model : str, optional
-        Claude model name. Defaults to :func:`~aieng_bot.config.get_model_name`.
+        Model name. Defaults to :func:`~aieng_bot.config.get_model_name`.
+    llm_base_url : str, optional
+        Base URL for the LLM backend. Set to point at a gateway (e.g.
+        ``https://proxy.vectorinstitute.ai``) instead of the Anthropic API
+        directly. Defaults to ``LLM_BASE_URL`` env var, or the Anthropic API
+        if unset.
 
     """
 
@@ -60,14 +65,21 @@ class BookstackQAAgent:
         token_secret: str,
         api_key: str | None = None,
         model: str | None = None,
+        llm_base_url: str | None = None,
     ) -> None:
         """Initialise the agent."""
         resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not resolved_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
 
-        self._sync_client = anthropic.Anthropic(api_key=resolved_key)
-        self._async_client = anthropic.AsyncAnthropic(api_key=resolved_key)
+        resolved_llm_base_url = llm_base_url or os.environ.get("LLM_BASE_URL")
+
+        self._sync_client = anthropic.Anthropic(
+            api_key=resolved_key, base_url=resolved_llm_base_url
+        )
+        self._async_client = anthropic.AsyncAnthropic(
+            api_key=resolved_key, base_url=resolved_llm_base_url
+        )
         self.bookstack = BookStackClient(base_url, token_id, token_secret)
         self.model = model or get_model_name()
 
