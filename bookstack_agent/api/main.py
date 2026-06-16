@@ -77,6 +77,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         ),
         token_id=os.environ["BOOKSTACK_TOKEN_ID"],
         token_secret=os.environ["BOOKSTACK_TOKEN_SECRET"],
+        llm_base_url=os.environ.get("LLM_BASE_URL"),
     )
 
     # OrderedDict preserves insertion order for LRU-style eviction
@@ -116,7 +117,7 @@ app.add_middleware(
 
 def get_agent() -> BookstackQAAgent:
     """Return the shared BookstackQAAgent."""
-    agent: BookstackQAAgent = app.state.agent
+    agent: BookstackQAAgent | None = getattr(app.state, "agent", None)
     if agent is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
     return agent
