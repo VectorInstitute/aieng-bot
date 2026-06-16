@@ -73,12 +73,13 @@ class BookstackQAAgent:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
 
         resolved_llm_base_url = llm_base_url or os.environ.get("LLM_BASE_URL")
-        client_kwargs: dict[str, str] = {"api_key": resolved_key}
-        if resolved_llm_base_url:
-            client_kwargs["base_url"] = resolved_llm_base_url
 
-        self._sync_client = anthropic.Anthropic(**client_kwargs)
-        self._async_client = anthropic.AsyncAnthropic(**client_kwargs)
+        self._sync_client = anthropic.Anthropic(
+            api_key=resolved_key, base_url=resolved_llm_base_url
+        )
+        self._async_client = anthropic.AsyncAnthropic(
+            api_key=resolved_key, base_url=resolved_llm_base_url
+        )
         self.bookstack = BookStackClient(base_url, token_id, token_secret)
         self.model = model or get_model_name()
 
