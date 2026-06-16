@@ -61,9 +61,11 @@ MAX_SESSIONS = 500  # prune oldest sessions beyond this limit
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Create the BookstackQAAgent and session store at startup."""
+    llm_base_url = os.environ.get("LLM_BASE_URL")
+    llm_key_var = "LLM_API_KEY" if llm_base_url else "ANTHROPIC_API_KEY"
     missing = [
         v
-        for v in ("ANTHROPIC_API_KEY", "BOOKSTACK_TOKEN_ID", "BOOKSTACK_TOKEN_SECRET")
+        for v in (llm_key_var, "BOOKSTACK_TOKEN_ID", "BOOKSTACK_TOKEN_SECRET")
         if not os.environ.get(v)
     ]
     if missing:
@@ -77,7 +79,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         ),
         token_id=os.environ["BOOKSTACK_TOKEN_ID"],
         token_secret=os.environ["BOOKSTACK_TOKEN_SECRET"],
-        llm_base_url=os.environ.get("LLM_BASE_URL"),
+        llm_base_url=llm_base_url,
     )
 
     # OrderedDict preserves insertion order for LRU-style eviction
