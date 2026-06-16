@@ -269,7 +269,10 @@ class BookstackQAAgent:
 
                         elif event_type == "content_block_start":
                             block = getattr(event, "content_block", None)
-                            if getattr(block, "type", None) == "tool_use" and text_streamed:
+                            if (
+                                getattr(block, "type", None) == "tool_use"
+                                and text_streamed
+                            ):
                                 # Reasoning/planning text preceded this tool call — discard it
                                 yield {"type": "text_clear"}
                                 accumulated_text = ""
