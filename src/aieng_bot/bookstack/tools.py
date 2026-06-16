@@ -94,16 +94,11 @@ def execute_tool(name: str, tool_input: dict[str, Any], client: BookStackClient)
         if name == "get_page":
             page_id = int(tool_input["page_id"])
             raw = client.get_page(page_id)
-            # Return only the fields useful for answering — omits large HTML body
             return json.dumps(
                 {
-                    "id": raw.get("id"),
                     "name": raw.get("name"),
-                    "book_id": raw.get("book_id"),
-                    "chapter_id": raw.get("chapter_id"),
                     "markdown": raw.get("markdown", ""),
                     "url": raw.get("url", ""),
-                    "updated_at": raw.get("updated_at"),
                 },
                 indent=2,
             )

@@ -131,6 +131,37 @@ export default function ChatPage({ user }: { user: User | null }) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
 
+  // RAF-based text buffering: text_chunk events are accumulated here and
+  // flushed to React state once per animation frame. If text_clear arrives
+  // before the RAF fires, the buffer is discarded silently — no flicker.
+  const pendingTextRef = useRef<string>('')
+  const flushRafRef    = useRef<number | null>(null)
+
+  function schedulePendingFlush() {
+    if (flushRafRef.current !== null) return
+    flushRafRef.current = requestAnimationFrame(() => {
+      flushRafRef.current = null
+      if (pendingTextRef.current === '') return
+      const text = pendingTextRef.current
+      pendingTextRef.current = ''
+      patchLast((msg) => ({ ...msg, content: (msg.content ?? '') + text }))
+    })
+  }
+
+  function cancelPendingFlush() {
+    if (flushRafRef.current !== null) {
+      cancelAnimationFrame(flushRafRef.current)
+      flushRafRef.current = null
+    }
+    pendingTextRef.current = ''
+  }
+
+  useEffect(() => {
+    return () => {
+      if (flushRafRef.current !== null) cancelAnimationFrame(flushRafRef.current)
+    }
+  }, [])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -220,8 +251,17 @@ export default function ChatPage({ user }: { user: User | null }) {
               setSessionId(event.session_id as string)
               break
 
+            case 'text_chunk':
+              // Buffer in a ref; RAF flushes to state once per frame.
+              // If text_clear fires before the RAF, text is discarded with no flicker.
+              pendingTextRef.current += event.chunk as string
+              schedulePendingFlush()
+              break
+
             case 'text_clear':
-              // Model emitted reasoning/thinking text before a tool call — discard it
+              // Reasoning text preceded a tool call — discard buffer and clear any
+              // text that already made it into state before the RAF could be cancelled.
+              cancelPendingFlush()
               patchLast((msg) => ({ ...msg, content: null }))
               break
 
@@ -233,14 +273,6 @@ export default function ChatPage({ user }: { user: User | null }) {
                   ...msg.toolSteps,
                   { tool: event.tool as ToolStep['tool'], input: event.input as Record<string, unknown> },
                 ],
-              }))
-              break
-
-            case 'text_chunk':
-              // Append streaming text character-by-character
-              patchLast((msg) => ({
-                ...msg,
-                content: (msg.content ?? '') + (event.chunk as string),
               }))
               break
 
@@ -257,7 +289,9 @@ export default function ChatPage({ user }: { user: User | null }) {
               break
 
             case 'answer':
-              // Finalise: replace with authoritative complete text, stop cursor
+              // Finalise: commit the authoritative complete text, stop streaming cursor.
+              // Cancel any pending RAF first so a stale flush doesn't overwrite this.
+              cancelPendingFlush()
               patchLast((msg) => ({
                 ...msg,
                 content:   event.text as string,
@@ -266,6 +300,7 @@ export default function ChatPage({ user }: { user: User | null }) {
               break
 
             case 'error':
+              cancelPendingFlush()
               patchLast((msg) => ({
                 ...msg,
                 content:   `⚠️ ${event.message as string}`,
@@ -276,13 +311,20 @@ export default function ChatPage({ user }: { user: User | null }) {
         }
       }
     } catch (err) {
+      cancelPendingFlush()
       patchLast((msg) => ({
         ...msg,
         content:   `⚠️ Could not reach the agent: ${err}`,
         streaming: false,
       }))
     } finally {
-      // Ensure streaming flag is cleared even on unexpected stream end
+      // Flush any remaining buffered text, then clear the RAF.
+      if (pendingTextRef.current) {
+        const text = pendingTextRef.current
+        pendingTextRef.current = ''
+        patchLast((msg) => ({ ...msg, content: (msg.content ?? '') + text }))
+      }
+      cancelPendingFlush()
       patchLast((msg) => (msg.streaming ? { ...msg, streaming: false } : msg))
       setLoading(false)
       inputRef.current?.focus()
