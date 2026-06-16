@@ -33,14 +33,16 @@ export default function LoginPage() {
       <div className="w-full max-w-sm flex flex-col items-center gap-8 animate-fade-in">
         {/* Identity */}
         <div className="flex flex-col items-center gap-3">
-          <pre className="font-mono text-base leading-6 select-none text-slate-400" aria-hidden="true">{
+          <div className="flex flex-col items-center gap-1.5">
+            <pre className="font-mono text-base leading-6 select-none text-slate-400" aria-hidden="true">{
 `  ◦   ◦
  ┌─────┐
  │ ◉ ◉ │
  └──‿──┘`
-          }</pre>
-          <div className="w-12 h-12 rounded-2xl bg-vector-gradient flex items-center justify-center shadow-lg shadow-vector-violet/20">
-            <BookOpen className="w-6 h-6 text-white" />
+            }</pre>
+            <div className="w-12 h-12 rounded-2xl bg-vector-gradient flex items-center justify-center shadow-lg shadow-vector-violet/20">
+              <BookOpen className="w-6 h-6 text-white" />
+            </div>
           </div>
           <div className="text-center">
             <p className="text-[11px] font-mono tracking-widest text-slate-500 uppercase mb-1">
