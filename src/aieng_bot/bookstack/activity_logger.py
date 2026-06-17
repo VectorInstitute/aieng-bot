@@ -18,8 +18,8 @@ try:
 
     _GCS_AVAILABLE = True
 except ImportError:
-    _PreconditionFailed = _NeverRaisedError  # type: ignore[assignment,misc]
-    _gcs_storage = None  # type: ignore[assignment]
+    _PreconditionFailed = _NeverRaisedError
+    _gcs_storage = None
     _GCS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
