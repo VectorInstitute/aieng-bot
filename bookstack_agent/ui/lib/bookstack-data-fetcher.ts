@@ -62,6 +62,7 @@ export function computeBookstackMetrics(log: BookstackActivityLog): BookstackMet
   const errors = activities.filter(a => a.status === 'error').length
 
   const sessions = new Set(activities.map(a => a.session_id))
+  const users = new Set(activities.map(a => a.user_email).filter(Boolean))
 
   const durations = activities.map(a => a.duration_seconds).filter(d => d > 0)
   const avgDuration = durations.length > 0
@@ -103,6 +104,7 @@ export function computeBookstackMetrics(log: BookstackActivityLog): BookstackMet
     error_queries: errors,
     success_rate: total > 0 ? successful / total : 0,
     unique_sessions: sessions.size,
+    unique_users: users.size,
     avg_duration_seconds: avgDuration,
     avg_tool_calls_per_query: avgToolCalls,
     total_tool_calls: totalToolCalls,
