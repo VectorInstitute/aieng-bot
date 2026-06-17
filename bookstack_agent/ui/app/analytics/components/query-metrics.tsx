@@ -56,9 +56,9 @@ export default function QueryMetrics({ metrics }: QueryMetricsProps) {
           accent="from-vector-violet to-vector-cobalt"
         />
         <MetricCard
-          label="Unique Sessions"
-          value={metrics.unique_sessions.toLocaleString()}
-          sub="distinct conversations"
+          label="Unique Users"
+          value={metrics.unique_users.toLocaleString()}
+          sub="distinct users"
           icon={<Users className="w-4 h-4 text-white" />}
           accent="from-vector-cobalt to-vector-violet"
         />
