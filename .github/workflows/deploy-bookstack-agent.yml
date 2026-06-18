@@ -93,7 +93,7 @@ jobs:
             --min-instances=1 \
             --concurrency=80 \
             --port=8080 \
-            --set-env-vars="LLM_API_KEY=${{ secrets.ANTHROPIC_API_KEY }},LLM_BASE_URL=${{ secrets.LLM_BASE_URL }},CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL }},BOOKSTACK_URL=https://bookstack.vectorinstitute.ai,BOOKSTACK_TOKEN_ID=${{ secrets.BOOKSTACK_TOKEN_ID }},BOOKSTACK_TOKEN_SECRET=${{ secrets.BOOKSTACK_TOKEN_SECRET }}" \
+            --set-env-vars="ANTHROPIC_API_KEY=${{ secrets.BOOKSTACK_API_KEY }},LLM_BASE_URL=${{ secrets.LLM_BASE_URL }},CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL }},BOOKSTACK_URL=https://bookstack.vectorinstitute.ai,BOOKSTACK_TOKEN_ID=${{ secrets.BOOKSTACK_TOKEN_ID }},BOOKSTACK_TOKEN_SECRET=${{ secrets.BOOKSTACK_TOKEN_SECRET }}" \
             --update-labels="deployed-by=github-actions,commit=${{ github.sha }},service=${{ env.SERVICE_NAME }}" \
             --quiet
 
