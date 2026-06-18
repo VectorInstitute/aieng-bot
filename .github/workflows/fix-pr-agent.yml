@@ -31,6 +31,13 @@ jobs:
       - name: Validate target repository
         run: |
           TARGET_REPO="${{ github.event.inputs.target_repo }}"
+          TARGET_ORG="${TARGET_REPO%%/*}"
+
+          # Only allow VectorInstitute org repositories
+          if [ "$TARGET_ORG" != "VectorInstitute" ]; then
+            echo "ERROR: Only VectorInstitute organization repositories are allowed (got: $TARGET_REPO)"
+            exit 1
+          fi
 
           # Prevent the bot from modifying its own repository
           if [ "$TARGET_REPO" = "VectorInstitute/aieng-bot" ]; then
@@ -41,7 +48,7 @@ jobs:
           echo "Target repository validated: $TARGET_REPO"
 
       - name: Checkout bot repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # actions/checkout@v6
         with:
           path: bot-repo
 
@@ -63,6 +70,13 @@ jobs:
           PR_AUTHOR=$(echo "$PR_INFO" | jq -r '.author.login')
           MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
 
+          # Only fix PRs authored by known bots
+          ALLOWED_AUTHORS="app/dependabot pre-commit-ci[bot]"
+          if ! echo "$ALLOWED_AUTHORS" | grep -qw "$PR_AUTHOR"; then
+            echo "ERROR: PR author '$PR_AUTHOR' is not in the allowed list: $ALLOWED_AUTHORS"
+            exit 1
+          fi
+
           echo "head-ref=$HEAD_REF" >> $GITHUB_OUTPUT
           echo "base-ref=$BASE_REF" >> $GITHUB_OUTPUT
           echo "pr-title=$PR_TITLE" >> $GITHUB_OUTPUT
@@ -75,7 +89,7 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Checkout target repository PR branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # actions/checkout@v6
         with:
           repository: ${{ github.event.inputs.target_repo }}
           ref: refs/pull/${{ github.event.inputs.pr_number }}/head
@@ -109,7 +123,7 @@ jobs:
         continue-on-error: true
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # actions/setup-python@v6
         with:
           python-version-file: bot-repo/.python-version
 
@@ -129,14 +143,14 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         continue-on-error: true
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # google-github-actions/setup-gcloud@v3
         continue-on-error: true
 
       - name: Run fix loop
@@ -228,7 +242,7 @@ jobs:
 
       - name: Upload trace as GitHub artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # actions/upload-artifact@v7
         with:
           name: agent-trace-${{ github.event.inputs.pr_number }}-${{ github.run_id }}
           path: /tmp/agent-execution-trace.json
@@ -236,7 +250,7 @@ jobs:
         continue-on-error: true
 
       - name: Comment on PR - Result
-        if: steps.fix-pr.outcome == 'success'
+        if: steps.fix.outcome == 'success'
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
@@ -265,7 +279,7 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_ACCESS_TOKEN }}
 
       - name: Comment on PR - Failure
-        if: steps.fix-pr.outcome == 'failure'
+        if: steps.fix.outcome == 'failure'
         run: |
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
