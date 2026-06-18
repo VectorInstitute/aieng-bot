@@ -109,7 +109,7 @@ Poll every 30-60 seconds until all checks complete. **Do not proceed until CI fi
 3. Fix the issues (use `/python-conventions` for general guidance; use `/fix-security-failures` for pip-audit/CVE failures)
 4. Commit and go to Step 2:
    ```bash
-   git add -A
+   git add <file1> <file2> ...
    git commit -m "Fix CI failures
 
    Co-authored-by: aieng-bot <aieng-bot@vectorinstitute.ai>"
