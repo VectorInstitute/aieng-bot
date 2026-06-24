@@ -48,7 +48,7 @@ jobs:
           fi
 
           PRS_TO_FIX="[]"
-          BOT_AUTHORS=("app/dependabot" "pre-commit-ci[bot]")
+          BOT_AUTHORS=("app/dependabot" "pre-commit-ci[bot]" "app/pre-commit-ci")
 
           for REPO in $REPOS; do
             # Skip the bot repository itself
