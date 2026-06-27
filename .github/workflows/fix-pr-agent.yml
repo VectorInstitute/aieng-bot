@@ -71,7 +71,7 @@ jobs:
           MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
 
           # Only fix PRs authored by known bots
-          ALLOWED_AUTHORS="app/dependabot pre-commit-ci[bot]"
+          ALLOWED_AUTHORS="app/dependabot pre-commit-ci[bot] app/pre-commit-ci"
           if ! echo "$ALLOWED_AUTHORS" | grep -qw "$PR_AUTHOR"; then
             echo "ERROR: PR author '$PR_AUTHOR' is not in the allowed list: $ALLOWED_AUTHORS"
             exit 1
