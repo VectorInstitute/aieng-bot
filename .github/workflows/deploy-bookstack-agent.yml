@@ -56,12 +56,22 @@ jobs:
 
       - name: Ensure Artifact Registry repository exists
         run: |
-          gcloud artifacts repositories describe ${{ env.REPOSITORY }} \
-            --location=${{ env.GAR_LOCATION }} 2>/dev/null || \
-          gcloud artifacts repositories create ${{ env.REPOSITORY }} \
+          if gcloud artifacts repositories describe ${{ env.REPOSITORY }} \
+            --location=${{ env.GAR_LOCATION }} >/dev/null 2>&1; then
+            echo "✓ Repository exists"
+          elif gcloud artifacts repositories create ${{ env.REPOSITORY }} \
             --repository-format=docker \
             --location=${{ env.GAR_LOCATION }} \
-            --description="Docker repository for Catalog services"
+            --description="Docker repository for Catalog services"; then
+            echo "✓ Repository created"
+          else
+            # Create can fail with ALREADY_EXISTS when the describe call
+            # failed transiently or another deploy workflow created the
+            # repository concurrently — re-check before failing the deploy.
+            gcloud artifacts repositories describe ${{ env.REPOSITORY }} \
+              --location=${{ env.GAR_LOCATION }} >/dev/null
+            echo "✓ Repository exists (created concurrently)"
+          fi
 
       - name: Build and push API image
         id: build
