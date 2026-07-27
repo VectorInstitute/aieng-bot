@@ -61,7 +61,13 @@ class TestTracerMetadata:
 
     def _make_tracer(self, **kwargs):
         return AgentExecutionTracer(
-            pr_info={"repo": "o/r", "number": 1, "title": "t", "author": "a", "url": "u"},
+            pr_info={
+                "repo": "o/r",
+                "number": 1,
+                "title": "t",
+                "author": "a",
+                "url": "u",
+            },
             failure_info={"type": "lint", "checks": ["c"]},
             workflow_run_id="1",
             github_run_url="u",
