@@ -91,9 +91,9 @@ After setup, the bot should:
 - Run daily at 00:00 UTC
 - Scan all VectorInstitute repositories
 - Find open bot PRs (Dependabot and pre-commit-ci)
-- Classify failures using Claude Haiku 4.5
+- Classify failures using Claude
 - Auto-merge PRs with passing checks
-- Fix failing PRs using Claude Sonnet 4.5
+- Fix failing PRs using Claude
 
 ## Configuration
 
@@ -110,9 +110,8 @@ on:
 
 ### Change Claude Model
 
-Set `CLAUDE_MODEL` environment variable to override defaults:
-- Classification: `claude-haiku-4-5-20251001`
-- Fixing: `claude-sonnet-4-5-20250929`
+Set `CLAUDE_MODEL` environment variable to override the default
+(`claude-sonnet-4-6`) used for both classification and fixing.
 
 ### Customize Fix Skills
 

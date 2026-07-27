@@ -83,11 +83,6 @@ export async function GET(request: NextRequest) {
       name: userInfo.name,
       picture: userInfo.picture,
     }
-    session.tokens = {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_at: Date.now() + tokens.expires_in * 1000,
-    }
     await session.save()
 
     // Clean up temporary cookies and redirect

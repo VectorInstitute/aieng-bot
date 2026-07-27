@@ -14,6 +14,7 @@ from anthropic.types import (
     ToolResultBlockParam,
 )
 
+from ..config import get_model_name
 from ..utils.logging import log_error, log_info, log_warning
 from .models import (
     CheckFailure,
@@ -196,7 +197,7 @@ class PRFailureClassifier:
 
         for _turn in range(max_turns):
             response = self.client.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_model_name(),
                 max_tokens=8192,
                 temperature=0.0,
                 tools=[bash_tool],

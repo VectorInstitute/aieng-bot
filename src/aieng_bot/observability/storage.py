@@ -33,7 +33,7 @@ class TraceStorage:
         Creates parent directories if they don't exist.
 
         """
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
 
         with open(filepath, "w") as f:
             json.dump(trace, f, indent=2)

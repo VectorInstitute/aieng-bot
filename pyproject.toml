@@ -89,6 +89,17 @@ bookstack-api = [
 [tool.uv]
 default-groups = ["dev"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["src/aieng_bot"]
+
+[tool.coverage.report]
+show_missing = true
+
 [tool.mypy]
 follow_imports = "normal"
 ignore_missing_imports = false
@@ -117,7 +128,7 @@ module = "bookstack_agent.api.main"
 allow_untyped_decorators = true
 
 [[tool.mypy.overrides]]
-module = "aieng_bot.bookstack.activity_logger"
+module = ["google.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

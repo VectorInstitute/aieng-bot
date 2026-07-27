@@ -14,6 +14,8 @@ on:
       - uv.lock
       - pyproject.toml
       - '**.ipynb'
+      - 'dashboard/**'
+      - 'bookstack_agent/ui/**'
   pull_request:
     branches:
       - main
@@ -24,6 +26,8 @@ on:
       - uv.lock
       - pyproject.toml
       - '**.ipynb'
+      - 'dashboard/**'
+      - 'bookstack_agent/ui/**'
 
 jobs:
   run-code-check:
@@ -48,7 +52,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 'dashboard/package-lock.json'
+          cache-dependency-path: |
+            dashboard/package-lock.json
+            bookstack_agent/ui/package-lock.json
 
       - name: Install the project
         run: uv sync --all-extras --dev
@@ -56,6 +62,11 @@ jobs:
       - name: Install dashboard dependencies
         run: |
           cd dashboard
+          npm ci
+
+      - name: Install bookstack UI dependencies
+        run: |
+          cd bookstack_agent/ui
           npm ci
 
       - name: Install dependencies and check code

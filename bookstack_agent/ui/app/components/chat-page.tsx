@@ -137,6 +137,10 @@ export default function ChatPage({ user }: { user: User | null }) {
   const pendingTextRef = useRef<string>('')
   const flushRafRef    = useRef<number | null>(null)
 
+  // In-flight SSE request; aborted on unmount so the stream doesn't keep
+  // writing to an unmounted tree.
+  const abortRef = useRef<AbortController | null>(null)
+
   function schedulePendingFlush() {
     if (flushRafRef.current !== null) return
     flushRafRef.current = requestAnimationFrame(() => {
@@ -159,6 +163,7 @@ export default function ChatPage({ user }: { user: User | null }) {
   useEffect(() => {
     return () => {
       if (flushRafRef.current !== null) cancelAnimationFrame(flushRafRef.current)
+      abortRef.current?.abort()
     }
   }, [])
 
@@ -180,9 +185,9 @@ export default function ChatPage({ user }: { user: User | null }) {
   }
 
   function clearConversation() {
-    // Optionally DELETE /api/session/:id on the backend
+    // Clear the conversation history on the backend (best-effort)
     if (sessionId) {
-      void fetch(`/aieng-bot/api/session/${sessionId}`, { method: 'DELETE' }).catch(() => null)
+      fetch(`/aieng-bot/api/session/${sessionId}`, { method: 'DELETE' }).catch(() => null)
     }
     setMessages([])
     setSessionId(null)
@@ -217,10 +222,14 @@ export default function ChatPage({ user }: { user: User | null }) {
     ])
 
     try {
+      abortRef.current?.abort()
+      abortRef.current = new AbortController()
+
       const res = await fetch('/aieng-bot/api/ask', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ question: q, session_id: sessionId }),
+        signal:  abortRef.current.signal,
       })
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
@@ -228,8 +237,9 @@ export default function ChatPage({ user }: { user: User | null }) {
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let   buffer  = ''
+      let   streamDone = false
 
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read()
         if (done) break
 
@@ -240,7 +250,10 @@ export default function ChatPage({ user }: { user: User | null }) {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           const raw = line.slice(6).trim()
-          if (raw === '[DONE]') break
+          if (raw === '[DONE]') {
+            streamDone = true
+            break
+          }
 
           let event: Record<string, unknown>
           try { event = JSON.parse(raw) } catch { continue }
@@ -312,11 +325,14 @@ export default function ChatPage({ user }: { user: User | null }) {
       }
     } catch (err) {
       cancelPendingFlush()
-      patchLast((msg) => ({
-        ...msg,
-        content:   `⚠️ Could not reach the agent: ${err}`,
-        streaming: false,
-      }))
+      const aborted = err instanceof DOMException && err.name === 'AbortError'
+      if (!aborted) {
+        patchLast((msg) => ({
+          ...msg,
+          content:   `⚠️ Could not reach the agent: ${err}`,
+          streaming: false,
+        }))
+      }
     } finally {
       // Flush any remaining buffered text, then clear the RAF.
       if (pendingTextRef.current) {

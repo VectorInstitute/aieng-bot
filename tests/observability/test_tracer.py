@@ -1,6 +1,5 @@
 """Tests for agent execution tracer module."""
 
-import os
 import subprocess
 from typing import Any
 from unittest.mock import MagicMock, mock_open, patch
@@ -9,7 +8,6 @@ import pytest
 
 from aieng_bot.observability import (
     AgentExecutionTracer,
-    create_tracer_from_env,
 )
 from aieng_bot.observability.parsers import ResultMessageParser
 
@@ -459,45 +457,6 @@ class TestAgentExecutionTracer:
 
         assert changes_made == 3
         assert files_modified == ["/a/file.py", "/m/file.py", "/z/file.py"]
-
-
-class TestCreateTracerFromEnv:
-    """Test suite for create_tracer_from_env factory function."""
-
-    @patch.dict(
-        os.environ,
-        {
-            "TARGET_REPO": "VectorInstitute/test-repo",
-            "PR_NUMBER": "123",
-            "PR_TITLE": "Fix tests",
-            "PR_AUTHOR": "dependabot[bot]",
-            "PR_URL": "https://github.com/VectorInstitute/test-repo/pull/123",
-            "FAILURE_TYPE": "test",
-            "FAILED_CHECK_NAMES": "pytest,unittest",
-            "FAILURE_LOGS": "Test failed",
-            "GITHUB_RUN_ID": "12345",
-            "GITHUB_SERVER_URL": "https://github.com",
-            "GITHUB_REPOSITORY": "VectorInstitute/aieng-bot",
-        },
-    )
-    def test_create_tracer_from_env(self):
-        """Test creating tracer from environment variables."""
-        tracer = create_tracer_from_env()
-
-        assert tracer.pr_info["repo"] == "VectorInstitute/test-repo"
-        assert tracer.pr_info["number"] == 123
-        assert tracer.failure_info["type"] == "test"
-        assert tracer.failure_info["checks"] == ["pytest", "unittest"]
-        assert tracer.workflow_run_id == "12345"
-        assert "actions/runs/12345" in tracer.github_run_url
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_create_tracer_from_env_defaults(self):
-        """Test creating tracer with missing env vars (uses defaults)."""
-        tracer = create_tracer_from_env()
-
-        assert tracer.pr_info["repo"] == "unknown/repo"
-        assert tracer.pr_info["number"] == 0
 
 
 class TestRefactoredHelperMethods:

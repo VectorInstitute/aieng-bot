@@ -24,11 +24,25 @@ import remarkGfm from 'remark-gfm'
 
 function CopyButton({ code }: { code: string }) {
   const [copied, setCopied] = React.useState(false)
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) clearTimeout(timeoutRef.current)
+    }
+  }, [])
+
   const copy = () => {
-    void navigator.clipboard.writeText(code).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    })
+    navigator.clipboard
+      .writeText(code)
+      .then(() => {
+        setCopied(true)
+        if (timeoutRef.current !== null) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => {
+        // Clipboard access denied (insecure origin / permissions) — ignore
+      })
   }
   return (
     <button

@@ -158,11 +158,6 @@ export interface User {
 
 export interface SessionData {
   isAuthenticated: boolean
-  tokens?: {
-    access_token: string
-    refresh_token?: string
-    expires_at: number
-  }
   user?: User
   // OAuth PKCE flow temporary fields
   state?: string

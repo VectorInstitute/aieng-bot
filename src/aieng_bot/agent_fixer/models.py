@@ -78,61 +78,6 @@ class AgenticLoopRequest:
 
 
 @dataclass
-class AgentFixRequest:
-    """Request for agent to fix a PR failure.
-
-    Attributes
-    ----------
-    repo : str
-        Repository name (owner/repo).
-    pr_number : int
-        Pull request number.
-    pr_title : str
-        Pull request title.
-    pr_author : str
-        Pull request author username.
-    pr_url : str
-        Full URL to the pull request.
-    head_ref : str
-        PR source branch name (e.g., dependabot/uv/pytest-cov-7.0.0).
-    base_ref : str
-        PR target branch name (e.g., main).
-    failure_types : list[str]
-        Types of failure (test, lint, security, build, merge_conflict).
-    failed_check_names : str
-        Comma-separated list of failed check names.
-    failure_logs_file : str
-        Path to file containing failure logs.
-    workflow_run_id : str
-        GitHub Actions workflow run ID.
-    github_run_url : str
-        URL to the GitHub Actions run.
-    cwd : str
-        Working directory where agent should operate.
-
-    """
-
-    repo: str
-    pr_number: int
-    pr_title: str
-    pr_author: str
-    pr_url: str
-    head_ref: str
-    base_ref: str
-    failure_types: list[str]
-    failed_check_names: str
-    failure_logs_file: str
-    workflow_run_id: str
-    github_run_url: str
-    cwd: str
-
-    @property
-    def failure_type(self) -> str:
-        """Return primary failure type for backward compatibility."""
-        return self.failure_types[0] if self.failure_types else "unknown"
-
-
-@dataclass
 class AgentFixResult:
     """Result from agent fix attempt.
 
