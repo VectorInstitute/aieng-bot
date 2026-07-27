@@ -836,7 +836,7 @@
 <p>The bot now monitors all VectorInstitute repositories automatically.</p>
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <p><strong>1. Classification</strong>
-- Analyzes PR and failure logs using Claude Haiku 4.5
+- Analyzes PR and failure logs using Claude
 - Categorizes failure type: test, lint, security, build, or merge conflict
 - Routes to appropriate fix strategy</p>
 <p><strong>2. Fix Loop</strong>
@@ -856,9 +856,9 @@
 - <code>ANTHROPIC_API_KEY</code> - Anthropic API access for Claude
 - <code>ORG_ACCESS_TOKEN</code> - GitHub PAT with org-wide permissions</p>
 <p><strong>Model Configuration</strong>
-- Classification: Claude Haiku 4.5 (<code>claude-haiku-4-5-20251001</code>) - cost-efficient
-- Fixing: Claude Sonnet 4.5 (<code>claude-sonnet-4-5-20250929</code>) - agentic capability
-- Override with <code>CLAUDE_MODEL</code> environment variable</p>
+- Classification: Claude Sonnet 4.6 (<code>claude-sonnet-4-6</code>)
+- Fixing: Claude Sonnet 4.6 (<code>claude-sonnet-4-6</code>) - agentic capability
+- Override with the <code>CLAUDE_MODEL</code> environment variable</p>
 <p><strong>Workflows</strong>
 - <code>discover-and-dispatch.yml</code> - Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs with failures
 - <code>fix-pr-agent.yml</code> - Per-PR agent workflow (6-hour timeout), can be triggered manually for any PR
@@ -911,7 +911,7 @@
 Actions → Select workflow → Run workflow → Enter parameters</p>
 <h2 id="dashboard">Dashboard<a class="headerlink" href="#dashboard" title="Permanent link">&para;</a></h2>
 <p><strong>View comprehensive analytics and agent execution traces:</strong>
-- 📊 <strong><a href="https://platform.vectorinstitute.ai/aieng-bot">Dashboard</a></strong> - Interactive dashboard with:
+- 📊 <strong><a href="https://catalog.vectorinstitute.ai/aieng-bot">Dashboard</a></strong> - Interactive dashboard with:
   - Overview table of all PR fixes
   - Success rates and performance metrics
   - Detailed agent execution traces (like LangSmith/Langfuse)
@@ -928,7 +928,7 @@ Actions → Select workflow → Run workflow → Enter parameters</p>
 - Google OAuth 2.0 sign-in</p>
 <h2 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Permanent link">&para;</a></h2>
 <p><strong>View activity:</strong>
-- <a href="https://platform.vectorinstitute.ai/aieng-bot">Dashboard</a> - Comprehensive analytics and traces
+- <a href="https://catalog.vectorinstitute.ai/aieng-bot">Dashboard</a> - Comprehensive analytics and traces
 - Actions tab - All workflow runs and success/failure rates
 - PR comments - Detailed status updates on each PR
 - Run summary - PR count and actions taken per run</p>

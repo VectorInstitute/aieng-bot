@@ -1166,9 +1166,9 @@ Actions → Select workflow → Run workflow</p>
 - Run daily at 00:00 UTC
 - Scan all VectorInstitute repositories
 - Find open bot PRs (Dependabot and pre-commit-ci)
-- Classify failures using Claude Haiku 4.5
+- Classify failures using Claude
 - Auto-merge PRs with passing checks
-- Fix failing PRs using Claude Sonnet 4.5</p>
+- Fix failing PRs using Claude</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <h3 id="adjust-monitoring-frequency">Adjust Monitoring Frequency<a class="headerlink" href="#adjust-monitoring-frequency" title="Permanent link">&para;</a></h3>
 <p>Edit <code>.github/workflows/discover-and-dispatch.yml</code>:
@@ -1179,9 +1179,8 @@ Actions → Select workflow → Run workflow</p>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="c1"># - cron: &#39;0 */12 * * *&#39; # Every 12 hours</span>
 </span></code></pre></div></p>
 <h3 id="change-claude-model">Change Claude Model<a class="headerlink" href="#change-claude-model" title="Permanent link">&para;</a></h3>
-<p>Set <code>CLAUDE_MODEL</code> environment variable to override defaults:
-- Classification: <code>claude-haiku-4-5-20251001</code>
-- Fixing: <code>claude-sonnet-4-5-20250929</code></p>
+<p>Set <code>CLAUDE_MODEL</code> environment variable to override the default
+(<code>claude-sonnet-4-6</code>) used for both classification and fixing.</p>
 <h3 id="customize-fix-skills">Customize Fix Skills<a class="headerlink" href="#customize-fix-skills" title="Permanent link">&para;</a></h3>
 <p>Edit skill definitions in <code>.claude/skills/</code>:
 - <code>fix-merge-conflicts.md</code>
