@@ -20,7 +20,6 @@ from .observability import (
     ActivityLogger,
     ActivityStatus,
     AgentExecutionTracer,
-    create_tracer_from_env,
 )
 
 __all__ = [
@@ -30,7 +29,6 @@ __all__ = [
     "FailureType",
     "PRContext",
     "AgentExecutionTracer",
-    "create_tracer_from_env",
     "ActivityLogger",
     "ActivityStatus",
     "get_model_name",

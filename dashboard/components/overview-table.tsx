@@ -16,6 +16,11 @@ interface OverviewTableProps {
 
 type SortField = 'timestamp' | 'repo' | 'status' | 'failure_type' | 'fix_time_hours'
 
+// Module-level constants so useTableData's memoized computations keep stable
+// dependency references across renders.
+const SEARCH_FIELDS: (keyof PRSummary)[] = ['repo', 'title', 'author']
+const FILTER_FIELDS: (keyof PRSummary)[] = ['status', 'failure_type']
+
 export default function OverviewTable({ prSummaries }: OverviewTableProps) {
   const {
     data: processedData,
@@ -32,23 +37,25 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
   } = useTableData<PRSummary>(prSummaries, {
     initialSortField: 'timestamp',
     initialSortDirection: 'desc',
-    searchFields: ['repo', 'title', 'author'],
-    filterFields: ['status', 'failure_type'],
+    searchFields: SEARCH_FIELDS,
+    filterFields: FILTER_FIELDS,
   })
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  // Calculate paginated data
-  const { paginatedData, totalPages } = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize
-    const endIndex = startIndex + pageSize
-    const paginated = processedData.slice(startIndex, endIndex)
+  // Calculate paginated data, clamping the page so shrinking data never
+  // strands the user on an empty page
+  const { paginatedData, totalPages, effectivePage } = useMemo(() => {
+    const pages = Math.max(1, Math.ceil(processedData.length / pageSize))
+    const page = Math.min(currentPage, pages)
+    const startIndex = (page - 1) * pageSize
 
     return {
-      paginatedData: paginated,
-      totalPages: Math.ceil(processedData.length / pageSize),
+      paginatedData: processedData.slice(startIndex, startIndex + pageSize),
+      totalPages: pages,
+      effectivePage: page,
     }
   }, [processedData, currentPage, pageSize])
 
@@ -135,8 +142,8 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
 
       {/* Results count */}
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Showing {filteredCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
-        {Math.min(currentPage * pageSize, filteredCount)} of {filteredCount} PRs
+        Showing {filteredCount === 0 ? 0 : (effectivePage - 1) * pageSize + 1}-
+        {Math.min(effectivePage * pageSize, filteredCount)} of {filteredCount} PRs
         {filteredCount < totalCount && ` (filtered from ${totalCount})`}
       </p>
 
@@ -268,20 +275,20 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            Page {currentPage} of {totalPages}
+            Page {effectivePage} of {totalPages}
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
+              disabled={effectivePage === 1}
               className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all"
             >
               First
             </button>
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={effectivePage === 1}
               className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all flex items-center gap-1"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -289,7 +296,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
             </button>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={effectivePage === totalPages}
               className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all flex items-center gap-1"
             >
               Next
@@ -297,7 +304,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
+              disabled={effectivePage === totalPages}
               className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600 rounded-md border border-gray-300 dark:border-gray-600 transition-all"
             >
               Last
@@ -310,7 +317,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
               type="number"
               min={1}
               max={totalPages}
-              value={currentPage}
+              value={effectivePage}
               onChange={(e) => {
                 const page = Number(e.target.value)
                 if (page >= 1 && page <= totalPages) {

@@ -63,19 +63,19 @@ aieng-bot fix --repo owner/repo --pr 123
 - Discovery workflow runs at 00:00 UTC
 - Scans all VectorInstitute repos
 - Finds bot PRs (Dependabot and pre-commit-ci)
-- Classifies failures with Claude Haiku 4.5
+- Classifies failures with Claude
 - Dispatches fix jobs for failing PRs
 - Auto-merges passing PRs
 
 ### First Week
 - Bot handles most bot PRs automatically
 - Team sees reduced manual PR review load
-- Fix success rate becomes visible on [Dashboard](https://platform.vectorinstitute.ai/aieng-bot)
+- Fix success rate becomes visible on [Dashboard](https://catalog.vectorinstitute.ai/aieng-bot)
 
 ## Monitoring
 
 ### Dashboard
-View comprehensive analytics at [platform.vectorinstitute.ai/aieng-bot](https://platform.vectorinstitute.ai/aieng-bot):
+View comprehensive analytics at [catalog.vectorinstitute.ai/aieng-bot](https://catalog.vectorinstitute.ai/aieng-bot):
 - PR status tracking
 - Agent execution traces
 - Success rates and metrics
@@ -138,8 +138,8 @@ Or via GitHub UI: Actions → Select workflow → "..." → Disable workflow
 ## Cost Estimation
 
 ### Claude API
-- Classification: Claude Haiku 4.5 (low cost)
-- Fixing: Claude Sonnet 4.5 (moderate cost)
+- Classification: Claude Sonnet 4.6 (default, override via `CLAUDE_MODEL`)
+- Fixing: Claude Sonnet 4.6 (default, override via `CLAUDE_MODEL`)
 - Estimated: $5-20/month depending on volume
 
 ### GitHub

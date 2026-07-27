@@ -10,11 +10,20 @@ import { getCurrentUser } from '@/lib/session'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request): Promise<Response> {
+  // Require an authenticated session before touching the backend — this
+  // route drives the LLM and must not be callable anonymously.
+  const user = await getCurrentUser()
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const body = await req.json()
 
   // Inject the authenticated user's email so the backend can log it.
-  const user = await getCurrentUser()
-  if (user?.email) {
+  if (user.email) {
     body.user_email = user.email
   }
 

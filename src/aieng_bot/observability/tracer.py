@@ -7,11 +7,11 @@ similar to LangSmith/Langfuse for later analysis and dashboard display.
 
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
+from ..config import get_model_name
 from .classifiers import MessageClassifier
 from .extractors import ContentExtractor, ToolInfoExtractor
 from .parsers import ResultMessageParser
@@ -59,16 +59,29 @@ class AgentExecutionTracer:
 
     """
 
-    # Tool call patterns for parsing
+    # Tool call patterns for parsing. The trailing anchor is required: a lazy
+    # (.+?) followed by only optional tokens would otherwise match a single
+    # character.
     TOOL_PATTERNS = {
-        "Read": r"(?:Reading|Read)\s+(?:file\s+)?[`'\"]?(.+?)[`'\"]?",
-        "Edit": r"(?:Editing|Edit)\s+[`'\"]?(.+?)[`'\"]?",
-        "Bash": r"(?:Running|Execute|Executing)\s+[`'\"]?(.+?)[`'\"]?",
-        "Glob": r"(?:Searching|Search|Finding|Glob)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
-        "Grep": r"(?:Grepping|Grep|Searching)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
+        "Read": r"(?:Reading|Read)\s+(?:file\s+)?[`'\"]?(.+?)[`'\"]?\s*$",
+        "Edit": r"(?:Editing|Edit)\s+[`'\"]?(.+?)[`'\"]?\s*$",
+        "Bash": r"(?:Running|Execute|Executing)\s+[`'\"]?(.+?)[`'\"]?\s*$",
+        "Glob": r"(?:Searching|Search|Finding|Glob)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?\s*$",
+        "Grep": r"(?:Grepping|Grep|Searching)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?\s*$",
         "Skill": r"(?:Launching\s+skill|Skill):\s+([a-zA-Z0-9_-]+)",
-        "WebSearch": r"(?:Searching web|WebSearch|Web search)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?",
+        "WebSearch": r"(?:Searching web|WebSearch|Web search)\s+(?:for\s+)?[`'\"]?(.+?)[`'\"]?\s*$",
     }
+
+    # Default tool list recorded in trace metadata when none is provided
+    DEFAULT_ALLOWED_TOOLS = [
+        "Read",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "Skill",
+        "WebSearch",
+    ]
 
     def __init__(
         self,
@@ -76,6 +89,8 @@ class AgentExecutionTracer:
         failure_info: dict[str, Any],
         workflow_run_id: str,
         github_run_url: str,
+        model: str | None = None,
+        allowed_tools: list[str] | None = None,
     ):
         """Initialize tracer with PR and workflow context.
 
@@ -89,12 +104,19 @@ class AgentExecutionTracer:
             GitHub Actions run ID.
         github_run_url : str
             URL to GitHub Actions run.
+        model : str or None, optional
+            Model identifier recorded in trace metadata. Defaults to the
+            configured model from :func:`aieng_bot.config.get_model_name`.
+        allowed_tools : list[str] or None, optional
+            Tools available to the agent, recorded in trace metadata.
 
         """
         self.pr_info = pr_info
         self.failure_info = failure_info
         self.workflow_run_id = workflow_run_id
         self.github_run_url = github_run_url
+        self.model = model or get_model_name()
+        self.allowed_tools = list(allowed_tools or self.DEFAULT_ALLOWED_TOOLS)
 
         self.trace: dict[str, Any] = self._initialize_trace()
         self.event_sequence = 0
@@ -127,16 +149,8 @@ class AgentExecutionTracer:
                 "start_time": datetime.now(UTC).isoformat(),
                 "end_time": None,
                 "duration_seconds": None,
-                "model": "claude-sonnet-4.5",
-                "tools_allowed": [
-                    "Read",
-                    "Edit",
-                    "Bash",
-                    "Glob",
-                    "Grep",
-                    "Skill",
-                    "WebSearch",
-                ],
+                "model": self.model,
+                "tools_allowed": self.allowed_tools,
                 "metrics": None,
             },
             "events": [],
@@ -222,13 +236,13 @@ class AgentExecutionTracer:
 
             # Extract tool info if applicable
             if msg_class.endswith("ToolUseBlock") or event_type == "TOOL_CALL":
-                self.event_processor._process_tool_use(message, event)
+                self.event_processor.process_tool_use(message, event)
             elif (
                 msg_class.endswith("ToolResultBlock")
                 or event_type == "TOOL_RESULT"
                 or (event_type == "ERROR" and "ToolResultBlock" in str(message))
             ):
-                self.event_processor._process_tool_result(message, event)
+                self.event_processor.process_tool_result(message, event)
                 self.event_processor.link_tool_result_to_call(
                     event, self.trace["events"]
                 )
@@ -371,53 +385,3 @@ class AgentExecutionTracer:
 
         """
         return SummaryGenerator.generate(self.trace, self.failure_info["type"])
-
-
-def create_tracer_from_env() -> AgentExecutionTracer:
-    """Create tracer from environment variables set by GitHub Actions workflow.
-
-    Expected environment variables:
-    - TARGET_REPO: Repository name (owner/repo)
-    - PR_NUMBER: Pull request number
-    - PR_TITLE: Pull request title
-    - PR_AUTHOR: Pull request author
-    - PR_URL: Pull request URL
-    - FAILURE_TYPE: Failure type classification
-    - FAILED_CHECK_NAMES: Comma-separated list of failed check names
-    - FAILURE_LOGS: Truncated failure logs
-    - GITHUB_RUN_ID: GitHub Actions run ID
-    - GITHUB_SERVER_URL: GitHub server URL
-    - GITHUB_REPOSITORY: Repository name for URL construction
-
-    Returns
-    -------
-    AgentExecutionTracer
-        Configured tracer instance ready to capture agent execution.
-
-    """
-    pr_info = {
-        "repo": os.getenv("TARGET_REPO", "unknown/repo"),
-        "number": int(os.getenv("PR_NUMBER", "0")),
-        "title": os.getenv("PR_TITLE", ""),
-        "author": os.getenv("PR_AUTHOR", ""),
-        "url": os.getenv("PR_URL", ""),
-    }
-
-    failure_info = {
-        "type": os.getenv("FAILURE_TYPE", "unknown"),
-        "checks": os.getenv("FAILED_CHECK_NAMES", "").split(","),
-    }
-
-    workflow_run_id = os.getenv("GITHUB_RUN_ID", "unknown")
-    github_run_url = (
-        f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/"
-        f"{os.getenv('GITHUB_REPOSITORY', '')}/"
-        f"actions/runs/{workflow_run_id}"
-    )
-
-    return AgentExecutionTracer(
-        pr_info=pr_info,
-        failure_info=failure_info,
-        workflow_run_id=workflow_run_id,
-        github_run_url=github_run_url,
-    )

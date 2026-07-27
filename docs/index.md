@@ -58,7 +58,7 @@ The bot now monitors all VectorInstitute repositories automatically.
 ## How It Works
 
 **1. Classification**
-- Analyzes PR and failure logs using Claude Haiku 4.5
+- Analyzes PR and failure logs using Claude
 - Categorizes failure type: test, lint, security, build, or merge conflict
 - Routes to appropriate fix strategy
 
@@ -84,9 +84,9 @@ The bot now monitors all VectorInstitute repositories automatically.
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
 **Model Configuration**
-- Classification: Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) - cost-efficient
-- Fixing: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - agentic capability
-- Override with `CLAUDE_MODEL` environment variable
+- Classification: Claude Sonnet 4.6 (`claude-sonnet-4-6`)
+- Fixing: Claude Sonnet 4.6 (`claude-sonnet-4-6`) - agentic capability
+- Override with the `CLAUDE_MODEL` environment variable
 
 **Workflows**
 - `discover-and-dispatch.yml` - Daily scan (00:00 UTC) for Dependabot/pre-commit-ci PRs with failures
@@ -153,7 +153,7 @@ Actions → Select workflow → Run workflow → Enter parameters
 ## Dashboard
 
 **View comprehensive analytics and agent execution traces:**
-- 📊 **[Dashboard](https://platform.vectorinstitute.ai/aieng-bot)** - Interactive dashboard with:
+- 📊 **[Dashboard](https://catalog.vectorinstitute.ai/aieng-bot)** - Interactive dashboard with:
   - Overview table of all PR fixes
   - Success rates and performance metrics
   - Detailed agent execution traces (like LangSmith/Langfuse)
@@ -174,7 +174,7 @@ Actions → Select workflow → Run workflow → Enter parameters
 ## Monitoring
 
 **View activity:**
-- [Dashboard](https://platform.vectorinstitute.ai/aieng-bot) - Comprehensive analytics and traces
+- [Dashboard](https://catalog.vectorinstitute.ai/aieng-bot) - Comprehensive analytics and traces
 - Actions tab - All workflow runs and success/failure rates
 - PR comments - Detailed status updates on each PR
 - Run summary - PR count and actions taken per run
