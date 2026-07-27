@@ -43,7 +43,7 @@ Deployed to GCP Cloud Run via `.github/workflows/deploy-dashboard.yml`:
 gh workflow run deploy-dashboard.yml
 ```
 
-**Production URL**: https://platform.vectorinstitute.ai/aieng-bot
+**Production URL**: https://catalog.vectorinstitute.ai/aieng-bot
 
 ## Architecture
 

@@ -26,12 +26,6 @@ from aieng_bot.utils.logging import (  # noqa: E402
     log_success,
 )
 
-# Initialize the Slack app with bot token and signing secret
-app = App(
-    token=os.environ.get("SLACK_BOT_TOKEN"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
-)
-
 
 def get_version_info() -> dict[str, str]:
     """Get version and metadata information about aieng-bot.
@@ -52,12 +46,13 @@ def get_version_info() -> dict[str, str]:
         "project": "aieng-bot",
         "description": "Vector Institute AI Engineering Bot for Maintenance Tasks",
         "repository": "https://github.com/VectorInstitute/aieng-bot",
-        "dashboard": "https://platform.vectorinstitute.ai/aieng-bot",
+        "dashboard": "https://catalog.vectorinstitute.ai/aieng-bot",
     }
 
 
-@app.command("/aieng-bot")
-def handle_aieng_bot_command(ack: Ack, respond: Respond, command: dict) -> None:
+def handle_aieng_bot_command(
+    ack: Ack, respond: Respond, command: dict[str, Any]
+) -> None:
     """Handle /aieng-bot slash command.
 
     Parameters
@@ -146,8 +141,7 @@ def handle_aieng_bot_command(ack: Ack, respond: Respond, command: dict) -> None:
         )
 
 
-@app.event("app_mention")
-def handle_app_mention(event: dict, say: Say) -> None:
+def handle_app_mention(event: dict[str, Any], say: Say) -> None:
     """Handle app mentions in channels.
 
     Parameters
@@ -160,6 +154,28 @@ def handle_app_mention(event: dict, say: Say) -> None:
     """
     user = event["user"]
     say(f"Hi <@{user}>! Use `/aieng-bot version` to get information about the bot.")
+
+
+def create_app() -> App:
+    """Build the Slack app and register handlers.
+
+    Construction happens lazily (not at import time) so that missing
+    environment variables are reported by ``main`` instead of raising
+    during import.
+
+    Returns
+    -------
+    App
+        Configured slack_bolt application.
+
+    """
+    slack_app = App(
+        token=os.environ.get("SLACK_BOT_TOKEN"),
+        signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
+    )
+    slack_app.command("/aieng-bot")(handle_aieng_bot_command)
+    slack_app.event("app_mention")(handle_app_mention)
+    return slack_app
 
 
 def main() -> None:
@@ -177,7 +193,7 @@ def main() -> None:
 
     try:
         # Start the app using Socket Mode
-        handler = SocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
+        handler = SocketModeHandler(create_app(), os.environ.get("SLACK_APP_TOKEN"))
         log_success("⚡️ AI Engineering Maintenance Bot is running!")
         log_info("Press Ctrl+C to stop")
         handler.start()

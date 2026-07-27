@@ -72,17 +72,17 @@ class EventProcessor:
 
         # Extract tool info based on block class
         if block_class.endswith("ToolUseBlock") or event_type == "TOOL_CALL":
-            self._process_tool_use(block, event)
+            self.process_tool_use(block, event)
         elif (
             block_class.endswith("ToolResultBlock")
             or event_type == "TOOL_RESULT"
             or (event_type == "ERROR" and "ToolResultBlock" in str(block))
         ):
-            self._process_tool_result(block, event)
+            self.process_tool_result(block, event)
 
         return event
 
-    def _process_tool_use(self, block: Any, event: dict[str, Any]) -> None:
+    def process_tool_use(self, block: Any, event: dict[str, Any]) -> None:
         """Process ToolUseBlock and populate event with tool information.
 
         Parameters
@@ -99,7 +99,7 @@ class EventProcessor:
         if tool_info["tool_use_id"]:
             event["tool_use_id"] = tool_info["tool_use_id"]
 
-    def _process_tool_result(self, block: Any, event: dict[str, Any]) -> None:
+    def process_tool_result(self, block: Any, event: dict[str, Any]) -> None:
         """Process ToolResultBlock and link to original tool call.
 
         Parameters

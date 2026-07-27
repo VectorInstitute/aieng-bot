@@ -52,3 +52,4 @@ aieng_bot.egg-info/
 coverage.xml
 classification.json
 *.next
+*.tsbuildinfo

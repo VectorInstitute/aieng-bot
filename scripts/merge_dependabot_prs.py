@@ -59,27 +59,34 @@ class GitHubCLIError(Exception):
     pass
 
 
-def run_gh_command(args: List[str], check: bool = True) -> str:
+def run_gh_command(args: List[str], check: bool = True, timeout: int = 120) -> str:
     """Execute a GitHub CLI command and return the output.
 
     Args:
         args: List of command arguments (without 'gh' prefix)
         check: Whether to raise an exception on non-zero exit code
+        timeout: Maximum seconds to wait before aborting the command
 
     Returns:
         Command output as string
 
     Raises:
-        GitHubCLIError: If command fails and check=True
+        GitHubCLIError: If command fails and check=True, or times out
 
     """
     cmd = ["gh"] + args
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=check)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=check, timeout=timeout
+        )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         error_msg = f"GitHub CLI command failed: {' '.join(cmd)}\nError: {e.stderr}"
         raise GitHubCLIError(error_msg) from e
+    except subprocess.TimeoutExpired as e:
+        raise GitHubCLIError(
+            f"GitHub CLI command timed out after {timeout}s: {' '.join(cmd)}"
+        ) from e
     except FileNotFoundError:
         raise GitHubCLIError(
             "GitHub CLI (gh) not found. Please install it from https://cli.github.com/"

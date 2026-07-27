@@ -18,32 +18,46 @@ class BookStackClient:
         BookStack API token ID.
     token_secret : str
         BookStack API token secret.
+    transport : httpx.BaseTransport, optional
+        Custom transport, primarily for injecting ``httpx.MockTransport``
+        in tests.
 
     """
 
     DEFAULT_TIMEOUT = 30.0
 
-    def __init__(self, base_url: str, token_id: str, token_secret: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token_id: str,
+        token_secret: str,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         """Initialise the client."""
-        self._api_base = base_url.rstrip("/") + "/api"
-        self._headers = {
-            "Authorization": f"Token {token_id}:{token_secret}",
-            "Content-Type": "application/json",
-        }
+        # A single client instance reuses connections across requests
+        # (httpx.Client is thread-safe, so calls may run in worker threads).
+        self._client = httpx.Client(
+            base_url=base_url.rstrip("/") + "/api",
+            headers={
+                "Authorization": f"Token {token_id}:{token_secret}",
+                "Content-Type": "application/json",
+            },
+            timeout=self.DEFAULT_TIMEOUT,
+            transport=transport,
+        )
+
+    def close(self) -> None:
+        """Close the underlying HTTP connection pool."""
+        self._client.close()
 
     def _get(
         self, path: str, params: dict[str, str | int] | None = None
     ) -> dict[str, object]:
         """Issue an authenticated GET and return parsed JSON."""
-        with httpx.Client(timeout=self.DEFAULT_TIMEOUT) as client:
-            response = client.get(
-                f"{self._api_base}{path}",
-                headers=self._headers,
-                params=params,
-            )
-            response.raise_for_status()
-            result: dict[str, object] = response.json()
-            return result
+        response = self._client.get(path, params=params)
+        response.raise_for_status()
+        result: dict[str, object] = response.json()
+        return result
 
     def search(self, query: str, count: int = 10, page: int = 1) -> dict[str, object]:
         """Full-text search across books, chapters, and pages.

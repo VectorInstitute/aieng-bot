@@ -88,21 +88,40 @@ def _check_pr_status(
         check=False,
     )
     if result.returncode == 0:
-        data = json.loads(result.stdout)
-        state = data.get("state", "UNKNOWN")
+        try:
+            data = json.loads(result.stdout)
+            state = data.get("state", "UNKNOWN")
+        except json.JSONDecodeError:
+            log_warning("Could not parse PR state from gh output")
 
-    # Check for failing checks
+    # Check for failing checks using structured output rather than substring
+    # matching (check names may themselves contain the word "fail")
     has_failing_checks = False
     result = subprocess.run(
-        ["gh", "pr", "checks", str(pr_number), "--repo", repo],
+        [
+            "gh",
+            "pr",
+            "checks",
+            str(pr_number),
+            "--repo",
+            repo,
+            "--json",
+            "state",
+        ],
         capture_output=True,
         text=True,
         env=env,
         check=False,
     )
-    # gh pr checks returns exit code 1 if any check failed
-    if result.returncode == 1 or "fail" in result.stdout.lower():
-        has_failing_checks = True
+    try:
+        checks = json.loads(result.stdout) if result.stdout.strip() else []
+        has_failing_checks = any(
+            check.get("state") in {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT"}
+            for check in checks
+        )
+    except json.JSONDecodeError:
+        # Fall back to gh's exit code: 1 means at least one check failed
+        has_failing_checks = result.returncode == 1
 
     return state, has_failing_checks
 
@@ -313,15 +332,19 @@ def _prepare_agent_environment(cwd: str) -> bool:
     shutil.copytree(skills_source, skills_dest, dirs_exist_ok=True)
     log_success("Skills copied successfully")
 
-    # Add bot files to git exclude list (safety net)
+    # Add bot files to git exclude list (safety net); skip if a previous run
+    # already added them so the file does not grow on every invocation
     git_exclude_file = Path(cwd) / ".git" / "info" / "exclude"
+    exclude_marker = "# AI Engineering Bot temporary files - DO NOT COMMIT"
     if git_exclude_file.parent.exists():
-        with open(git_exclude_file, "a") as f:
-            f.write("\n# AI Engineering Bot temporary files - DO NOT COMMIT\n")
-            f.write(".claude/\n")
-            f.write(".pr-context.json\n")
-            f.write(".failure-logs.txt\n")
-        log_success("Bot files added to .git/info/exclude")
+        existing = git_exclude_file.read_text() if git_exclude_file.exists() else ""
+        if exclude_marker not in existing:
+            with open(git_exclude_file, "a") as f:
+                f.write(f"\n{exclude_marker}\n")
+                f.write(".claude/\n")
+                f.write(".pr-context.json\n")
+                f.write(".failure-logs.txt\n")
+            log_success("Bot files added to .git/info/exclude")
 
     return True
 
@@ -353,10 +376,12 @@ def _cleanup_temporary_files(
                 shutil.rmtree(skills_dest)
                 log_success("Removed .claude/ directory")
 
-            pr_context_file = Path(cwd) / ".pr-context.json"
-            if pr_context_file.exists():
-                os.unlink(pr_context_file)
-                log_success("Removed .pr-context.json")
+        # The PR context file is written regardless of whether skills were
+        # copied, so always remove it
+        pr_context_file = Path(cwd) / ".pr-context.json"
+        if pr_context_file.exists():
+            os.unlink(pr_context_file)
+            log_success("Removed .pr-context.json")
     except Exception as e:
         log_warning(f"Error during cleanup: {e}")
 

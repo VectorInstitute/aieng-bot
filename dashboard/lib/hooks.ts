@@ -7,6 +7,10 @@ import { searchFilter, sortBy, getUniqueValues } from './utils'
 
 type SortDirection = 'asc' | 'desc'
 
+// Stable default so memoized computations are not invalidated every render
+// by a fresh [] literal in the destructuring defaults.
+const EMPTY_FIELDS: never[] = []
+
 /**
  * Hook for managing sortable and filterable table data
  */
@@ -22,8 +26,8 @@ export function useTableData<T extends Record<string, unknown>>(
   const {
     initialSortField,
     initialSortDirection = 'desc',
-    searchFields = [],
-    filterFields = [],
+    searchFields = EMPTY_FIELDS,
+    filterFields = EMPTY_FIELDS,
   } = config
 
   const [sortField, setSortField] = useState<keyof T>(initialSortField)

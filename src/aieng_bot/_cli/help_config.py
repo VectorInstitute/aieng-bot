@@ -51,21 +51,6 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--version", "--no-banner", "--help"],
         },
     ],
-    "aieng-bot classify": [
-        {
-            "name": "Required",
-            "options": ["--repo", "--pr"],
-            "panel_styles": {"border_style": VECTOR_MAGENTA},
-        },
-        {
-            "name": "Output Format",
-            "options": ["--json", "--output"],
-        },
-        {
-            "name": "Authentication",
-            "options": ["--github-token", "--anthropic-api-key"],
-        },
-    ],
     "aieng-bot fix": [
         {
             "name": "Required",
@@ -92,7 +77,7 @@ click.rich_click.COMMAND_GROUPS = {
     "aieng-bot": [
         {
             "name": "Commands",
-            "commands": ["classify", "fix"],
+            "commands": ["fix"],
         },
     ],
 }
