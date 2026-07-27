@@ -133,16 +133,21 @@ AgentDep: TypeAlias = Annotated[BookstackQAAgent, Depends(get_agent)]
 # ---------------------------------------------------------------------------
 
 
-def _get_or_create_session(session_id: str | None) -> tuple[str, MessageHistory]:
-    """Return ``(session_id, history)`` — creating a new session if needed."""
+def _ensure_session(session_id: str | None) -> str:
+    """Return a valid session ID, creating a new session if needed.
+
+    Unknown client-supplied IDs are never adopted — a fresh server-generated
+    UUID is issued instead, so clients cannot pre-register arbitrary keys.
+    The history itself must be read under the session lock (see ``ask``).
+    """
     sessions: OrderedDict[str, MessageHistory] = app.state.sessions
 
     if session_id and session_id in sessions:
         # Move to end (most-recently-used)
         sessions.move_to_end(session_id)
-        return session_id, list(sessions[session_id])
+        return session_id
 
-    new_id = session_id or str(uuid.uuid4())
+    new_id = str(uuid.uuid4())
     sessions[new_id] = []
 
     # Evict oldest sessions if over limit
@@ -151,7 +156,7 @@ def _get_or_create_session(session_id: str | None) -> tuple[str, MessageHistory]
         sessions.pop(oldest)
         app.state.session_locks.pop(oldest, None)
 
-    return new_id, []
+    return new_id
 
 
 def _save_session(session_id: str, history: MessageHistory) -> None:
@@ -172,6 +177,17 @@ def _get_session_lock(session_id: str) -> asyncio.Lock:
 # ---------------------------------------------------------------------------
 # Analytics helpers
 # ---------------------------------------------------------------------------
+
+# Strong references to fire-and-forget tasks so they are not garbage-collected
+# before completing (asyncio only keeps weak references to running tasks).
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _spawn_background_task(coro: Any) -> None:
+    """Schedule a fire-and-forget coroutine, keeping a strong reference."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 async def _log_query_bg(
@@ -251,7 +267,7 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
     """
 
     async def event_stream() -> AsyncGenerator[str, None]:
-        sid, history = _get_or_create_session(request.session_id)
+        sid = _ensure_session(request.session_id)
         lock = _get_session_lock(sid)
 
         # Analytics accumulators
@@ -263,8 +279,12 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
         # Emit the session ID immediately so the client can store it
         yield f"data: {json.dumps({'type': 'session', 'session_id': sid})}\n\n"
 
-        # Serialize within the same session; different sessions run concurrently
+        # Serialize within the same session; different sessions run concurrently.
+        # History must be read inside the lock — reading it earlier would let
+        # two concurrent requests snapshot the same pre-state and lose turns.
         async with lock:
+            sessions: OrderedDict[str, MessageHistory] = app.state.sessions
+            history: MessageHistory = list(sessions.get(sid, []))
             updated_history: MessageHistory = history
             async for event in agent.ask_stream(request.question, history=history):
                 event_type = event.get("type")
@@ -311,7 +331,7 @@ async def ask(request: AskRequest, agent: AgentDep) -> StreamingResponse:
         # Fire analytics logging asynchronously — does not block the stream
         duration = time.monotonic() - start_time
         activity_logger: BookstackActivityLogger = app.state.activity_logger
-        asyncio.create_task(
+        _spawn_background_task(
             _log_query_bg(
                 activity_logger=activity_logger,
                 session_id=sid,

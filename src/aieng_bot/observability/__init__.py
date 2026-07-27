@@ -6,7 +6,7 @@ format for later analysis and dashboard display.
 
 Main Components
 ---------------
-- tracer : Main tracer class and factory function
+- tracer : Main tracer class
 - classifiers : Message classification logic
 - extractors : Content extraction from message blocks
 - parsers : ResultMessage parsing utilities
@@ -16,15 +16,13 @@ Main Components
 Public API
 ----------
 - AgentExecutionTracer : Main tracer class
-- create_tracer_from_env : Factory function to create tracer from environment variables
 """
 
 from .activity_logger import ActivityLogger, ActivityStatus
-from .tracer import AgentExecutionTracer, create_tracer_from_env
+from .tracer import AgentExecutionTracer
 
 __all__ = [
     "AgentExecutionTracer",
-    "create_tracer_from_env",
     "ActivityLogger",
     "ActivityStatus",
 ]

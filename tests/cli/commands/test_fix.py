@@ -137,7 +137,7 @@ class TestCheckPRStatus:
 
             check_response = MagicMock()
             check_response.returncode = 0
-            check_response.stdout = "some check\tpass\t..."
+            check_response.stdout = '[{"state": "SUCCESS"}, {"state": "SUCCESS"}]'
 
             mock_run.side_effect = [state_response, check_response]
 
@@ -146,16 +146,54 @@ class TestCheckPRStatus:
             assert state == "OPEN"
             assert has_failures is False
 
-    def test_check_with_fail_in_output(self):
-        """Test that 'fail' in output text triggers has_failing_checks."""
+    def test_check_with_failed_state(self):
+        """Test that a FAILURE check state triggers has_failing_checks."""
         with patch("subprocess.run") as mock_run:
             state_response = MagicMock()
             state_response.returncode = 0
             state_response.stdout = '{"state": "OPEN"}'
 
             check_response = MagicMock()
-            check_response.returncode = 0  # Exit code 0
-            check_response.stdout = "CI\tfailure\tdetails"  # But 'fail' in output
+            check_response.returncode = 1
+            check_response.stdout = '[{"state": "SUCCESS"}, {"state": "FAILURE"}]'
+
+            mock_run.side_effect = [state_response, check_response]
+
+            state, has_failures = _check_pr_status("owner/repo", 123, "token")
+
+            assert state == "OPEN"
+            assert has_failures is True
+
+    def test_check_name_containing_fail_is_not_failure(self):
+        """A passing check whose name contains 'fail' must not count as failing."""
+        with patch("subprocess.run") as mock_run:
+            state_response = MagicMock()
+            state_response.returncode = 0
+            state_response.stdout = '{"state": "OPEN"}'
+
+            check_response = MagicMock()
+            check_response.returncode = 0
+            check_response.stdout = (
+                '[{"name": "test-failure-handling", "state": "SUCCESS"}]'
+            )
+
+            mock_run.side_effect = [state_response, check_response]
+
+            state, has_failures = _check_pr_status("owner/repo", 123, "token")
+
+            assert state == "OPEN"
+            assert has_failures is False
+
+    def test_check_non_json_falls_back_to_exit_code(self):
+        """Unparsable check output falls back to gh's exit code."""
+        with patch("subprocess.run") as mock_run:
+            state_response = MagicMock()
+            state_response.returncode = 0
+            state_response.stdout = '{"state": "OPEN"}'
+
+            check_response = MagicMock()
+            check_response.returncode = 1
+            check_response.stdout = "not json"
 
             mock_run.side_effect = [state_response, check_response]
 

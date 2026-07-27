@@ -255,7 +255,7 @@ jobs:
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
-          DASHBOARD_URL="https://platform.vectorinstitute.ai/aieng-bot"
+          DASHBOARD_URL="https://catalog.vectorinstitute.ai/aieng-bot"
 
           FIX_SUMMARY=""
           if [ -f /tmp/fix-summary.txt ]; then
@@ -284,7 +284,7 @@ jobs:
           REPO="${{ github.event.inputs.target_repo }}"
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           TRACE_URL="${{ steps.upload-trace.outputs.trace_url }}"
-          DASHBOARD_URL="https://platform.vectorinstitute.ai/aieng-bot"
+          DASHBOARD_URL="https://catalog.vectorinstitute.ai/aieng-bot"
 
           cat > /tmp/pr-comment.txt << EOF
           **Automated fix attempt failed**

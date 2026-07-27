@@ -285,13 +285,14 @@ class BookstackQAAgent:
     async def _execute_tool_calls(
         self,
         tool_uses: list[Any],
+        tool_results: list[dict[str, Any]],
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Execute tool calls sequentially; yield ``tool_use`` / ``tool_resolve`` events.
 
-        After iterating, read ``self._tool_results`` for the list of
-        ``tool_result`` dicts to append to the message history.
+        Appends ``tool_result`` dicts to *tool_results* as each call
+        completes. Results are passed via the caller-owned list (rather than
+        instance state) so one shared agent can serve concurrent requests.
         """
-        self._tool_results: list[dict[str, Any]] = []
         for tu in tool_uses:
             ti = dict(tu.input) if isinstance(tu.input, dict) else {}
             yield {"type": "tool_use", "tool": tu.name, "input": ti}
@@ -308,7 +309,7 @@ class BookstackQAAgent:
                         }
                 except (json.JSONDecodeError, KeyError, ValueError):
                     pass
-            self._tool_results.append(
+            tool_results.append(
                 {"type": "tool_result", "tool_use_id": tu.id, "content": result}
             )
 
@@ -392,9 +393,10 @@ class BookstackQAAgent:
                         "content": self._content_from_response(final_response),
                     }
                 )
-                async for event in self._execute_tool_calls(tool_uses):
+                tool_results: list[dict[str, Any]] = []
+                async for event in self._execute_tool_calls(tool_uses, tool_results):
                     yield event
-                messages.append({"role": "user", "content": self._tool_results})
+                messages.append({"role": "user", "content": tool_results})
 
             yield {
                 "type": "error",

@@ -2,56 +2,9 @@
  * Data fetching utilities for GCS storage
  */
 
-import type { AgentTrace, BotMetrics, BotMetricsHistory, BotActivityLog, PRSummary } from './types'
+import type { AgentTrace, BotMetrics, BotActivityLog, PRSummary } from './types'
 
 const GCS_BUCKET_URL = 'https://storage.googleapis.com/bot-dashboard-vectorinstitute'
-
-/**
- * Fetch latest bot metrics
- */
-export async function fetchBotMetrics(): Promise<BotMetrics | null> {
-  try {
-    const response = await fetch(`${GCS_BUCKET_URL}/data/bot_metrics_latest.json`, {
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      // Don't log 404s - expected when no data collected yet
-      if (response.status !== 404) {
-        console.error('Failed to fetch bot metrics:', response.statusText)
-      }
-      return null
-    }
-
-    return await response.json()
-  } catch (error) {
-    console.error('Error fetching bot metrics:', error)
-    return null
-  }
-}
-
-/**
- * Fetch historical bot metrics
- */
-export async function fetchBotMetricsHistory(): Promise<BotMetricsHistory | null> {
-  try {
-    const response = await fetch(`${GCS_BUCKET_URL}/data/bot_metrics_history.json`, {
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      if (response.status !== 404) {
-        console.error('Failed to fetch bot metrics history:', response.statusText)
-      }
-      return null
-    }
-
-    return await response.json()
-  } catch (error) {
-    console.error('Error fetching bot metrics history:', error)
-    return null
-  }
-}
 
 /**
  * Fetch bot activity log

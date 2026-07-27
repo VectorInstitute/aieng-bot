@@ -7,62 +7,10 @@ import pytest
 
 from aieng_bot.agent_fixer import (
     AgentFixer,
-    AgentFixRequest,
     AgentFixResult,
     AgenticLoopRequest,
 )
-
-
-class TestAgentFixRequest:
-    """Test AgentFixRequest dataclass."""
-
-    def test_create_request(self):
-        """Test creating a fix request with all required fields."""
-        request = AgentFixRequest(
-            repo="VectorInstitute/test-repo",
-            pr_number=123,
-            pr_title="Bump dependency",
-            pr_author="app/dependabot",
-            pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
-            head_ref="dependabot/pytest-8.0.0",
-            base_ref="main",
-            failure_types=["test"],
-            failed_check_names="Run Tests,Lint",
-            failure_logs_file=".failure-logs.txt",
-            workflow_run_id="1234567890",
-            github_run_url="https://github.com/runs/123",
-            cwd="/path/to/repo",
-        )
-
-        assert request.repo == "VectorInstitute/test-repo"
-        assert request.pr_number == 123
-        assert request.failure_type == "test"  # Uses property
-        assert request.failure_types == ["test"]
-        assert request.cwd == "/path/to/repo"
-
-    def test_request_immutable_fields(self):
-        """Test that request fields are properly typed."""
-        request = AgentFixRequest(
-            repo="test/repo",
-            pr_number=456,
-            pr_title="Fix bug",
-            pr_author="user",
-            pr_url="https://github.com/test/repo/pull/456",
-            head_ref="feature/fix",
-            base_ref="main",
-            failure_types=["lint"],
-            failed_check_names="ESLint",
-            failure_logs_file="logs.txt",
-            workflow_run_id="999",
-            github_run_url="https://url",
-            cwd="/cwd",
-        )
-
-        # Verify types
-        assert isinstance(request.repo, str)
-        assert isinstance(request.pr_number, int)
-        assert isinstance(request.failure_type, str)  # Uses property
-        assert isinstance(request.failure_types, list)
+from aieng_bot.agent_fixer.fixer import AGENTIC_LOOP_TOOLS
 
 
 class TestAgentFixResult:
@@ -104,30 +52,8 @@ class TestAgentFixResult:
         assert result.error_message is None
 
 
-class TestAgentFixer:
-    """Test AgentFixer class."""
-
-    @pytest.fixture
-    def fix_request(self, tmp_path):
-        """Create a test fix request."""
-        logs_file = tmp_path / ".failure-logs.txt"
-        logs_file.write_text("Error: test failed\nAssertion error at line 42")
-
-        return AgentFixRequest(
-            repo="VectorInstitute/test-repo",
-            pr_number=123,
-            pr_title="Bump pytest",
-            pr_author="app/dependabot",
-            pr_url="https://github.com/VectorInstitute/test-repo/pull/123",
-            head_ref="dependabot/pytest-8.0.0",
-            base_ref="main",
-            failure_types=["test"],
-            failed_check_names="Run Tests",
-            failure_logs_file=str(logs_file),
-            workflow_run_id="1234567890",
-            github_run_url="https://github.com/runs/123",
-            cwd=str(tmp_path),
-        )
+class TestAgentFixerInit:
+    """Test AgentFixer initialization."""
 
     def test_init_without_api_key(self):
         """Test that fixer raises error if ANTHROPIC_API_KEY not set."""
@@ -142,232 +68,6 @@ class TestAgentFixer:
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             fixer = AgentFixer()
             assert fixer.api_key == "test-key"
-
-    def test_write_pr_context(self, fix_request, tmp_path):
-        """Test writing PR context to JSON file."""
-        import json  # noqa: PLC0415 - Import after test setup
-
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            fixer._write_pr_context(fix_request)
-
-            context_file = tmp_path / ".pr-context.json"
-            assert context_file.exists()
-
-            with open(context_file) as f:
-                context = json.load(f)
-
-            assert context["repo"] == "VectorInstitute/test-repo"
-            assert context["pr_number"] == 123
-            assert context["pr_title"] == "Bump pytest"
-            assert context["pr_author"] == "app/dependabot"
-            assert context["failure_type"] == "test"
-            assert context["failed_checks"] == ["Run Tests"]
-
-    def test_build_prompt(self, fix_request):
-        """Test building simple prompt for skills."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            prompt = fixer._build_prompt(fix_request)
-
-            assert "aieng-bot" in prompt
-            assert "test check failures" in prompt
-            assert ".pr-context.json" in prompt
-            assert ".failure-logs.txt" in prompt
-            assert "fix-test-failures skill" in prompt
-            assert "minimal, targeted changes" in prompt
-
-    def test_build_prompt_missing_logs(self, fix_request, tmp_path):
-        """Test building prompt when logs file doesn't exist."""
-        fix_request.failure_logs_file = str(tmp_path / "missing-logs.txt")
-
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            prompt = fixer._build_prompt(fix_request)
-
-            assert "no failure logs (file not found)" in prompt
-
-    def test_create_tracer(self, fix_request):
-        """Test creating an execution tracer."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            tracer = fixer._create_tracer(fix_request)
-
-            assert tracer.trace["metadata"]["pr"]["repo"] == "VectorInstitute/test-repo"
-            assert tracer.trace["metadata"]["pr"]["number"] == 123
-            assert tracer.trace["metadata"]["failure"]["type"] == "test"
-            assert tracer.trace["metadata"]["workflow_run_id"] == "1234567890"
-
-    @pytest.mark.asyncio
-    async def test_apply_fixes_success(self, fix_request, tmp_path):
-        """Test successful application of fixes."""
-
-        # Mock agent stream
-        async def mock_stream():
-            yield MagicMock()
-
-        # Create a mock tracer with proper async generator
-        async def mock_capture_stream(stream):
-            async for msg in mock_stream():
-                yield msg
-
-        mock_tracer = MagicMock()
-        mock_tracer.capture_agent_stream = mock_capture_stream
-        mock_tracer.get_summary.return_value = "Fixed 1 test"
-        mock_tracer.save_trace = MagicMock()
-        mock_tracer.extract_file_metrics.return_value = (2, ["/src/test.py"])
-
-        # Create a regular mock function that returns the async generator
-        def mock_query(*args, **kwargs):
-            return mock_stream()
-
-        with (
-            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot.agent_fixer.fixer.query", side_effect=mock_query),
-            patch.object(AgentFixer, "_create_tracer", return_value=mock_tracer),
-            patch("builtins.open", mock_open()),
-        ):
-            fixer = AgentFixer()
-            result = await fixer.apply_fixes(fix_request)
-
-            assert result.status == "SUCCESS"
-            assert result.trace_file == "/tmp/agent-execution-trace.json"
-            assert result.summary_file == "/tmp/fix-summary.txt"
-            assert result.error_message is None
-
-            mock_tracer.finalize.assert_called_once_with(
-                status="SUCCESS",
-                changes_made=2,
-                files_modified=["/src/test.py"],
-            )
-            mock_tracer.save_trace.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_apply_fixes_failure(self, fix_request):
-        """Test handling of agent execution failure."""
-        with (
-            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch(
-                "aieng_bot.agent_fixer.fixer.query",
-                side_effect=RuntimeError("Agent failed"),
-            ),
-        ):
-            fixer = AgentFixer()
-            result = await fixer.apply_fixes(fix_request)
-
-            assert result.status == "FAILED"
-            assert result.error_message == "Agent failed"
-            assert result.trace_file == ""
-            assert result.summary_file == ""
-
-    @pytest.mark.asyncio
-    async def test_apply_fixes_calls_agent_with_correct_options(
-        self, fix_request, tmp_path
-    ):
-        """Test that agent is called with correct options including skills."""
-
-        async def mock_stream():
-            yield MagicMock()
-
-        # Create a mock tracer with proper async generator
-        async def mock_capture_stream(stream):
-            async for msg in mock_stream():
-                yield msg
-
-        mock_tracer = MagicMock()
-        mock_tracer.capture_agent_stream = mock_capture_stream
-        mock_tracer.get_summary.return_value = "Summary"
-        mock_tracer.save_trace = MagicMock()
-        mock_tracer.extract_file_metrics.return_value = (1, ["/src/file.py"])
-
-        # Create a regular mock function that returns the async generator
-        mock_query_func = MagicMock(side_effect=lambda *args, **kwargs: mock_stream())
-
-        with (
-            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot.agent_fixer.fixer.query", mock_query_func),
-            patch.object(AgentFixer, "_create_tracer", return_value=mock_tracer),
-            patch("builtins.open", mock_open()),
-        ):
-            fixer = AgentFixer()
-            await fixer.apply_fixes(fix_request)
-
-            # Verify query was called
-            mock_query_func.assert_called_once()
-            call_args = mock_query_func.call_args
-
-            # Check prompt argument
-            assert "aieng-bot" in call_args.kwargs["prompt"]
-            assert "fix-test-failures skill" in call_args.kwargs["prompt"]
-            assert ".pr-context.json" in call_args.kwargs["prompt"]
-
-            # Check options
-            options = call_args.kwargs["options"]
-            assert options.allowed_tools == [
-                "Read",
-                "Edit",
-                "Bash",
-                "Glob",
-                "Grep",
-                "Skill",
-                "WebSearch",
-            ]
-            assert options.permission_mode == "acceptEdits"
-            assert options.cwd == str(tmp_path)
-            assert options.setting_sources == ["project"]  # Skills enabled!
-
-    def test_pr_context_file_structure(self, fix_request, tmp_path):
-        """Test that PR context file has all required fields."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            fixer._write_pr_context(fix_request)
-
-            import json  # noqa: PLC0415 - Import after test setup
-
-            context_file = tmp_path / ".pr-context.json"
-            with open(context_file) as f:
-                context = json.load(f)
-
-            # Verify all required fields are present
-            assert "repo" in context
-            assert "pr_number" in context
-            assert "pr_title" in context
-            assert "pr_author" in context
-            assert "pr_url" in context
-            assert "failure_type" in context
-            assert "failed_checks" in context
-            assert "failure_logs_file" in context
-
-            # Verify types
-            assert isinstance(context["pr_number"], int)
-            assert isinstance(context["failed_checks"], list)
-
-    def test_build_prompt_references_context_file(self, fix_request):
-        """Test that prompt tells agent to read context file."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-            prompt = fixer._build_prompt(fix_request)
-
-            # Should mention the context file location
-            assert ".pr-context.json" in prompt
-            assert "PR metadata" in prompt or "context" in prompt.lower()
-
-    def test_build_prompt_references_correct_skill(self, fix_request):
-        """Test that prompt mentions the correct skill for failure type."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            fixer = AgentFixer()
-
-            # Test different failure types
-            failure_type_list = ["test", "lint", "security", "build", "merge_conflict"]
-            for failure_type in failure_type_list:
-                fix_request.failure_types = [failure_type]
-                prompt = fixer._build_prompt(fix_request)
-
-                # Should reference the specific skill
-                expected_skill = f"fix-{failure_type}-failures"
-                assert expected_skill in prompt, (
-                    f"Prompt should mention {expected_skill} skill"
-                )
 
 
 class TestAgenticLoopRequest:
@@ -400,6 +100,29 @@ class TestAgenticLoopRequest:
         assert request.timeout_minutes == 330
         assert request.cwd == "/path/to/repo"
 
+    def test_failure_type_empty_list(self):
+        """Test that the failure_type property guards against empty lists."""
+        request = AgenticLoopRequest(
+            repo="test/repo",
+            pr_number=1,
+            pr_title="t",
+            pr_author="a",
+            pr_url="u",
+            head_ref="h",
+            base_ref="main",
+            failure_types=[],
+            failed_check_names=[],
+            failure_logs_file="logs.txt",
+            max_retries=1,
+            timeout_minutes=1,
+            workflow_run_id="1",
+            github_run_url="u",
+            cwd="/cwd",
+        )
+
+        assert request.failure_type == "unknown"
+        assert request.failure_types_str == ""
+
     def test_request_fields(self):
         """Test that request fields are properly typed."""
         request = AgenticLoopRequest(
@@ -420,7 +143,6 @@ class TestAgenticLoopRequest:
             cwd="/cwd",
         )
 
-        # Verify types
         assert isinstance(request.repo, str)
         assert isinstance(request.pr_number, int)
         assert isinstance(request.failure_type, str)
@@ -454,6 +176,24 @@ class TestAgenticLoop:
             github_run_url="https://github.com/runs/123",
             cwd=str(tmp_path),
         )
+
+    @pytest.fixture
+    def mock_tracer(self):
+        """Create a mock tracer whose capture passes the stream through."""
+
+        async def mock_capture_stream(stream):
+            async for msg in stream:
+                yield msg
+
+        tracer = MagicMock()
+        tracer.capture_agent_stream = mock_capture_stream
+        tracer.get_summary.return_value = "Fixed and merged PR"
+        tracer.save_trace = MagicMock()
+        tracer.extract_file_metrics.return_value = (
+            3,
+            ["/src/app.py", "/tests/test_app.py"],
+        )
+        return tracer
 
     def test_write_agentic_context(self, agentic_request, tmp_path):
         """Test writing agentic loop context to JSON file."""
@@ -496,7 +236,6 @@ class TestAgenticLoop:
 
     def test_build_agentic_prompt_no_merge(self, agentic_request):
         """Test building agentic loop prompt with merge disabled."""
-        # Set merge_pr to False
         agentic_request.merge_pr = False
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
@@ -510,6 +249,16 @@ class TestAgenticLoop:
             assert "gh pr checks" in prompt
             assert "max retries (3)" in prompt
 
+    def test_build_agentic_prompt_empty_failure_types(self, agentic_request):
+        """Test that an empty failure_types list does not crash prompt building."""
+        agentic_request.failure_types = []
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            prompt = fixer._build_agentic_prompt(agentic_request)
+
+            assert "unknown" in prompt
+
     def test_create_agentic_tracer(self, agentic_request):
         """Test creating an execution tracer for agentic loop."""
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
@@ -521,30 +270,17 @@ class TestAgenticLoop:
             # Failure type is now pre-classified before the agent runs
             assert tracer.trace["metadata"]["failure"]["type"] == "test"
             assert tracer.trace["metadata"]["workflow_run_id"] == "1234567890"
+            # Trace metadata records the actual tool set and configured model
+            assert tracer.trace["execution"]["tools_allowed"] == AGENTIC_LOOP_TOOLS
+            assert tracer.trace["execution"]["model"]
 
     @pytest.mark.asyncio
-    async def test_run_agentic_loop_success(self, agentic_request, tmp_path):
+    async def test_run_agentic_loop_success(self, agentic_request, mock_tracer):
         """Test successful agentic loop execution."""
 
-        # Mock agent stream
         async def mock_stream():
             yield MagicMock()
 
-        # Create a mock tracer with proper async generator
-        async def mock_capture_stream(stream):
-            async for msg in mock_stream():
-                yield msg
-
-        mock_tracer = MagicMock()
-        mock_tracer.capture_agent_stream = mock_capture_stream
-        mock_tracer.get_summary.return_value = "Fixed and merged PR"
-        mock_tracer.save_trace = MagicMock()
-        mock_tracer.extract_file_metrics.return_value = (
-            3,
-            ["/src/app.py", "/tests/test_app.py"],
-        )
-
-        # Create a regular mock function that returns the async generator
         def mock_query(*args, **kwargs):
             return mock_stream()
 
@@ -572,19 +308,89 @@ class TestAgenticLoop:
             mock_tracer.save_trace.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_run_agentic_loop_failure(self, agentic_request):
-        """Test handling of agentic loop execution failure."""
+    async def test_run_agentic_loop_uses_correct_options(
+        self, agentic_request, mock_tracer
+    ):
+        """Test that the agent is invoked with the full agentic tool set."""
+
+        async def mock_stream():
+            yield MagicMock()
+
+        mock_query_func = MagicMock(side_effect=lambda *args, **kwargs: mock_stream())
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch("aieng_bot.agent_fixer.fixer.query", mock_query_func),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            await fixer.run_agentic_loop(agentic_request)
+
+            mock_query_func.assert_called_once()
+            options = mock_query_func.call_args.kwargs["options"]
+            assert options.allowed_tools == AGENTIC_LOOP_TOOLS
+            assert options.permission_mode == "acceptEdits"
+            assert options.cwd == agentic_request.cwd
+            assert options.setting_sources == ["project"]
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_failure_saves_trace(
+        self, agentic_request, mock_tracer
+    ):
+        """Test that a failed run still finalizes and saves the trace."""
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
             patch(
                 "aieng_bot.agent_fixer.fixer.query",
                 side_effect=RuntimeError("Agent failed"),
             ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
         ):
             fixer = AgentFixer()
             result = await fixer.run_agentic_loop(agentic_request)
 
             assert result.status == "FAILED"
             assert result.error_message == "Agent failed"
+            # The trace captured up to the failure is preserved for debugging
+            assert result.trace_file == "/tmp/agent-execution-trace.json"
+            assert result.summary_file == "/tmp/fix-summary.txt"
+            mock_tracer.finalize.assert_called_once_with(
+                status="FAILED",
+                changes_made=3,
+                files_modified=["/src/app.py", "/tests/test_app.py"],
+            )
+            mock_tracer.save_trace.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_trace_save_failure(
+        self, agentic_request, mock_tracer
+    ):
+        """Test that a trace-save failure yields empty file paths."""
+
+        async def mock_stream():
+            yield MagicMock()
+
+        mock_tracer.save_trace.side_effect = OSError("disk full")
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.query",
+                side_effect=lambda *args, **kwargs: mock_stream(),
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+            assert result.status == "SUCCESS"
             assert result.trace_file == ""
             assert result.summary_file == ""
