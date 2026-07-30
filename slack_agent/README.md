@@ -1,87 +1,96 @@
 # aieng-bot Slack Agent
 
 Slack agent for the Vector Institute workspace, built on Slack Bolt +
-Socket Mode. Phase 1 is a dummy agent that proves out the plumbing —
-install, per-thread context isolation, background listening, and
-auto-deploy — before the real agent layer (Claude Agent SDK, Managed
-Agents, or a custom harness) is wired into `respond_to()` in `app.py`.
+Socket Mode. Designed to grow into a Claude Tag-style teammate one
+capability at a time.
 
 ## Architecture
 
 ```
 Slack event (mention, DM, channel message, slash command)
-  → Socket Mode (outbound WebSocket — no public URL, no inbound firewall rules)
-  → Bolt handler records the message into a per-(channel, thread) ContextStore
-  → respond_to() produces a reply   ← replace with the real agent layer
-  → reply posted back to the same thread
+  → Socket Mode (outbound WebSocket: no public URL, no inbound firewall rules)
+  → handlers.py routes the event
+      · channel messages: recorded into per-thread ContextStore (context.py)
+      · mentions and DMs: routed to the first enabled capability
+  → capability (capabilities/) streams work into a StreamingReply (streaming.py)
+      · placeholder reply posted in-thread, then edited in place (throttled)
+      · tool activity lines while working, final answer + context footer when done
+  → markdown converted to Slack mrkdwn (mrkdwn.py)
 ```
 
 Every Slack thread and DM gets an isolated context keyed by
-`(channel, thread_ts)` — the same model Claude Tag uses. The bot
-listens to all messages in channels it is invited to (recording them
-for context) but only speaks when @mentioned or DMed.
+`(channel, thread_ts)`, including its own multi-turn agent history, so
+follow-up questions work per thread. The bot records messages in channels
+it is invited to (background context) but only speaks when @mentioned or
+DMed.
 
-## One-time setup
+### Capabilities
 
-### 1. Create the Slack app
+| Capability | Module | Status |
+|---|---|---|
+| BookStack QA: answers documentation questions from the Vector wiki | `capabilities/bookstack_qa.py` | live |
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From an app manifest**
-2. Pick the Vector workspace, paste the contents of `manifest.yaml` (YAML tab), and create the app
+New capabilities implement the `Capability` protocol (`capabilities/base.py`)
+and register in `capabilities/__init__.py`. The Slack plumbing does not change.
 
-### 2. Generate tokens
+The BookStack QA capability reuses `aieng_bot.bookstack.BookstackQAAgent`
+(the same agent behind the web UI at bookstack.vectorinstitute.ai) including
+its LLM gateway support (`LLM_BASE_URL` + `LLM_API_KEY`).
 
-1. **App-level token**: Basic Information → App-Level Tokens → Generate — add scope `connections:write`. Copy the `xapp-…` token.
-2. **Bot token**: OAuth & Permissions → **Install to Workspace** (or **Request to Install** if the workspace requires admin approval — see below). Copy the `xoxb-…` token after install.
+## Local development
 
-> **Admin approval note**: the `channels:history` / `groups:history`
-> scopes let the bot read messages in channels it is *explicitly
-> invited to* (needed for background context). Socket Mode means no
-> inbound network access — only an outbound WebSocket to
-> `wss-primary.slack.com`. Message text is processed by the bot
-> service; nothing is sent to an LLM yet in phase 1.
-
-### 3. Run locally
+From the repo root:
 
 ```bash
-cd slack_agent
-cp .env.example .env   # fill in both tokens
-uv sync
-uv run python app.py
+uv sync --group slack-agent
+uv run python -m slack_agent.app
 ```
 
-## Test plan (dummy channel)
+Configuration comes from two optional dotenv files:
 
-1. Create a test channel (e.g. `#aieng-bot-test`) and `/invite @aieng-bot`
-2. `@aieng-bot hello` — replies in-thread with version, build SHA, and its context for that thread
-3. Post a few plain messages (no mention), then mention it again in the same thread — the tracked message count grows: **background listening works**
-4. Mention it in a *different* thread — count starts fresh: **contexts are isolated**
-5. DM the bot — it replies without needing a mention
-6. `/aieng-bot version` — shows the running build SHA (verifies a deploy picked up your latest changes)
+- repo root `.env`: LLM + BookStack credentials (`ANTHROPIC_API_KEY` or
+  `LLM_BASE_URL`/`LLM_API_KEY`, `BOOKSTACK_TOKEN_ID`, `BOOKSTACK_TOKEN_SECRET`)
+- `slack_agent/.env`: `SLACK_BOT_TOKEN` (xoxb), `SLACK_APP_TOKEN` (xapp)
+
+Without BookStack/LLM credentials the bot still runs with no capabilities
+and says so when asked.
+
+Note: the production bot runs on Cloud Run with a single Socket Mode
+connection. Running locally at the same time means both instances receive
+events and reply twice. Scale the Cloud Run service down (or accept the
+double replies) while testing locally.
 
 ## Continuous deployment
 
-`.github/workflows/deploy-slack-agent.yml` builds and deploys to Cloud
-Run (project `coderd`, Toronto) on every push to `main` touching
-`slack_agent/**`. Because Socket Mode connects outbound, redeploying
-the service is all it takes for changes to reflect in Slack — the
-Slack app config itself only changes when you edit scopes/events, which
-requires updating the manifest at api.slack.com (and re-installing if
-scopes changed).
+`.github/workflows/deploy-slack-agent.yml` builds and deploys to Cloud Run
+(project `coderd`, Toronto) on every push to `main` touching
+`slack_agent/**` or `src/aieng_bot/bookstack/**`.
 
-Required GitHub secrets (repo → Settings → Secrets):
+Required GitHub secrets:
 
-- `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` — from step 2 above
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT` — already set up for the bookstack/dashboard deploys
+- `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`: Slack app credentials
+- `BOOKSTACK_API_KEY` (used as `LLM_API_KEY`), `LLM_BASE_URL`, `CLAUDE_MODEL`,
+  `BOOKSTACK_TOKEN_ID`, `BOOKSTACK_TOKEN_SECRET`: shared with the bookstack
+  agent deploy
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`: GCP auth
 
 The service runs exactly one always-on instance (`--min-instances=1
 --max-instances=1 --no-cpu-throttling`) because Socket Mode holds a
-persistent WebSocket and the context store is in-memory. The HTTP port
-only serves `/health`.
+persistent WebSocket and contexts are in-memory. The HTTP port only serves
+`/health`.
+
+## Slack app configuration
+
+The app manifest lives in `manifest.yaml` (app: **aieng-bot**,
+`A0BLK0D8Q7R`). Config changes are applied with the App Manifest API
+(`apps.manifest.update`); scope changes additionally require a reinstall.
+Logo assets live in `assets/`.
 
 ## Roadmap
 
-- [ ] Phase 1: dummy bot installed in the Vector workspace (this)
-- [ ] Persist thread contexts (currently in-memory, lost on redeploy)
-- [ ] Wire the agent layer into `respond_to()` (Claude Agent SDK / Managed Agents / custom harness)
-- [ ] Tools & APIs one by one (GitHub, dashboards, BookStack, …)
-- [ ] Optional: Slack "Agents & AI Apps" assistant surface (`assistant:write`, split-view pane) — needs a scope addition + re-install
+- [x] Socket Mode plumbing with per-thread contexts and background listening
+- [x] BookStack QA capability with streaming replies
+- [ ] Persist thread contexts across deploys
+- [ ] Use recorded channel messages as ambient context for answers
+- [ ] More capabilities: GitHub, CI failures, dashboards
+- [ ] Slack "Agents & AI Apps" assistant surface (needs `assistant:write` scope + reinstall)
