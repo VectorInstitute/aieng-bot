@@ -10,7 +10,7 @@ display_information:
     • It follows along quietly in channels to stay in the loop, and only speaks when spoken to.
     • DM it directly for one-on-one help, no mention needed.
 
-    Where it is going: deep integrations with Vector's engineering stack — GitHub, CI, dashboards, and internal knowledge — so you can hand it real work and let it finish the job.
+    Where it is going: deep integrations with Vector's engineering stack (GitHub, CI, dashboards, and internal knowledge) so you can hand it real work and let it finish the job.
 
     Every release deploys automatically, so the bot you talk to is always the latest version.
   background_color: "#2c2d30"
