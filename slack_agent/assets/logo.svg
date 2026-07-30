@@ -23,9 +23,9 @@
   <rect width="1024" height="1024" fill="url(#bg)"/>
 
   <!-- the prompt: a vector chevron -->
-  <path d="M 336 318 L 576 512 L 336 706" stroke="url(#brand)" stroke-width="110"
+  <path d="M 314 318 L 554 512 L 314 706" stroke="url(#brand)" stroke-width="110"
         stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow)"/>
 
   <!-- the cursor: warm, mid-blink -->
-  <rect x="628" y="344" width="116" height="336" rx="34" fill="url(#ember)" filter="url(#glow)"/>
+  <rect x="654" y="263" width="116" height="498" rx="34" fill="url(#ember)" filter="url(#glow)"/>
 </svg>
