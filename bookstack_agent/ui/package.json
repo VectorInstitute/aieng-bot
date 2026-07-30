@@ -1,7 +1,7 @@
 {
   "name": "bookstack-agent-ui",
   "version": "1.0.0",
-  "description": "BookStack QA Agent — chat UI",
+  "description": "BookStack QA Agent \u2014 chat UI",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
@@ -35,5 +35,11 @@
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.19",
+      "sharp": "^0.35.0"
+    }
   }
 }
