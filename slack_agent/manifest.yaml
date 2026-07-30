@@ -1,6 +1,6 @@
 display_information:
   name: aieng-bot
-  description: Vector Institute AI engineering agent — answers questions and does work in channels, threads, and DMs
+  description: Vector's AI engineering teammate. Mention it, DM it, put it to work.
   background_color: "#2c2d30"
 features:
   bot_user:

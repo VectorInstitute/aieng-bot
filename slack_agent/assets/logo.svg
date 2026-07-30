@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="80%">
+      <stop offset="0%" stop-color="#15121f"/>
+      <stop offset="60%" stop-color="#0d0b16"/>
+      <stop offset="100%" stop-color="#08070e"/>
+    </radialGradient>
+    <!-- official Vector gradient: magenta -> violet -> cobalt -->
+    <linearGradient id="brand" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#EB088A"/>
+      <stop offset="50%" stop-color="#8A25C9"/>
+      <stop offset="100%" stop-color="#313CFF"/>
+    </linearGradient>
+    <linearGradient id="brandflat" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EB088A"/>
+      <stop offset="100%" stop-color="#8A25C9"/>
+    </linearGradient>
+    <linearGradient id="hairline" gradientUnits="userSpaceOnUse" x1="292" y1="0" x2="732" y2="0">
+      <stop offset="0%" stop-color="#EB088A"/>
+      <stop offset="100%" stop-color="#8A25C9"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#48C0D9"/>
+      <stop offset="100%" stop-color="#313CFF"/>
+    </linearGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- neural net brain in the background -->
+  <g stroke-width="3" fill="none" opacity="0.9">
+    <g stroke="#EB088A" opacity="0.20">
+      <path d="M 120 260 L 250 180 L 400 230 M 250 180 L 300 90 M 400 230 L 300 90"/>
+      <path d="M 120 260 L 190 400 L 300 340 M 400 230 L 300 340"/>
+      <path d="M 850 140 L 740 220 L 890 300 M 850 140 L 890 300 M 740 220 L 640 130"/>
+      <path d="M 130 760 L 240 850 L 350 780 M 240 850 L 300 940"/>
+      <path d="M 880 720 L 800 830 L 920 880 M 800 830 L 690 900"/>
+    </g>
+    <g stroke="#313CFF" opacity="0.22">
+      <path d="M 190 400 L 130 540 M 890 300 L 930 460 L 830 520"/>
+      <path d="M 350 780 L 300 940 M 690 900 L 620 950"/>
+      <path d="M 640 130 L 520 80 L 300 90 M 520 80 L 400 230"/>
+    </g>
+  </g>
+  <!-- graph nodes -->
+  <g fill="#EB088A" opacity="0.55">
+    <circle cx="120" cy="260" r="7"/><circle cx="250" cy="180" r="9"/>
+    <circle cx="300" cy="90" r="6"/><circle cx="190" cy="400" r="6"/>
+    <circle cx="300" cy="340" r="7"/><circle cx="240" cy="850" r="8"/>
+    <circle cx="130" cy="760" r="6"/><circle cx="800" cy="830" r="8"/>
+    <circle cx="920" cy="880" r="5"/><circle cx="690" cy="900" r="6"/>
+  </g>
+  <g fill="#313CFF" opacity="0.6">
+    <circle cx="400" cy="230" r="7"/><circle cx="850" cy="140" r="8"/>
+    <circle cx="740" cy="220" r="6"/><circle cx="890" cy="300" r="7"/>
+    <circle cx="640" cy="130" r="5"/><circle cx="520" cy="80" r="6"/>
+    <circle cx="130" cy="540" r="5"/><circle cx="930" cy="460" r="6"/>
+    <circle cx="350" cy="780" r="6"/><circle cx="880" cy="720" r="6"/>
+    <circle cx="300" cy="940" r="5"/><circle cx="830" cy="520" r="5"/>
+  </g>
+
+  <!-- vector arrow antenna: brand gradient, 45 degrees -->
+  <g filter="url(#glow)">
+    <path d="M 512 390 L 645 257" stroke="url(#brand)" stroke-width="30" stroke-linecap="round" fill="none"/>
+    <path d="M 702 200 L 684 296 L 606 218 Z" fill="url(#brand)"/>
+  </g>
+  <circle cx="512" cy="390" r="20" fill="#EB088A" filter="url(#soft)"/>
+
+  <!-- angular head -->
+  <g>
+    <path d="M 372 400 L 652 400 L 732 470 L 732 700 L 652 770 L 372 770 L 292 700 L 292 470 Z"
+          fill="#14121c" stroke="url(#brandflat)" stroke-width="12" stroke-linejoin="round"/>
+
+    <!-- wireframe neural cranium inside the head -->
+    <g stroke="#EB088A" stroke-width="3.5" opacity="0.75" fill="none">
+      <path d="M 372 400 L 512 452 L 652 400 M 292 470 L 420 502 L 512 452 L 604 502 L 732 470"/>
+      <path d="M 420 502 L 512 540 L 604 502 M 292 545 L 420 502 M 732 545 L 604 502"/>
+      <path d="M 372 400 L 420 502 M 652 400 L 604 502"/>
+    </g>
+    <g fill="#F1F1F1">
+      <circle cx="512" cy="452" r="8"/>
+      <circle cx="420" cy="502" r="7"/>
+      <circle cx="604" cy="502" r="7"/>
+      <circle cx="512" cy="540" r="6"/>
+    </g>
+
+    <!-- hairline: separates the neural cranium from the face -->
+    <path d="M 292 566 L 732 566" stroke="url(#hairline)" stroke-width="9" stroke-linecap="round"/>
+
+    <!-- eyes -->
+    <g fill="url(#visor)" filter="url(#glow)">
+      <rect x="401" y="606" width="72" height="104" rx="36"/>
+      <rect x="551" y="606" width="72" height="104" rx="36"/>
+    </g>
+
+    <!-- chin vents -->
+    <g stroke="#8A25C9" stroke-width="10" stroke-linecap="round" opacity="0.9">
+      <path d="M 452 738 L 492 738 M 532 738 L 572 738"/>
+    </g>
+
+    <!-- ear fins -->
+    <path d="M 292 520 L 236 546 L 236 646 L 292 672 Z" fill="url(#brandflat)"/>
+    <path d="M 732 520 L 788 546 L 788 646 L 732 672 Z" fill="#313CFF"/>
+  </g>
+</svg>
