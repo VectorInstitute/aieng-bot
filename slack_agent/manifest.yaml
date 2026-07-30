@@ -1,6 +1,18 @@
 display_information:
   name: aieng-bot
   description: Vector's AI engineering teammate. Mention it, DM it, put it to work.
+  long_description: |-
+    aieng-bot is Vector's AI engineering teammate, built by the AI Engineering team.
+
+    How it works:
+    • Mention @aieng-bot in any channel it has been invited to and it replies in the thread.
+    • Every thread and DM gets its own isolated context, so conversations never bleed into each other.
+    • It follows along quietly in channels to stay in the loop, and only speaks when spoken to.
+    • DM it directly for one-on-one help, no mention needed.
+
+    Where it is going: deep integrations with Vector's engineering stack — GitHub, CI, dashboards, and internal knowledge — so you can hand it real work and let it finish the job.
+
+    Built in the open at github.com/VectorInstitute/aieng-bot. Every release deploys automatically, so the bot you talk to is always the latest version.
   background_color: "#2c2d30"
 features:
   bot_user:
