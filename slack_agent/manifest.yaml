@@ -12,7 +12,7 @@ display_information:
 
     Where it is going: deep integrations with Vector's engineering stack — GitHub, CI, dashboards, and internal knowledge — so you can hand it real work and let it finish the job.
 
-    Built in the open at github.com/VectorInstitute/aieng-bot. Every release deploys automatically, so the bot you talk to is always the latest version.
+    Every release deploys automatically, so the bot you talk to is always the latest version.
   background_color: "#2c2d30"
 features:
   bot_user:
