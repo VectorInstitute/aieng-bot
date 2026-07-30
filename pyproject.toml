@@ -121,7 +121,7 @@ warn_unused_ignores = true
 implicit_reexport = false
 strict_equality = true
 extra_checks = true
-mypy_path = "src:slack_bot/stubs"
+mypy_path = "src:slack_agent/stubs"
 
 [[tool.mypy.overrides]]
 module = "bookstack_agent.api.main"
