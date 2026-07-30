@@ -5,7 +5,7 @@
       <stop offset="70%" stop-color="#100d16"/>
       <stop offset="100%" stop-color="#0b0910"/>
     </radialGradient>
-    <linearGradient id="brand" x1="0%" y1="100%" x2="100%" y2="0%">
+    <linearGradient id="brand" gradientUnits="userSpaceOnUse" x1="220" y1="750" x2="720" y2="420">
       <stop offset="0%" stop-color="#EB088A"/>
       <stop offset="55%" stop-color="#8A25C9"/>
       <stop offset="100%" stop-color="#313CFF"/>
@@ -22,10 +22,12 @@
 
   <rect width="1024" height="1024" fill="url(#bg)"/>
 
-  <!-- the prompt: a vector chevron -->
-  <path d="M 314 318 L 554 512 L 314 706" stroke="url(#brand)" stroke-width="110"
-        stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow)"/>
+  <!-- the Vector Institute glyph, contour-traced from the logo, rotated 90° CCW -->
+  <g transform="translate(165.5, 752.5) rotate(-90)" filter="url(#glow)">
+    <path d="M 239,514 L 76,92 L 19,90 L 19,52 L 212,53 L 211,90 L 156,91 L 278,408 Z" fill="url(#brand)"/>
+    <path d="M 335,264 L 316,215 L 374,75 L 288,108 L 309,64 L 416,18 L 462,128 L 443,170 L 406,88 Z" fill="#EB088A"/>
+  </g>
 
-  <!-- the cursor: warm, mid-blink -->
-  <rect x="654" y="263" width="116" height="498" rx="34" fill="url(#ember)" filter="url(#glow)"/>
+  <!-- the cursor -->
+  <rect x="724" y="290" width="116" height="443" rx="26" fill="url(#ember)" filter="url(#glow)"/>
 </svg>
