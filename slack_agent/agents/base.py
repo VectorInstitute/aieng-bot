@@ -1,4 +1,4 @@
-"""Capability interface."""
+"""Sub-agent interface."""
 
 from typing import Protocol
 
@@ -6,15 +6,16 @@ from ..context import ThreadContext
 from ..streaming import StreamingReply
 
 
-class Capability(Protocol):
-    """One thing the agent can do in response to a user request.
+class SubAgent(Protocol):
+    """A specialist agent the orchestrator can delegate a request to.
 
-    Implementations receive the user's question, the thread's context (for
-    multi-turn history), and a :class:`StreamingReply` to render progress and
-    the final answer into Slack.
+    Each sub-agent owns one domain (BookStack documentation, GitHub, CI, …),
+    runs its own LLM loop with its own tools, and renders its progress and
+    final answer into the thread's :class:`StreamingReply`.
     """
 
     name: str
+    description: str
 
     async def handle(
         self, question: str, context: ThreadContext, reply: StreamingReply

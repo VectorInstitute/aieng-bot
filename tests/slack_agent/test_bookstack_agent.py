@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from aieng_bot.bookstack.agent import BookstackQAAgent, MessageHistory
+from slack_agent.agents.bookstack.agent import BookstackQAAgent, MessageHistory
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,9 +92,9 @@ def _make_stream_ctx(
 def agent() -> BookstackQAAgent:
     """Return an agent with all external clients mocked."""
     with (
-        patch("aieng_bot.bookstack.agent.anthropic.Anthropic"),
-        patch("aieng_bot.bookstack.agent.anthropic.AsyncAnthropic"),
-        patch("aieng_bot.bookstack.agent.BookStackClient"),
+        patch("slack_agent.agents.bookstack.agent.anthropic.Anthropic"),
+        patch("slack_agent.agents.bookstack.agent.anthropic.AsyncAnthropic"),
+        patch("slack_agent.agents.bookstack.agent.BookStackClient"),
     ):
         return BookstackQAAgent(
             base_url="https://bookstack.example.com",
@@ -148,7 +148,7 @@ class TestAskSync:
         agent._sync_client.messages.create.side_effect = [tool_resp, final_resp]  # type: ignore[attr-defined]
 
         with patch(
-            "aieng_bot.bookstack.agent.execute_tool",
+            "slack_agent.agents.bookstack.agent.execute_tool",
             return_value=json.dumps({"data": [], "total": 0}),
         ):
             answer, _ = agent.ask("What is the onboarding process?")
@@ -164,7 +164,7 @@ class TestAskSync:
         agent._sync_client.messages.create.return_value = tool_resp  # type: ignore[attr-defined]
 
         with (
-            patch("aieng_bot.bookstack.agent.execute_tool", return_value="{}"),
+            patch("slack_agent.agents.bookstack.agent.execute_tool", return_value="{}"),
             pytest.raises(RuntimeError, match="Max tool-use turns"),
         ):
             agent.ask("Loop forever?")
@@ -229,7 +229,7 @@ class TestAskStream:
         agent._async_client.messages.stream.side_effect = [ctx1, ctx2]  # type: ignore[attr-defined]
 
         with patch(
-            "aieng_bot.bookstack.agent.execute_tool",
+            "slack_agent.agents.bookstack.agent.execute_tool",
             return_value=json.dumps({"data": [], "total": 0}),
         ):
             events = []
@@ -304,7 +304,9 @@ class TestAskStream:
         page_result = json.dumps(
             {"id": 7, "name": "Onboarding Guide", "markdown": "# Hi"}
         )
-        with patch("aieng_bot.bookstack.agent.execute_tool", return_value=page_result):
+        with patch(
+            "slack_agent.agents.bookstack.agent.execute_tool", return_value=page_result
+        ):
             events = []
             async for evt in agent.ask_stream("What is onboarding?"):
                 events.append(evt)
@@ -351,7 +353,7 @@ class TestAskStream:
         agent._async_client.messages.stream.side_effect = [ctx1, ctx2]  # type: ignore[attr-defined]
 
         with patch(
-            "aieng_bot.bookstack.agent.execute_tool",
+            "slack_agent.agents.bookstack.agent.execute_tool",
             return_value=json.dumps({"data": [], "total": 0}),
         ):
             events = []
@@ -409,7 +411,7 @@ class TestAskStream:
         agent._async_client.messages.stream.side_effect = [ctx1, ctx2]  # type: ignore[attr-defined]
 
         with patch(
-            "aieng_bot.bookstack.agent.execute_tool",
+            "slack_agent.agents.bookstack.agent.execute_tool",
             return_value=json.dumps({"data": [], "total": 0}),
         ):
             events = []

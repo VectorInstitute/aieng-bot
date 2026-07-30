@@ -16,7 +16,7 @@ import re
 from typing import Any
 
 from . import APP_VERSION
-from .capabilities.base import Capability
+from .agents.orchestrator import Orchestrator
 from .config import Settings
 from .context import ContextStore, ThreadContext
 from .streaming import StreamingReply
@@ -27,7 +27,7 @@ _MENTION = re.compile(r"<@[A-Z0-9]+>")
 
 
 class SlackHandlers:
-    """Event handlers bound to a context store and capability list.
+    """Event handlers bound to a context store and the orchestrator.
 
     Parameters
     ----------
@@ -35,8 +35,8 @@ class SlackHandlers:
         Resolved runtime configuration.
     store : ContextStore
         Per-thread context store.
-    capabilities : list[Capability]
-        Enabled capabilities in routing priority order.
+    orchestrator : Orchestrator
+        Agent-layer entry point that routes requests to sub-agents.
 
     """
 
@@ -44,12 +44,12 @@ class SlackHandlers:
         self,
         settings: Settings,
         store: ContextStore,
-        capabilities: list[Capability],
+        orchestrator: Orchestrator,
     ) -> None:
         """Store collaborators."""
         self._settings = settings
         self._store = store
-        self._capabilities = capabilities
+        self._orchestrator = orchestrator
 
     # ------------------------------------------------------------------
     # Event handlers (registered in app.py)
@@ -113,12 +113,12 @@ class SlackHandlers:
         """
         await ack()
         text = command.get("text", "").strip().lower()
-        capability_names = ", ".join(c.name for c in self._capabilities) or "none"
+        agent_names = ", ".join(self._orchestrator.agent_names) or "none"
 
         if text in {"version", ""}:
             await respond(
                 f"*aieng-bot* `v{APP_VERSION}` (build `{self._settings.git_sha[:7]}`)\n"
-                f"Capabilities: {capability_names}\n"
+                f"Agents: {agent_names}\n"
                 f"Tracking {len(self._store)} thread context(s) since last restart."
             )
         else:
@@ -134,7 +134,7 @@ class SlackHandlers:
     async def _answer(
         self, event: dict[str, Any], client: Any, context: ThreadContext
     ) -> None:
-        """Run the routed capability and stream the reply into the thread."""
+        """Run the orchestrator and stream the reply into the thread."""
         channel = event["channel"]
         thread_ts = event.get("thread_ts") or event["ts"]
         question = _MENTION.sub("", event.get("text", "")).strip()
@@ -150,14 +150,13 @@ class SlackHandlers:
             )
             return
 
-        capability = self._capabilities[0] if self._capabilities else None
-        if capability is None:
+        if not self._orchestrator.agent_names:
             await client.chat_postMessage(
                 channel=channel,
                 thread_ts=thread_ts,
                 text=(
                     f"I'm running (`v{APP_VERSION}`, build "
-                    f"`{self._settings.git_sha[:7]}`) but no capabilities are "
+                    f"`{self._settings.git_sha[:7]}`) but no agents are "
                     "configured yet."
                 ),
             )
@@ -171,9 +170,9 @@ class SlackHandlers:
 
         async with context.lock:
             try:
-                await capability.handle(question, context, reply)
+                await self._orchestrator.handle(question, context, reply)
             except Exception:
-                logger.exception("capability %s failed", capability.name)
+                logger.exception("agent run failed")
                 await reply.fail("unexpected internal error")
                 await _react(client, channel, event["ts"], "warning", remove="eyes")
                 return

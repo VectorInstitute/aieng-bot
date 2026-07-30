@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 from collections.abc import AsyncGenerator
 from typing import Any, cast
@@ -9,11 +10,13 @@ from typing import Any, cast
 import anthropic
 from anthropic.types import MessageParam  # used in cast() calls below
 
-from ..config import get_model_name
-from ..utils.logging import log_info
+from aieng_bot.config import get_model_name
+
 from .client import BookStackClient
 from .prompts import SYSTEM_PROMPT
 from .tools import ALL_TOOLS, execute_tool
+
+logger = logging.getLogger(__name__)
 
 # Full Anthropic message list — includes interleaved user/assistant/tool turns.
 # Typed as list[Any] because intermediate turns contain ToolUseBlockParam /
@@ -201,7 +204,7 @@ class BookstackQAAgent:
 
             tool_results: list[dict[str, Any]] = []
             for tu in tool_uses:
-                log_info(f"  tool: {tu.name}({tu.input})")
+                logger.info("tool: %s(%s)", tu.name, tu.input)
                 ti = dict(tu.input) if isinstance(tu.input, dict) else {}
                 tool_results.append(
                     {

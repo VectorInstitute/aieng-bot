@@ -1,29 +1,32 @@
-"""BookStack QA capability.
+"""BookStack QA sub-agent.
 
-Answers questions from the Vector wiki by driving
-:class:`aieng_bot.bookstack.BookstackQAAgent` and rendering its streaming
-events into the thread's :class:`~slack_agent.streaming.StreamingReply`.
-Multi-turn follow-ups work per thread: the Anthropic message history is
-stored on the :class:`~slack_agent.context.ThreadContext`.
+Answers documentation questions from the Vector wiki by driving
+:class:`~slack_agent.agents.bookstack.agent.BookstackQAAgent` and rendering
+its streaming events into the thread's reply. Multi-turn follow-ups work
+per thread: the Anthropic message history lives on the thread context.
 """
 
 import logging
 import time
 
-from aieng_bot.bookstack import BookstackQAAgent
-
-from ..config import Settings
-from ..context import ThreadContext
-from ..mrkdwn import to_mrkdwn
-from ..streaming import StreamingReply
+from ...config import Settings
+from ...context import ThreadContext
+from ...mrkdwn import to_mrkdwn
+from ...streaming import StreamingReply
+from .agent import BookstackQAAgent
 
 logger = logging.getLogger(__name__)
 
 
-class BookstackQACapability:
+class BookstackSubAgent:
     """Answer documentation questions from the BookStack wiki."""
 
-    name = "bookstack-qa"
+    name = "bookstack"
+    description = (
+        "Answers questions about Vector Institute's internal documentation "
+        "(cluster access, onboarding, tooling, processes) by searching the "
+        "BookStack wiki."
+    )
 
     def __init__(self, settings: Settings) -> None:
         """Build the underlying QA agent from settings.
@@ -101,7 +104,7 @@ class BookstackQACapability:
 
             elif event_type == "error":
                 message = str(event.get("message", "unknown error"))
-                logger.error("bookstack qa error: %s", message)
+                logger.error("bookstack sub-agent error: %s", message)
                 await reply.fail(message)
                 return
 

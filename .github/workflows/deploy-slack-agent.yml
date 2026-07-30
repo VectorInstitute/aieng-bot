@@ -5,7 +5,8 @@ on:
     branches: [main]
     paths:
       - 'slack_agent/**'
-      - 'src/aieng_bot/bookstack/**'
+      - 'src/aieng_bot/**'
+      - 'uv.lock'
       - '.github/workflows/deploy-slack-agent.yml'
   workflow_dispatch:
 

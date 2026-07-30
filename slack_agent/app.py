@@ -1,6 +1,6 @@
 """aieng-bot Slack agent entrypoint.
 
-Wires settings, per-thread contexts, capabilities, and Slack event handlers
+Wires settings, per-thread contexts, the orchestrator, and Slack event handlers
 together, then runs the Socket Mode connection plus a minimal HTTP health
 endpoint (required by Cloud Run).
 
@@ -15,7 +15,7 @@ from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
 
 from . import APP_VERSION
-from .capabilities import build_capabilities
+from .agents import build_orchestrator
 from .config import Settings
 from .context import ContextStore
 from .handlers import SlackHandlers
@@ -42,11 +42,11 @@ def create_app(settings: Settings) -> AsyncApp:
 
     """
     store = ContextStore()
-    capabilities = build_capabilities(settings)
-    handlers = SlackHandlers(settings, store, capabilities)
+    orchestrator = build_orchestrator(settings)
+    handlers = SlackHandlers(settings, store, orchestrator)
     logger.info(
-        "capabilities enabled: %s",
-        ", ".join(c.name for c in capabilities) or "none",
+        "sub-agents enabled: %s",
+        ", ".join(orchestrator.agent_names) or "none",
     )
 
     app = AsyncApp(token=settings.slack_bot_token)
