@@ -11,10 +11,11 @@ Slack event (mention, DM, channel message, slash command)
   → Socket Mode (outbound WebSocket: no public URL, no inbound firewall rules)
   → handlers.py routes the event
       · channel messages: recorded into per-thread ContextStore (context.py)
-      · mentions and DMs: routed to the first enabled capability
-  → capability (capabilities/) streams work into a StreamingReply (streaming.py)
+      · mentions and DMs: handed to the Orchestrator
+  → Orchestrator (agents/orchestrator.py) picks a specialist sub-agent
+  → sub-agent runs its own LLM loop, streaming into a StreamingReply (streaming.py)
       · placeholder reply posted in-thread, then edited in place (throttled)
-      · tool activity lines while working, final answer + context footer when done
+      · muted status line while working, final answer + context footer when done
   → markdown converted to Slack mrkdwn (mrkdwn.py)
 ```
 
@@ -24,18 +25,27 @@ follow-up questions work per thread. The bot records messages in channels
 it is invited to (background context) but only speaks when @mentioned or
 DMed.
 
-### Capabilities
+### Agent layer
 
-| Capability | Module | Status |
+The agent layer is orchestrator-shaped: `agents/orchestrator.py` owns the
+roster of specialist sub-agents and routes each request to one of them.
+With a single sub-agent registered the route is direct; when more land,
+`Orchestrator.route()` becomes the dispatch point (heuristics or a small
+classifier over the sub-agents' descriptions) with no change to the Slack
+plumbing or the sub-agents.
+
+| Sub-agent | Module | Status |
 |---|---|---|
-| BookStack QA: answers documentation questions from the Vector wiki | `capabilities/bookstack_qa.py` | live |
+| bookstack: answers documentation questions from the Vector wiki | `agents/bookstack/` | live |
 
-New capabilities implement the `Capability` protocol (`capabilities/base.py`)
-and register in `capabilities/__init__.py`. The Slack plumbing does not change.
+New sub-agents implement the `SubAgent` protocol (`agents/base.py`) and
+register in `agents/__init__.py`.
 
-The BookStack QA capability reuses `aieng_bot.bookstack.BookstackQAAgent`
-(the same agent behind the web UI at bookstack.vectorinstitute.ai) including
-its LLM gateway support (`LLM_BASE_URL` + `LLM_API_KEY`).
+The bookstack sub-agent fully owns the QA stack (`agents/bookstack/`:
+Anthropic tool-use loop, BookStack API client, tools, prompts), using the
+shared model + gateway plumbing (`CLAUDE_MODEL` via `aieng_bot.config`,
+`LLM_BASE_URL` + `LLM_API_KEY` bearer auth). The former web chat UI and its
+FastAPI backend were retired in favor of Slack.
 
 ## Local development
 
@@ -52,7 +62,7 @@ Configuration comes from two optional dotenv files:
   `LLM_BASE_URL`/`LLM_API_KEY`, `BOOKSTACK_TOKEN_ID`, `BOOKSTACK_TOKEN_SECRET`)
 - `slack_agent/.env`: `SLACK_BOT_TOKEN` (xoxb), `SLACK_APP_TOKEN` (xapp)
 
-Without BookStack/LLM credentials the bot still runs with no capabilities
+Without BookStack/LLM credentials the bot still runs with no agents
 and says so when asked.
 
 Note: the production bot runs on Cloud Run with a single Socket Mode
@@ -64,14 +74,14 @@ double replies) while testing locally.
 
 `.github/workflows/deploy-slack-agent.yml` builds and deploys to Cloud Run
 (project `coderd`, Toronto) on every push to `main` touching
-`slack_agent/**` or `src/aieng_bot/bookstack/**`.
+`slack_agent/**`, `src/aieng_bot/**`, or `uv.lock`.
 
 Required GitHub secrets:
 
 - `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`: Slack app credentials
 - `BOOKSTACK_API_KEY` (used as `LLM_API_KEY`), `LLM_BASE_URL`, `CLAUDE_MODEL`,
-  `BOOKSTACK_TOKEN_ID`, `BOOKSTACK_TOKEN_SECRET`: shared with the bookstack
-  agent deploy
+  `BOOKSTACK_TOKEN_ID`, `BOOKSTACK_TOKEN_SECRET`: LLM gateway and BookStack
+  API credentials
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`: GCP auth
 
 The service runs exactly one always-on instance (`--min-instances=1
@@ -92,5 +102,5 @@ Logo assets live in `assets/`.
 - [x] BookStack QA capability with streaming replies
 - [ ] Persist thread contexts across deploys
 - [ ] Use recorded channel messages as ambient context for answers
-- [ ] More capabilities: GitHub, CI failures, dashboards
+- [ ] More sub-agents: GitHub, CI failures, dashboards
 - [ ] Slack "Agents & AI Apps" assistant surface (needs `assistant:write` scope + reinstall)

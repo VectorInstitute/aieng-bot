@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from aieng_bot.bookstack.client import BookStackClient
+from slack_agent.agents.bookstack.client import BookStackClient
 
 
 def _make_client(

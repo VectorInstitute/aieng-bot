@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aieng_bot.bookstack.client import BookStackClient
-from aieng_bot.bookstack.tools import (
+from slack_agent.agents.bookstack.client import BookStackClient
+from slack_agent.agents.bookstack.tools import (
     ALL_TOOLS,
     GET_PAGE_TOOL,
     LIST_BOOKS_TOOL,
