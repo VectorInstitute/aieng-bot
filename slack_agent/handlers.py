@@ -165,7 +165,7 @@ class SlackHandlers:
 
         await _react(client, channel, event["ts"], "eyes")
         posted = await client.chat_postMessage(
-            channel=channel, thread_ts=thread_ts, text="⏳ _Thinking…_"
+            channel=channel, thread_ts=thread_ts, text="_Thinking…_"
         )
         reply = StreamingReply(client, channel, posted["ts"])
 

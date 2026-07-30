@@ -67,26 +67,24 @@ class BookstackQACapability:
             if event_type == "tool_use":
                 tool = event.get("tool", "")
                 tool_input = event.get("input", {})
-                reply.resolve_activity()
                 if tool == "search_bookstack":
                     searches += 1
                     query = str(tool_input.get("query", ""))[:80]
-                    reply.start_activity(f"Searching the wiki for _{query}_")
+                    reply.set_status(f'Searching BookStack for "{query}"')
                 elif tool == "get_page":
-                    reply.start_activity("Reading a page…")
+                    reply.set_status("Reading documentation")
                 elif tool == "list_books":
-                    reply.start_activity("Listing wiki books")
+                    reply.set_status("Browsing BookStack books")
                 else:
-                    reply.start_activity(f"Running {tool}")
+                    reply.set_status("Working")
 
             elif event_type == "tool_resolve":
                 title = str(event.get("page_title", ""))
                 if title:
                     pages.append(title)
-                    reply.resolve_activity(f"Read *{title}*")
+                    reply.set_status(f"Reading {title}")
 
             elif event_type == "text_chunk":
-                reply.resolve_activity()
                 reply.append_text(str(event.get("chunk", "")))
 
             elif event_type == "text_clear":
@@ -114,7 +112,7 @@ class BookstackQACapability:
 
 def _summary(searches: int, pages: int, duration: float) -> str:
     """Build the muted context footer for a finished answer."""
-    parts = ["🔍 aieng-bot searched the wiki"]
+    parts = ["aieng-bot searched BookStack"]
     if searches:
         parts.append(f"{searches} search{'es' if searches != 1 else ''}")
     if pages:
