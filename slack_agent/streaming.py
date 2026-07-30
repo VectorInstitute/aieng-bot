@@ -5,10 +5,11 @@ emulated the way Slack's own AI apps do it: post a placeholder reply in the
 thread, then edit it in place as the agent works. Updates are throttled to
 stay well inside ``chat.update`` rate limits.
 
-While the agent is working, the message shows an activity trail (one line
-per tool action, current one animated with an hourglass) above the partial
-answer. The final update replaces all of it with the finished answer and a
-muted context line summarizing what the agent did.
+While the agent is working, the message shows a single muted status line
+describing the current action (the style Claude Tag uses: quiet, no emoji,
+trailing ellipsis). Once answer text starts streaming it replaces the
+status. The final update shows the finished answer and a muted context
+line summarizing what the agent did.
 """
 
 import time
@@ -43,7 +44,7 @@ class StreamingReply:
         self._channel = channel
         self._ts = ts
         self._min_interval = min_interval
-        self._activity: list[str] = []
+        self._status = ""
         self._text = ""
         self._last_flush = 0.0
         self._dirty = False
@@ -52,25 +53,17 @@ class StreamingReply:
     # State mutation (cheap; no network)
     # ------------------------------------------------------------------
 
-    def start_activity(self, line: str) -> None:
-        """Add an in-progress activity line (rendered with an hourglass)."""
-        self._activity.append(f"⏳ {line}")
-        self._dirty = True
-
-    def resolve_activity(self, done_line: str | None = None) -> None:
-        """Mark the most recent activity line as completed.
+    def set_status(self, line: str) -> None:
+        """Replace the current status line (shown while no text streams).
 
         Parameters
         ----------
-        done_line : str, optional
-            Replacement text; defaults to the original line without the
-            hourglass.
+        line : str
+            Plain description of the current action, no trailing ellipsis
+            (one is added when rendering).
 
         """
-        if not self._activity:
-            return
-        current = self._activity[-1].removeprefix("⏳ ")
-        self._activity[-1] = f"✔ {done_line or current}"
+        self._status = line
         self._dirty = True
 
     def append_text(self, chunk: str) -> None:
@@ -88,12 +81,11 @@ class StreamingReply:
     # ------------------------------------------------------------------
 
     def _render_working(self) -> str:
-        parts: list[str] = []
-        if self._activity:
-            parts.append("\n".join(self._activity))
         if self._text:
-            parts.append(self._text[:_MAX_TEXT] + _CURSOR)
-        return "\n\n".join(parts) or "⏳ _Thinking…_"
+            return self._text[:_MAX_TEXT] + _CURSOR
+        if self._status:
+            return f"_{self._status}…_"
+        return "_Thinking…_"
 
     async def flush(self, force: bool = False) -> None:
         """Push pending state to Slack if the throttle window allows.
