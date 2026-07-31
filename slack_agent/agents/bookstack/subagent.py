@@ -96,10 +96,12 @@ class BookstackSubAgent:
             elif event_type == "answer":
                 context.agent_history = list(event.get("history", []))
                 duration = time.monotonic() - started
-                await reply.finalize(
-                    to_mrkdwn(str(event.get("text", ""))),
-                    footer=_summary(searches, len(pages), duration),
+                footer = (
+                    _summary(searches, len(pages), duration)
+                    if searches or pages
+                    else None
                 )
+                await reply.finalize(to_mrkdwn(str(event.get("text", ""))), footer)
                 return
 
             elif event_type == "error":
