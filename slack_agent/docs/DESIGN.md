@@ -104,6 +104,36 @@ Slack event (mention in channel)
 - `agents/bookstack/subagent.py`: composes both toolsets and their step
   labels
 
+### Streaming engines
+
+Two engines behind one `StreamingReply` interface:
+
+- **Native streaming** (`chat.startStream`/`appendStream`/`stopStream`,
+  `chat:write` only) in channels and threaded DMs: Slack renders the
+  typing treatment itself and shows step transitions as task-update
+  chunks (`task_display_mode: plan`). Best-effort: unsupported pieces
+  degrade per-capability and are remembered process-wide.
+- **Edit-in-place** for top-level DMs (native streams are always thread
+  replies, which would break inline DM UX) and as the universal
+  fallback: placeholder + throttled `chat.update` with the plan block.
+
+Both normalize the final message via `chat.update` (sections + footer).
+Custom client-side rendering (React etc.) is impossible on Slack by
+design; native streaming, plan/task blocks, and the newer interactive
+elements (`feedback_buttons`, `context_actions`) are the sanctioned
+polish surface. Candidates for later: feedback buttons on answers.
+
+### Reply placement
+
+Placement is deterministic etiquette, not a model decision: channel
+replies thread off the mention (channel hygiene), top-level DM replies
+go inline, explicit threads are respected. Two constraints force this:
+the acknowledgment must post before the model starts thinking, and
+Slack cannot move a message between thread and inline after the fact.
+The agent's judgment applies to *whether* to reply (NO_REPLY) and,
+later, a possible post_message tool for posting standalone follow-ups
+it deems channel-worthy.
+
 ### Reactions (human-like emoji)
 
 UX philosophy: instant acknowledgment beats delayed personality, and a

@@ -7,6 +7,7 @@ per thread: the Anthropic message history lives on the thread context.
 """
 
 import logging
+import re
 import time
 
 from ...config import Settings
@@ -121,6 +122,7 @@ class BookstackSubAgent:
                     else None
                 )
                 answer, reaction = split_reaction(str(event.get("text", "")))
+                answer = _strip_empty_sources(answer)
                 if answer.strip().upper() == NO_REPLY:
                     await reply.delete()
                     return reaction or "thumbsup"
@@ -137,6 +139,15 @@ class BookstackSubAgent:
 
         await reply.fail("the agent returned no answer")
         return None
+
+
+# A "Sources" heading with nothing under it (belt to the prompt's braces).
+_EMPTY_SOURCES = re.compile(r"\n+\s*(?:#{1,6}\s*|\*\*?)?Sources(?:\*\*?)?:?\s*$")
+
+
+def _strip_empty_sources(answer: str) -> str:
+    """Drop a trailing Sources heading that has no entries beneath it."""
+    return _EMPTY_SOURCES.sub("", answer)
 
 
 _HISTORY_LIMIT = 40

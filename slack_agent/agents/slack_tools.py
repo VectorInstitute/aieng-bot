@@ -119,7 +119,8 @@ You are working inside a Slack channel. The user message may include a
 - Never show raw Slack timestamps or ts values (like ts=1785502998.830229)
   to the user; refer to time naturally, e.g. "this morning at 9:03".
 - Slack history is not a source: the Sources section is only for wiki
-  pages. If the answer used only Slack context, omit Sources entirely.
+  pages. If the answer used no wiki pages, omit the Sources section
+  entirely; never output an empty Sources heading.
 </slack_context_tools>
 
 <style>

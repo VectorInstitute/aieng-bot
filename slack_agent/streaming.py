@@ -1,24 +1,31 @@
 """Streaming reply renderer for Slack.
 
-Slack has no token-streaming primitive for classic messages, so streaming is
-emulated the way Slack's own AI apps do it: post a placeholder reply in the
-thread, then edit it in place as the agent works. Updates are throttled to
-stay well inside ``chat.update`` rate limits.
+Two engines behind one interface:
 
-While the agent is working, the message shows a live step checklist in the
-GitHub Actions style: each step is a bullet whose status transitions in
-place (🟡 running → 🟢 done → 🔴 failed), with the streaming answer text
-below. Short tool-less replies skip the checklist entirely (the pattern
-Claude Tag uses: questions get a direct reply, longer tasks get a live
-checklist edited in place). The final update replaces everything with the
-finished answer and a muted context line.
+- **Native streaming** (channels and threaded DMs): Slack's
+  ``chat.startStream`` / ``chat.appendStream`` / ``chat.stopStream``
+  render token streaming with Slack's own typing treatment; step
+  transitions are sent best-effort as task-update chunks. Streamed
+  messages are always thread replies, which channels want anyway.
+- **Edit-in-place** (top-level DMs, and any workspace where the native
+  API is unavailable): a placeholder message updated under a throttle,
+  with steps as a native plan block. This keeps DM replies inline, which
+  native streaming cannot do.
+
+Either way, the final message is normalized with a ``chat.update`` to
+the canonical answer layout (sections + muted context footer), and
+protocol tokens (NO_REPLY, the reaction sign-off) are masked from the
+visible stream by :func:`~slack_agent.reactions.visible_stream_text`.
 """
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from .reactions import visible_stream_text
+
+logger = logging.getLogger(__name__)
 
 # Slack rejects messages over 40k chars; leave generous headroom.
 _MAX_TEXT = 12000
@@ -27,6 +34,10 @@ _CURSOR = " ▍"
 _RUNNING = "\U0001f7e1"  # yellow circle
 _DONE = "\U0001f7e2"  # green circle
 _FAILED = "\U0001f534"  # red circle
+
+# Workspace capability flags, discovered on first failure and remembered
+# for the process lifetime so every reply does not retry a dead API.
+_CAPS = {"native_stream": True, "native_tasks": True, "native_plan_block": True}
 
 
 @dataclass
@@ -57,7 +68,7 @@ class _Step:
 
 
 class StreamingReply:
-    """A single in-thread reply message that is edited as the agent works.
+    """A single in-conversation reply rendered live as the agent works.
 
     Parameters
     ----------
@@ -65,27 +76,81 @@ class StreamingReply:
         Bolt async web client (``app.client``).
     channel : str
         Channel ID the reply lives in.
-    ts : str
-        Timestamp of the placeholder message to edit.
+    anchor_ts : str
+        Timestamp of the user's message (native streams thread off it).
+    reply_thread_ts : str or None
+        Thread for edit-in-place replies; None posts inline (DMs).
+    native_allowed : bool
+        Whether native streaming may be used (False for top-level DMs,
+        where it would force a thread).
+    recipient_user_id : str
+        Asker's user ID (required by native streaming in channels).
+    recipient_team_id : str
+        Asker's team ID (required by native streaming in channels).
     min_interval : float
-        Minimum seconds between ``chat.update`` calls.
+        Minimum seconds between network flushes.
 
     """
 
     def __init__(
-        self, client: Any, channel: str, ts: str, min_interval: float = 1.2
+        self,
+        client: Any,
+        channel: str,
+        anchor_ts: str,
+        reply_thread_ts: str | None = None,
+        native_allowed: bool = False,
+        recipient_user_id: str = "",
+        recipient_team_id: str = "",
+        min_interval: float = 1.2,
     ) -> None:
-        """Initialize the renderer around an already-posted placeholder."""
+        """Store configuration; call :meth:`start` before streaming."""
         self._client = client
         self._channel = channel
-        self._ts = ts
+        self._anchor_ts = anchor_ts
+        self._reply_thread_ts = reply_thread_ts
+        self._native_allowed = native_allowed
+        self._recipient_user_id = recipient_user_id
+        self._recipient_team_id = recipient_team_id
         self._min_interval = min_interval
         self._steps: list[_Step] = []
         self._text = ""
         self._last_flush = 0.0
         self._dirty = False
-        self._native_plan = True
         self._flush_seq = 0
+        self._ts = ""
+        self._native = False
+        self._sent_visible_len = 0
+        self._sent_step_states: list[tuple[str, str]] = []
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    async def start(self) -> None:
+        """Open the reply: a native stream where possible, else a placeholder."""
+        if self._native_allowed and _CAPS["native_stream"]:
+            try:
+                response = await self._client.chat_startStream(
+                    channel=self._channel,
+                    thread_ts=self._anchor_ts,
+                    recipient_user_id=self._recipient_user_id,
+                    recipient_team_id=self._recipient_team_id,
+                    task_display_mode="plan",
+                )
+                self._ts = response["ts"]
+                self._native = True
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("native streaming unavailable: %s", exc)
+                _CAPS["native_stream"] = False
+
+        response = await self._client.chat_postMessage(
+            channel=self._channel,
+            thread_ts=self._reply_thread_ts,
+            text="_Thinking…_",
+        )
+        self._ts = response["ts"]
+        self._native = False
 
     # ------------------------------------------------------------------
     # State mutation (cheap; no network)
@@ -143,10 +208,155 @@ class StreamingReply:
     def clear_text(self) -> None:
         """Discard streamed text (the agent decided to use a tool instead)."""
         self._text = ""
+        # Native streams cannot retract already-sent text; the final
+        # chat.update replaces everything, so just restart the delta.
+        self._sent_visible_len = 0
         self._dirty = True
 
     # ------------------------------------------------------------------
-    # Rendering
+    # Flushing
+    # ------------------------------------------------------------------
+
+    async def flush(self, force: bool = False) -> None:
+        """Push pending state to Slack if the throttle window allows.
+
+        Parameters
+        ----------
+        force : bool
+            Update immediately, ignoring the throttle.
+
+        """
+        now = time.monotonic()
+        if not self._dirty or not self._ts:
+            return
+        if not force and (now - self._last_flush) < self._min_interval:
+            return
+        self._last_flush = now
+        self._dirty = False
+        if self._native:
+            await self._flush_native()
+        else:
+            await self._flush_update()
+
+    async def _flush_native(self) -> None:
+        """Append new text (and best-effort step updates) to the stream."""
+        if _CAPS["native_tasks"]:
+            chunks = self._step_chunks()
+            if chunks:
+                try:
+                    await self._client.chat_appendStream(
+                        channel=self._channel, ts=self._ts, chunks=chunks
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("task chunks rejected; text-only stream: %s", exc)
+                    _CAPS["native_tasks"] = False
+
+        visible = visible_stream_text(self._text)
+        if len(visible) > self._sent_visible_len:
+            delta = visible[self._sent_visible_len :]
+            self._sent_visible_len = len(visible)
+            await self._client.chat_appendStream(
+                channel=self._channel, ts=self._ts, markdown_text=delta
+            )
+
+    def _step_chunks(self) -> list[dict[str, Any]]:
+        """Task-update chunks for steps that changed since the last flush."""
+        states = [(step.label, step.plan_status()) for step in self._steps]
+        chunks = [
+            {"type": "task_update", "id": f"t{i}", "title": label, "status": status}
+            for i, (label, status) in enumerate(states)
+            if i >= len(self._sent_step_states)
+            or self._sent_step_states[i] != (label, status)
+        ]
+        self._sent_step_states = states
+        return chunks
+
+    async def _flush_update(self) -> None:
+        """Edit-in-place rendering (plan block + streaming section)."""
+        self._flush_seq += 1
+        blocks, fallback = self._working_blocks()
+        try:
+            await self._client.chat_update(
+                channel=self._channel, ts=self._ts, text=fallback, blocks=blocks
+            )
+        except Exception:
+            if not (_CAPS["native_plan_block"] and self._steps):
+                raise
+            _CAPS["native_plan_block"] = False
+            blocks, fallback = self._working_blocks()
+            await self._client.chat_update(
+                channel=self._channel, ts=self._ts, text=fallback, blocks=blocks
+            )
+
+    # ------------------------------------------------------------------
+    # Terminal states
+    # ------------------------------------------------------------------
+
+    async def finalize(self, text: str, footer: str | None = None) -> None:
+        """Replace the working message with the final answer.
+
+        Parameters
+        ----------
+        text : str
+            Final answer in Slack mrkdwn.
+        footer : str, optional
+            Muted context line (activity summary) appended below the answer.
+
+        """
+        await self._stop_native_stream()
+        text = text[:_MAX_TEXT]
+        blocks: list[dict[str, Any]] = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": chunk}}
+            for chunk in _split_for_blocks(text)
+        ]
+        if footer:
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [{"type": "mrkdwn", "text": footer}],
+                }
+            )
+        await self._client.chat_update(
+            channel=self._channel, ts=self._ts, text=text, blocks=blocks
+        )
+
+    async def delete(self) -> None:
+        """Remove the reply entirely (the agent chose not to respond)."""
+        await self._stop_native_stream()
+        await self._client.chat_delete(channel=self._channel, ts=self._ts)
+
+    async def fail(self, message: str) -> None:
+        """Render the checklist with the current step failed, plus the error."""
+        await self._stop_native_stream()
+        for step in reversed(self._steps):
+            if step.status == "running":
+                step.status = "failed"
+                break
+        blocks: list[dict[str, Any]] = []
+        if self._steps:
+            blocks.append(
+                self._plan_block()
+                if _CAPS["native_plan_block"]
+                else self._steps_context_block()
+            )
+        error_line = f"⚠️ Something went wrong: {message[:500]}"
+        blocks.append(
+            {"type": "section", "text": {"type": "mrkdwn", "text": error_line}}
+        )
+        await self._client.chat_update(
+            channel=self._channel, ts=self._ts, text=error_line, blocks=blocks
+        )
+
+    async def _stop_native_stream(self) -> None:
+        if not self._native:
+            return
+        try:
+            await self._client.chat_stopStream(channel=self._channel, ts=self._ts)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("stopStream failed (already stopped?): %s", exc)
+
+    # ------------------------------------------------------------------
+    # Edit-in-place rendering helpers
     # ------------------------------------------------------------------
 
     def _plan_block(self) -> dict[str, Any]:
@@ -184,17 +394,13 @@ class StreamingReply:
         }
 
     def _working_blocks(self) -> tuple[list[dict[str, Any]], str]:
-        """Build the working-state Block Kit layout plus a text fallback.
-
-        Steps render as a native plan block (Slack's task-list surface for
-        AI apps, with built-in status indicators); if the workspace rejects
-        it, steps fall back to a muted context block. The streaming text is
-        a regular section block below.
-        """
+        """Build the edit-in-place Block Kit layout plus a text fallback."""
         blocks: list[dict[str, Any]] = []
         if self._steps:
             blocks.append(
-                self._plan_block() if self._native_plan else self._steps_context_block()
+                self._plan_block()
+                if _CAPS["native_plan_block"]
+                else self._steps_context_block()
             )
         visible = visible_stream_text(self._text)
         if visible:
@@ -214,91 +420,6 @@ class StreamingReply:
             )
         fallback = visible[:200] if visible else "Working…"
         return blocks, fallback
-
-    async def flush(self, force: bool = False) -> None:
-        """Push pending state to Slack if the throttle window allows.
-
-        Parameters
-        ----------
-        force : bool
-            Update immediately, ignoring the throttle.
-
-        """
-        now = time.monotonic()
-        if not self._dirty:
-            return
-        if not force and (now - self._last_flush) < self._min_interval:
-            return
-        self._last_flush = now
-        self._dirty = False
-        self._flush_seq += 1
-        blocks, fallback = self._working_blocks()
-        try:
-            await self._client.chat_update(
-                channel=self._channel, ts=self._ts, text=fallback, blocks=blocks
-            )
-        except Exception:
-            if not (self._native_plan and self._steps):
-                raise
-            # Workspace rejected the plan block; fall back to context style.
-            self._native_plan = False
-            blocks, fallback = self._working_blocks()
-            await self._client.chat_update(
-                channel=self._channel, ts=self._ts, text=fallback, blocks=blocks
-            )
-
-    async def finalize(self, text: str, footer: str | None = None) -> None:
-        """Replace the working message with the final answer.
-
-        Parameters
-        ----------
-        text : str
-            Final answer in Slack mrkdwn.
-        footer : str, optional
-            Muted context line (activity summary) appended below the answer.
-
-        """
-        text = text[:_MAX_TEXT]
-        blocks: list[dict[str, Any]] = [
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": chunk},
-            }
-            for chunk in _split_for_blocks(text)
-        ]
-        if footer:
-            blocks.append(
-                {
-                    "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": footer}],
-                }
-            )
-        await self._client.chat_update(
-            channel=self._channel, ts=self._ts, text=text, blocks=blocks
-        )
-
-    async def delete(self) -> None:
-        """Remove the placeholder message (the agent chose not to reply)."""
-        await self._client.chat_delete(channel=self._channel, ts=self._ts)
-
-    async def fail(self, message: str) -> None:
-        """Render the checklist with the current step failed, plus the error."""
-        for step in reversed(self._steps):
-            if step.status == "running":
-                step.status = "failed"
-                break
-        blocks: list[dict[str, Any]] = []
-        if self._steps:
-            blocks.append(
-                self._plan_block() if self._native_plan else self._steps_context_block()
-            )
-        error_line = f"⚠️ Something went wrong: {message[:500]}"
-        blocks.append(
-            {"type": "section", "text": {"type": "mrkdwn", "text": error_line}}
-        )
-        await self._client.chat_update(
-            channel=self._channel, ts=self._ts, text=error_line, blocks=blocks
-        )
 
 
 def _split_for_blocks(text: str, limit: int = 2900) -> list[str]:

@@ -166,11 +166,20 @@ class SlackHandlers:
             return
 
         await _react(client, channel, event["ts"], "eyes")
-        posted = await client.chat_postMessage(
-            channel=channel, thread_ts=reply_thread, text="_Thinking…_"
+        reply = StreamingReply(
+            client,
+            channel,
+            anchor_ts=event["ts"],
+            reply_thread_ts=reply_thread,
+            # Native streams are always thread replies, which would force
+            # threads in top-level DMs; those keep the inline engine.
+            native_allowed=reply_thread is not None
+            or event.get("channel_type") != "im",
+            recipient_user_id=event.get("user", ""),
+            recipient_team_id=event.get("team", ""),
         )
+        await reply.start()
         question = await self._enrich_question(event, context, question)
-        reply = StreamingReply(client, channel, posted["ts"])
 
         async with context.lock:
             try:
