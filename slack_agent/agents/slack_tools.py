@@ -4,21 +4,17 @@ The same pattern as the BookStack tools: instead of stuffing channel
 history into every prompt, the model calls these tools when a question
 references discussion outside the ambient window. Tools are hard-bound
 to the channel the question came from, so private-channel data never
-crosses channels.
+crosses channels. Fetching and rendering are delegated to the shared
+:class:`~slack_agent.slack_context.SlackContextService` so the ambient
+window (L2) and tool results (L3) always render identically.
 """
 
-import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from anthropic.types import ToolParam
-from slack_sdk import WebClient
 
-from ..slack_context import NAME_CACHE, format_message
-
-logger = logging.getLogger(__name__)
-
-_RESULT_CHARS = 8000
+from ..slack_context import CONTEXT_TAG, SlackContextService
 
 SLACK_TOOLS: list[ToolParam] = [
     {
@@ -68,15 +64,22 @@ SLACK_TOOLS: list[ToolParam] = [
     },
 ]
 
-SLACK_TOOL_NAMES = {t["name"] for t in SLACK_TOOLS}
+# Progress-checklist labels for these tools, kept beside the definitions.
+STEP_LABELS: dict[str, tuple[str, str]] = {
+    "get_channel_history": (
+        "Reading recent channel messages",
+        "Read recent channel messages",
+    ),
+    "get_thread_replies": ("Reading a thread", "Read a thread"),
+}
 
-SYSTEM_SUFFIX = """
+SYSTEM_SUFFIX = f"""
 
 <slack_context_tools>
 You are working inside a Slack channel. The user message may include a
-<slack_context> block with recent messages for orientation.
+<{CONTEXT_TAG}> block with recent messages for orientation.
 - Use get_channel_history when the question refers to earlier discussion
-  that is not in <slack_context> (for example "what did we decide about X?").
+  that is not in <{CONTEXT_TAG}> (for example "what did we decide about X?").
 - Use get_thread_replies with a thread_ts from history results to read one
   conversation in full.
 - These tools only see the current channel. Never invent channel history.
@@ -93,83 +96,38 @@ You are working inside a Slack channel. The user message may include a
 </slack_context_tools>"""
 
 
-def _sync_display_name(client: WebClient, user_id: str) -> str:
-    if not user_id:
-        return "unknown"
-    if user_id not in NAME_CACHE:
-        try:
-            info: Any = client.users_info(user=user_id)
-            profile = info["user"].get("profile", {})
-            NAME_CACHE[user_id] = (
-                profile.get("display_name")
-                or profile.get("real_name")
-                or info["user"].get("name")
-                or user_id
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("users_info failed for %s: %s", user_id, exc)
-            return user_id
-    return NAME_CACHE[user_id]
-
-
-def _render(client: WebClient, messages: list[dict[str, Any]]) -> str:
-    lines = []
-    for msg in messages:
-        if msg.get("subtype"):
-            continue
-        user = msg.get("user", "")
-        name = (
-            _sync_display_name(client, user) if user else (msg.get("username") or "app")
-        )
-        line = format_message(msg.get("ts", ""), name, msg.get("text", ""))
-        if msg.get("reply_count"):
-            line += f"  (thread with {msg['reply_count']} replies, ts={msg['ts']})"
-        lines.append(line)
-    return "\n".join(lines)[:_RESULT_CHARS] or "(no messages)"
-
-
 def build_slack_executor(
-    token: str, channel: str, client: WebClient | None = None
-) -> Callable[[str, dict[str, Any]], str]:
-    """Build a synchronous executor for the Slack tools.
+    service: SlackContextService, channel: str
+) -> Callable[[str, dict[str, Any]], Awaitable[str]]:
+    """Build the async executor for the Slack tools.
 
     Parameters
     ----------
-    token : str
-        Bot token used for Web API calls.
+    service : SlackContextService
+        Shared context service (one client, one name cache, one renderer).
     channel : str
         The only channel the tools may read; bound at request time.
-    client : WebClient, optional
-        Injected client for tests; a real one is built from *token*
-        otherwise.
 
     Returns
     -------
     Callable
-        ``executor(name, tool_input) -> str`` matching the agent loop's
-        tool execution convention.
+        ``await executor(name, tool_input) -> str`` matching the agent
+        loop's extra-tool convention.
 
     """
-    web = client or WebClient(token=token)
 
-    def execute(name: str, tool_input: dict[str, Any]) -> str:
+    async def execute(name: str, tool_input: dict[str, Any]) -> str:
         try:
             if name == "get_channel_history":
                 limit = max(1, min(int(tool_input.get("limit", 30)), 100))
-                kwargs: dict[str, Any] = {"channel": channel, "limit": limit}
-                if tool_input.get("oldest"):
-                    kwargs["oldest"] = str(tool_input["oldest"])
-                response: Any = web.conversations_history(**kwargs)
-                return _render(web, list(reversed(response.get("messages", []))))
+                oldest = str(tool_input["oldest"]) if tool_input.get("oldest") else None
+                return await service.history_text(channel, limit, oldest)
 
             if name == "get_thread_replies":
                 thread_ts = str(tool_input.get("thread_ts", "")).strip()
                 if not thread_ts:
                     return "Error: thread_ts is required"
-                response = web.conversations_replies(
-                    channel=channel, ts=thread_ts, limit=50
-                )
-                return _render(web, list(response.get("messages", [])))
+                return await service.thread_text(channel, thread_ts)
 
             return f"Unknown tool: {name}"
         except Exception as exc:  # noqa: BLE001

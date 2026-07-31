@@ -43,14 +43,14 @@ def create_app(settings: Settings) -> AsyncApp:
 
     """
     store = ContextStore()
-    orchestrator = build_orchestrator(settings)
+    app = AsyncApp(token=settings.slack_bot_token)
+    slack_context = SlackContextService(app.client)
+    orchestrator = build_orchestrator(settings, slack_context)
     logger.info(
         "sub-agents enabled: %s",
         ", ".join(orchestrator.agent_names) or "none",
     )
 
-    app = AsyncApp(token=settings.slack_bot_token)
-    slack_context = SlackContextService(app.client)
     handlers = SlackHandlers(settings, store, orchestrator, slack_context)
     app.event("app_mention")(handlers.handle_app_mention)
     app.event("message")(handlers.handle_message)

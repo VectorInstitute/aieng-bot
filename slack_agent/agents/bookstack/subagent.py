@@ -12,8 +12,14 @@ import time
 from ...config import Settings
 from ...context import ThreadContext
 from ...mrkdwn import to_mrkdwn
+from ...slack_context import SlackContextService
 from ...streaming import StreamingReply
-from ..slack_tools import SLACK_TOOLS, SYSTEM_SUFFIX, build_slack_executor
+from ..slack_tools import (
+    SLACK_TOOLS,
+    STEP_LABELS,
+    SYSTEM_SUFFIX,
+    build_slack_executor,
+)
 from .agent import BookstackQAAgent
 
 logger = logging.getLogger(__name__)
@@ -29,16 +35,18 @@ class BookstackSubAgent:
         "BookStack wiki."
     )
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, slack_context: SlackContextService) -> None:
         """Build the underlying QA agent from settings.
 
         Parameters
         ----------
         settings : Settings
             Resolved runtime configuration with BookStack credentials.
+        slack_context : SlackContextService
+            Shared Slack context service powering the history tools.
 
         """
-        self._settings = settings
+        self._slack_context = slack_context
         self._agent = BookstackQAAgent(
             base_url=settings.bookstack_url,
             token_id=settings.bookstack_token_id,
@@ -65,9 +73,7 @@ class BookstackSubAgent:
         pages: list[str] = []
         drafting = False
 
-        slack_executor = build_slack_executor(
-            self._settings.slack_bot_token, context.channel
-        )
+        slack_executor = build_slack_executor(self._slack_context, context.channel)
         async for event in self._agent.ask_stream(
             question,
             history=context.agent_history,
@@ -137,18 +143,12 @@ def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:
             f'Searched BookStack for "{query}"',
         )
         return 1
-    if tool == "get_page":
-        reply.begin_step("Reading documentation", "Read documentation")
-    elif tool == "list_books":
-        reply.begin_step("Browsing BookStack books", "Browsed BookStack books")
-    elif tool == "get_channel_history":
-        reply.begin_step(
-            "Reading recent channel messages", "Read recent channel messages"
-        )
-    elif tool == "get_thread_replies":
-        reply.begin_step("Reading a thread", "Read a thread")
-    else:
-        reply.begin_step("Working", "Worked")
+    labels = {
+        "get_page": ("Reading documentation", "Read documentation"),
+        "list_books": ("Browsing BookStack books", "Browsed BookStack books"),
+        **STEP_LABELS,
+    }
+    reply.begin_step(*labels.get(str(tool), ("Working", "Worked")))
     return 0
 
 

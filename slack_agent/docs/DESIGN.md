@@ -83,21 +83,21 @@ Slack event (mention in channel)
 
 ### Components
 
-- `slack_context.py`: `SlackContextService`
-  - `ambient_window(channel, thread_ts, exclude_ts)` → formatted text
-    block: recent channel messages plus the pre-mention thread replies
-  - display-name resolution via `users.info` with an in-process cache
-  - message formatting: `[HH:MM] Name: text`, long messages truncated
-- `agents/slack_tools.py`: Anthropic tool definitions + a synchronous
-  executor factory bound to (channel, bot token). Tools:
+- `slack_context.py`: `SlackContextService`, the single owner of Slack
+  context: display-name resolution (cached, batched), message rendering
+  (local-time stamps, truncation, thread markers), the ambient window,
+  and `wrap_question()` (the `<slack_context>` prompt contract). Both
+  L2 and the L3 tools render through this one service.
+- `agents/slack_tools.py`: Anthropic tool definitions, step labels, the
+  system-prompt suffix, and an async executor factory bound to
+  (service, channel). Tools:
   - `get_channel_history(limit≤100, oldest?)`: recent channel messages
   - `get_thread_replies(thread_ts)`: full replies of one thread
-  - a system-prompt suffix teaching the model when to use them
-- `agents/bookstack/agent.py`: the LLM loop accepts extra tools and an
-  extra executor per call (`ask_stream(..., extra_tools,
-  extra_executor, extra_system)`), keeping the loop generic
-- `agents/bookstack/subagent.py`: composes both toolsets, adds step
-  labels for Slack tools ("Reading channel history")
+- `agents/bookstack/agent.py`: the LLM loop accepts extra tools, an
+  async extra executor (dispatch: anything outside the BookStack tool
+  names), and a system suffix per call, keeping the loop generic
+- `agents/bookstack/subagent.py`: composes both toolsets and their step
+  labels
 
 ### Scope and safety
 
@@ -131,6 +131,14 @@ Slack event (mention in channel)
    Cloud Run volume, Firestore, or BookStack itself).
 3. L5 ambient replies: opt-in per channel, conservative triggers.
 4. Session persistence across deploys (currently in-memory).
+
+Deliberate debt, with triggers:
+
+- Tool-registry refactor (a `ToolLoopAgent` over composed toolsets
+  instead of BookStack-primary + extras): do when a third toolset
+  lands (L4 memory tools are the likely trigger).
+- `SLACK_TIMEZONE` read from env at import; fold into `Settings` on
+  the next config change.
 
 ## Sources
 

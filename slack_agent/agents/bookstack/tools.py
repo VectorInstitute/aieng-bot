@@ -65,6 +65,8 @@ LIST_BOOKS_TOOL: ToolParam = {
 
 ALL_TOOLS: list[ToolParam] = [SEARCH_TOOL, GET_PAGE_TOOL, LIST_BOOKS_TOOL]
 
+BOOKSTACK_TOOL_NAMES = frozenset(str(t["name"]) for t in ALL_TOOLS)
+
 
 def execute_tool(name: str, tool_input: dict[str, Any], client: BookStackClient) -> str:
     """Execute a tool call against the BookStack API and return a JSON string result.
