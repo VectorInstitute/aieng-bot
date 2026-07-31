@@ -8,10 +8,16 @@ deliberately small and cheap.
 """
 
 import logging
-import time
+import os
+from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+
+# Timestamps shown to the model (and echoed to users) follow the
+# workspace's local time so they match what people see in Slack.
+LOCAL_TZ = ZoneInfo(os.environ.get("SLACK_TIMEZONE", "America/Toronto"))
 
 # Shared user-id -> display-name cache (also used by the sync tool executor).
 NAME_CACHE: dict[str, str] = {}
@@ -31,9 +37,10 @@ def truncate(text: str, limit: int = _MESSAGE_CHARS) -> str:
 
 
 def format_message(ts: str, name: str, text: str) -> str:
-    """Format one message as ``[MM-DD HH:MM] Name: text``."""
+    """Format one message as ``[MM-DD HH:MM] Name: text`` in local time."""
     try:
-        stamp = time.strftime("%m-%d %H:%M", time.gmtime(float(ts)))
+        moment = datetime.fromtimestamp(float(ts), tz=timezone.utc)
+        stamp = moment.astimezone(LOCAL_TZ).strftime("%m-%d %H:%M")
     except (TypeError, ValueError):
         stamp = "?"
     return f"[{stamp}] {name}: {truncate(text)}"
