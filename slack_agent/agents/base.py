@@ -18,7 +18,11 @@ class SubAgent(Protocol):
     description: str
 
     async def handle(
-        self, question: str, context: ThreadContext, reply: StreamingReply
+        self,
+        question: str,
+        context: ThreadContext,
+        reply: StreamingReply,
+        requester: str = "",
     ) -> str | None:
         """Answer *question* in *context*, rendering into *reply*.
 
@@ -30,6 +34,9 @@ class SubAgent(Protocol):
             Isolated context of the Slack thread.
         reply : StreamingReply
             Renderer for the in-thread reply message.
+        requester : str, optional
+            Display name of the person asking; used for provenance on
+            any write action the run performs.
 
         Returns
         -------

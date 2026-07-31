@@ -168,3 +168,52 @@ class TestBookStackClient:
 
         client = _make_client(handler)
         assert client.list_books() == {"data": [{"id": 7}]}
+
+
+class TestBookStackClientWrites:
+    """Write endpoints: page creation and update."""
+
+    def test_create_page_posts_to_pages(self) -> None:
+        """create_page POSTs book_id, name, and markdown to /pages."""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["path"] = request.url.path
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"id": 42, "name": "T"})
+
+        client = _make_client(handler)
+        result = client.create_page(book_id=1, name="T", markdown="# T")
+
+        assert captured["method"] == "POST"
+        assert captured["path"] == "/api/pages"
+        assert captured["body"] == {"book_id": 1, "name": "T", "markdown": "# T"}
+        assert result["id"] == 42
+
+    def test_update_page_puts_only_given_fields(self) -> None:
+        """update_page PUTs to /pages/{id} and omits unset fields."""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["path"] = request.url.path
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"id": 7, "name": "T"})
+
+        client = _make_client(handler)
+        client.update_page(page_id=7, markdown="# New")
+
+        assert captured["method"] == "PUT"
+        assert captured["path"] == "/api/pages/7"
+        assert captured["body"] == {"markdown": "# New"}
+
+    def test_write_http_error_propagates(self) -> None:
+        """A 403 on create_page raises instead of failing silently."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"error": "no permission"})
+
+        client = _make_client(handler)
+        with pytest.raises(httpx.HTTPStatusError):
+            client.create_page(book_id=1, name="T", markdown="x")

@@ -79,7 +79,11 @@ class BookstackSubAgent:
         self._background: set[asyncio.Task[None]] = set()
 
     async def handle(
-        self, question: str, context: ThreadContext, reply: StreamingReply
+        self,
+        question: str,
+        context: ThreadContext,
+        reply: StreamingReply,
+        requester: str = "",
     ) -> str | None:
         """Answer *question* from the wiki, streaming progress into *reply*.
 
@@ -91,6 +95,9 @@ class BookstackSubAgent:
             Thread context carrying the multi-turn agent history.
         reply : StreamingReply
             Renderer for the in-thread reply message.
+        requester : str, optional
+            Display name of the asker; stamped into any wiki page this
+            run writes.
 
         Returns
         -------
@@ -110,6 +117,7 @@ class BookstackSubAgent:
             extra_tools=SLACK_TOOLS,
             extra_executor=slack_executor,
             system=SYSTEM,
+            write_attribution=requester,
         ):
             event_type = event.get("type")
 
@@ -120,9 +128,14 @@ class BookstackSubAgent:
             elif event_type == "tool_resolve":
                 title = str(event.get("page_title", ""))
                 if title:
-                    pages.append(title)
+                    tool = str(event.get("tool", "get_page"))
+                    if tool == "get_page":
+                        pages.append(title)
+                    verb = {"create_page": "Created", "update_page": "Updated"}.get(
+                        tool, "Read"
+                    )
                     reply.complete_step(
-                        f"Read {title}",
+                        f"{verb} {title}",
                         source_url=str(event.get("page_url", "")),
                         source_text=title,
                     )
@@ -221,6 +234,8 @@ def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:
     labels = {
         "get_page": ("Reading documentation", "Read documentation"),
         "list_books": ("Browsing BookStack books", "Browsed BookStack books"),
+        "create_page": ("Writing a wiki page", "Wrote a wiki page"),
+        "update_page": ("Updating a wiki page", "Updated a wiki page"),
         **STEP_LABELS,
     }
     reply.begin_step(*labels.get(str(tool), ("Working", "Worked")))

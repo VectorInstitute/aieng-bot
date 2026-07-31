@@ -75,7 +75,7 @@ class TestBuildSystemPrompt:
         )
         assert "answer in plain language from" in prompt
         assert "never infer an ability from" in prompt
-        assert "cannot write to BookStack" in prompt
+        assert "not listed above, you cannot do it" in prompt
 
     def test_sections_appended_in_order_after_capabilities(self):
         """Domain sections follow identity and capabilities, in order."""
@@ -114,9 +114,11 @@ class TestBookstackSubagentPrompt:
         assert "<slack_context_tools>" in SYSTEM
         assert "reaction:" in SYSTEM
 
-    def test_reaction_is_the_only_write(self):
-        """add_reaction is an action; everything else stays read-only."""
+    def test_write_actions_match_the_access_registry(self):
+        """Exactly the declared write tools appear in the Actions list."""
         actions = SYSTEM.split("Actions (the only ways you can change anything):")[1]
         actions = actions.split("\n\n")[0]
-        assert "add_reaction" in actions
+        for write_tool in ("add_reaction", "create_page", "update_page"):
+            assert write_tool in actions
         assert "search_bookstack" not in actions
+        assert "get_channel_history" not in actions

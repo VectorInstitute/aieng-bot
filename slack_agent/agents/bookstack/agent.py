@@ -297,6 +297,7 @@ class BookstackQAAgent:
         tool_uses: list[Any],
         tool_results: list[dict[str, Any]],
         extra_executor: Callable[[str, dict[str, Any]], Awaitable[str]] | None = None,
+        write_attribution: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Execute tool calls sequentially; yield ``tool_use`` / ``tool_resolve`` events.
 
@@ -312,15 +313,16 @@ class BookstackQAAgent:
                 result = await extra_executor(tu.name, ti)
             else:
                 result = await asyncio.to_thread(
-                    execute_tool, tu.name, ti, self.bookstack
+                    execute_tool, tu.name, ti, self.bookstack, write_attribution
                 )
-            if tu.name == "get_page":
+            if tu.name in {"get_page", "create_page", "update_page"}:
                 try:
                     page_data = json.loads(result)
                     page_title = str(page_data.get("name") or "")
                     if page_title:
                         yield {
                             "type": "tool_resolve",
+                            "tool": tu.name,
                             "page_id": ti.get("page_id"),
                             "page_title": page_title,
                             "page_url": str(page_data.get("url") or ""),
@@ -339,6 +341,7 @@ class BookstackQAAgent:
         extra_executor: Callable[[str, dict[str, Any]], Awaitable[str]] | None = None,
         extra_system: str = "",
         system: str | None = None,
+        write_attribution: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Answer a question, yielding structured SSE events as they occur.
 
@@ -381,6 +384,9 @@ class BookstackQAAgent:
             Complete system prompt to use verbatim, replacing the
             default assembly. Callers with a harness-built prompt (the
             Slack sub-agent) pass it here.
+        write_attribution : str, optional
+            Who requested this run; stamped into any page the run
+            writes so wiki provenance survives the shared API token.
 
         Yields
         ------
@@ -435,7 +441,7 @@ class BookstackQAAgent:
                 )
                 tool_results: list[dict[str, Any]] = []
                 async for event in self._execute_tool_calls(
-                    tool_uses, tool_results, extra_executor
+                    tool_uses, tool_results, extra_executor, write_attribution
                 ):
                     yield event
                 messages.append({"role": "user", "content": tool_results})

@@ -182,9 +182,15 @@ class SlackHandlers:
         await reply.start()
         question = await self._enrich_question(event, context, question)
 
+        requester = ""
+        if event.get("user"):
+            requester = await self._slack_context.display_name(event["user"])
+
         async with context.lock:
             try:
-                reaction = await self._orchestrator.handle(question, context, reply)
+                reaction = await self._orchestrator.handle(
+                    question, context, reply, requester=requester
+                )
             except Exception:
                 logger.exception("agent run failed")
                 await reply.fail("unexpected internal error")

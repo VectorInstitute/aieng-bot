@@ -65,7 +65,11 @@ class Orchestrator:
         return self._agents[0]
 
     async def handle(
-        self, question: str, context: ThreadContext, reply: StreamingReply
+        self,
+        question: str,
+        context: ThreadContext,
+        reply: StreamingReply,
+        requester: str = "",
     ) -> str | None:
         """Route *question* and delegate to the chosen sub-agent.
 
@@ -77,6 +81,8 @@ class Orchestrator:
             Isolated context of the Slack thread.
         reply : StreamingReply
             Renderer for the in-thread reply message.
+        requester : str, optional
+            Display name of the asker, for write-action provenance.
 
         Returns
         -------
@@ -89,4 +95,4 @@ class Orchestrator:
             await reply.fail("no agents are configured")
             return None
         logger.info("routing to sub-agent %s", agent.name)
-        return await agent.handle(question, context, reply)
+        return await agent.handle(question, context, reply, requester=requester)

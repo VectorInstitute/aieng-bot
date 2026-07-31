@@ -107,3 +107,106 @@ class BookStackClient:
 
         """
         return self._get("/books", {"count": 100})
+
+    def list_roles(self) -> dict[str, object]:
+        """List user roles (admin-only endpoint).
+
+        Returns
+        -------
+        dict
+            BookStack response with ``data`` list of role objects.
+
+        """
+        return self._get("/roles")
+
+    def set_page_permissions(
+        self, page_id: int, role_permissions: list[dict[str, object]]
+    ) -> dict[str, object]:
+        """Set explicit per-role content permissions on a page.
+
+        Follows the wiki's convention for restricted content: explicit
+        role rows with fallback permissions left inheriting.
+
+        Parameters
+        ----------
+        page_id : int
+            Numeric ID of the page.
+        role_permissions : list of dict
+            Role permission rows (``role_id``, ``view``, ``create``,
+            ``update``, ``delete``).
+
+        Returns
+        -------
+        dict
+            The resulting content-permissions object.
+
+        """
+        response = self._client.put(
+            f"/content-permissions/page/{page_id}",
+            json={
+                "role_permissions": role_permissions,
+                "fallback_permissions": {"inheriting": True},
+            },
+        )
+        response.raise_for_status()
+        result: dict[str, object] = response.json()
+        return result
+
+    def create_page(self, book_id: int, name: str, markdown: str) -> dict[str, object]:
+        """Create a page with markdown content inside a book.
+
+        Parameters
+        ----------
+        book_id : int
+            Numeric ID of the book the page goes in.
+        name : str
+            Page title.
+        markdown : str
+            Page body in markdown.
+
+        Returns
+        -------
+        dict
+            The created page object.
+
+        """
+        response = self._client.post(
+            "/pages",
+            json={"book_id": book_id, "name": name, "markdown": markdown},
+        )
+        response.raise_for_status()
+        result: dict[str, object] = response.json()
+        return result
+
+    def update_page(
+        self,
+        page_id: int,
+        name: str | None = None,
+        markdown: str | None = None,
+    ) -> dict[str, object]:
+        """Update a page's title and/or markdown content.
+
+        Parameters
+        ----------
+        page_id : int
+            Numeric ID of the page to update.
+        name : str, optional
+            New page title; unchanged when omitted.
+        markdown : str, optional
+            New page body; unchanged when omitted.
+
+        Returns
+        -------
+        dict
+            The updated page object.
+
+        """
+        payload = {
+            key: value
+            for key, value in (("name", name), ("markdown", markdown))
+            if value is not None
+        }
+        response = self._client.put(f"/pages/{page_id}", json=payload)
+        response.raise_for_status()
+        result: dict[str, object] = response.json()
+        return result
