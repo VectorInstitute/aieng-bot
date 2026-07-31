@@ -309,6 +309,7 @@ class BookstackQAAgent:
                             "type": "tool_resolve",
                             "page_id": ti.get("page_id"),
                             "page_title": page_title,
+                            "page_url": str(page_data.get("url") or ""),
                         }
                 except (json.JSONDecodeError, KeyError, ValueError):
                     pass

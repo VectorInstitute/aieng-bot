@@ -76,7 +76,11 @@ class BookstackSubAgent:
                 title = str(event.get("page_title", ""))
                 if title:
                     pages.append(title)
-                    reply.complete_step(f"Read {title}")
+                    reply.complete_step(
+                        f"Read {title}",
+                        source_url=str(event.get("page_url", "")),
+                        source_text=title,
+                    )
 
             elif event_type == "text_chunk":
                 if (searches or pages) and not drafting:

@@ -29,11 +29,22 @@ _FAILED = "\U0001f534"  # red circle
 
 @dataclass
 class _Step:
-    """One checklist entry with GitHub Actions-style status transitions."""
+    """One checklist entry with live status transitions."""
 
     running_label: str
     done_label: str
     status: str = "running"
+    source_url: str = ""
+    source_text: str = ""
+
+    @property
+    def label(self) -> str:
+        return self.running_label if self.status == "running" else self.done_label
+
+    def plan_status(self) -> str:
+        return {"running": "in_progress", "done": "complete", "failed": "error"}[
+            self.status
+        ]
 
     def render(self) -> str:
         if self.status == "running":
@@ -71,6 +82,8 @@ class StreamingReply:
         self._text = ""
         self._last_flush = 0.0
         self._dirty = False
+        self._native_plan = True
+        self._flush_seq = 0
 
     # ------------------------------------------------------------------
     # State mutation (cheap; no network)
@@ -92,13 +105,22 @@ class StreamingReply:
         self._steps.append(_Step(running_label, done_label or running_label))
         self._dirty = True
 
-    def complete_step(self, done_label: str | None = None) -> None:
+    def complete_step(
+        self,
+        done_label: str | None = None,
+        source_url: str = "",
+        source_text: str = "",
+    ) -> None:
         """Mark the currently running step as done.
 
         Parameters
         ----------
         done_label : str, optional
             Replacement past-tense label (e.g. a resolved page title).
+        source_url : str, optional
+            Link to the resource this step used (shown as a source chip).
+        source_text : str, optional
+            Display text for the source link.
 
         """
         for step in reversed(self._steps):
@@ -106,6 +128,8 @@ class StreamingReply:
                 step.status = "done"
                 if done_label:
                     step.done_label = done_label
+                step.source_url = source_url
+                step.source_text = source_text
                 self._dirty = True
                 return
 
@@ -123,13 +147,70 @@ class StreamingReply:
     # Rendering
     # ------------------------------------------------------------------
 
-    def _render_working(self) -> str:
-        parts: list[str] = []
+    def _plan_block(self) -> dict[str, Any]:
+        """Render the steps as Slack's native plan block (AI task list)."""
+        tasks: list[dict[str, Any]] = []
+        for i, step in enumerate(self._steps):
+            task: dict[str, Any] = {
+                "task_id": f"t{i}",
+                "title": step.label,
+                "status": step.plan_status(),
+            }
+            if step.source_url:
+                task["sources"] = [
+                    {
+                        "type": "url",
+                        "url": step.source_url,
+                        "text": step.source_text or step.source_url,
+                    }
+                ]
+            tasks.append(task)
+        return {
+            "type": "plan",
+            "block_id": f"plan_{self._flush_seq}",
+            "title": {"type": "plain_text", "text": "Working on it"},
+            "tasks": tasks,
+        }
+
+    def _steps_context_block(self) -> dict[str, Any]:
+        """Fallback rendering: steps as a muted context block."""
+        return {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": "\n".join(s.render() for s in self._steps)}
+            ],
+        }
+
+    def _working_blocks(self) -> tuple[list[dict[str, Any]], str]:
+        """Build the working-state Block Kit layout plus a text fallback.
+
+        Steps render as a native plan block (Slack's task-list surface for
+        AI apps, with built-in status indicators); if the workspace rejects
+        it, steps fall back to a muted context block. The streaming text is
+        a regular section block below.
+        """
+        blocks: list[dict[str, Any]] = []
         if self._steps:
-            parts.append("\n".join(step.render() for step in self._steps))
+            blocks.append(
+                self._plan_block() if self._native_plan else self._steps_context_block()
+            )
         if self._text:
-            parts.append(self._text[:_MAX_TEXT] + _CURSOR)
-        return "\n\n".join(parts) or "_Thinking…_"
+            # Section blocks cap at 3000 chars; the final render shows it all.
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": self._text[:2900] + _CURSOR},
+                }
+            )
+        if not blocks:
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [{"type": "mrkdwn", "text": "Thinking…"}],
+                }
+            )
+        fallback = self._text[:200] if self._text else "Working…"
+        return blocks, fallback
 
     async def flush(self, force: bool = False) -> None:
         """Push pending state to Slack if the throttle window allows.
@@ -147,9 +228,21 @@ class StreamingReply:
             return
         self._last_flush = now
         self._dirty = False
-        await self._client.chat_update(
-            channel=self._channel, ts=self._ts, text=self._render_working()
-        )
+        self._flush_seq += 1
+        blocks, fallback = self._working_blocks()
+        try:
+            await self._client.chat_update(
+                channel=self._channel, ts=self._ts, text=fallback, blocks=blocks
+            )
+        except Exception:
+            if not (self._native_plan and self._steps):
+                raise
+            # Workspace rejected the plan block; fall back to context style.
+            self._native_plan = False
+            blocks, fallback = self._working_blocks()
+            await self._client.chat_update(
+                channel=self._channel, ts=self._ts, text=fallback, blocks=blocks
+            )
 
     async def finalize(self, text: str, footer: str | None = None) -> None:
         """Replace the working message with the final answer.
@@ -187,12 +280,17 @@ class StreamingReply:
             if step.status == "running":
                 step.status = "failed"
                 break
-        parts = []
+        blocks: list[dict[str, Any]] = []
         if self._steps:
-            parts.append("\n".join(step.render() for step in self._steps))
-        parts.append(f"⚠️ Something went wrong: {message[:500]}")
+            blocks.append(
+                self._plan_block() if self._native_plan else self._steps_context_block()
+            )
+        error_line = f"⚠️ Something went wrong: {message[:500]}"
+        blocks.append(
+            {"type": "section", "text": {"type": "mrkdwn", "text": error_line}}
+        )
         await self._client.chat_update(
-            channel=self._channel, ts=self._ts, text="\n\n".join(parts)
+            channel=self._channel, ts=self._ts, text=error_line, blocks=blocks
         )
 
 
