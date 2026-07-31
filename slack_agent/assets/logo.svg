@@ -6,16 +6,16 @@
       <stop offset="100%" stop-color="#0b0910"/>
     </radialGradient>
     <linearGradient id="brand" gradientUnits="userSpaceOnUse" x1="220" y1="750" x2="720" y2="420">
-      <stop offset="0%" stop-color="#EB088A"/>
-      <stop offset="55%" stop-color="#8A25C9"/>
-      <stop offset="100%" stop-color="#313CFF"/>
+      <stop offset="0%" stop-color="#FF1699"/>
+      <stop offset="55%" stop-color="#A93BF0"/>
+      <stop offset="100%" stop-color="#4A55FF"/>
     </linearGradient>
     <linearGradient id="ember" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFB84D"/>
-      <stop offset="100%" stop-color="#FF9E00"/>
+      <stop offset="0%" stop-color="#FFC266"/>
+      <stop offset="100%" stop-color="#FFA11A"/>
     </linearGradient>
     <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="16" result="b"/>
+      <feGaussianBlur stdDeviation="9" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
@@ -23,11 +23,11 @@
   <rect width="1024" height="1024" fill="url(#bg)"/>
 
   <!-- the Vector Institute glyph, contour-traced from the logo, rotated 90° CCW -->
-  <g transform="translate(165.5, 752.5) rotate(-90)" filter="url(#glow)">
+  <g transform="translate(143, 206) scale(1.15)" filter="url(#glow)">
     <path d="M 239,514 L 76,92 L 19,90 L 19,52 L 212,53 L 211,90 L 156,91 L 278,408 Z" fill="url(#brand)"/>
-    <path d="M 335,264 L 316,215 L 374,75 L 288,108 L 309,64 L 416,18 L 462,128 L 443,170 L 406,88 Z" fill="#EB088A"/>
+    <path d="M 335,264 L 316,215 L 374,75 L 288,108 L 309,64 L 416,18 L 462,128 L 443,170 L 406,88 Z" fill="#FF1A9C"/>
   </g>
 
   <!-- the cursor -->
-  <rect x="724" y="290" width="116" height="443" rx="26" fill="url(#ember)" filter="url(#glow)"/>
+  <rect x="714" y="227" width="128" height="570" rx="28" fill="url(#ember)" filter="url(#glow)"/>
 </svg>
