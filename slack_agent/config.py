@@ -35,6 +35,12 @@ class Settings:
         BookStack API token ID (empty if unconfigured).
     bookstack_token_secret : str
         BookStack API token secret (empty if unconfigured).
+    context_window_tokens : int
+        Context window of the serving model; history budgets derive
+        from it.
+    state_dir : str
+        Directory for durable session snapshots (a GCS volume mount in
+        production); empty disables persistence.
 
     """
 
@@ -45,6 +51,8 @@ class Settings:
     bookstack_url: str
     bookstack_token_id: str
     bookstack_token_secret: str
+    context_window_tokens: int
+    state_dir: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -80,6 +88,10 @@ class Settings:
             ),
             bookstack_token_id=os.environ.get("BOOKSTACK_TOKEN_ID", ""),
             bookstack_token_secret=os.environ.get("BOOKSTACK_TOKEN_SECRET", ""),
+            context_window_tokens=int(
+                os.environ.get("CONTEXT_WINDOW_TOKENS", "262144")
+            ),
+            state_dir=os.environ.get("STATE_DIR", ""),
         )
 
     @property

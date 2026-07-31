@@ -81,6 +81,7 @@ class SlackHandlers:
             len(context.messages),
             len(self._store),
         )
+        self._store.persist(context)
 
         if event.get("channel_type") == "im":
             await self._answer(event, client, context)
@@ -189,6 +190,8 @@ class SlackHandlers:
                 await reply.fail("unexpected internal error")
                 await _react(client, channel, event["ts"], "warning", remove="eyes")
                 return
+            finally:
+                self._store.persist(context)
 
         await _react(
             client, channel, event["ts"], reaction or DEFAULT_REACTION, remove="eyes"

@@ -19,6 +19,7 @@ from .agents import build_orchestrator
 from .config import Settings
 from .context import ContextStore
 from .handlers import SlackHandlers
+from .persistence import ContextArchive
 from .slack_context import SlackContextService
 
 logging.basicConfig(
@@ -42,7 +43,12 @@ def create_app(settings: Settings) -> AsyncApp:
         Configured slack_bolt async application.
 
     """
-    store = ContextStore()
+    archive = ContextArchive(settings.state_dir) if settings.state_dir else None
+    store = ContextStore(archive=archive)
+    logger.info(
+        "session persistence: %s",
+        settings.state_dir or "disabled (memory only)",
+    )
     app = AsyncApp(token=settings.slack_bot_token)
     slack_context = SlackContextService(app.client)
     orchestrator = build_orchestrator(settings, slack_context)

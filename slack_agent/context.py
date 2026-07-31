@@ -10,6 +10,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
+from .persistence import ContextArchive
+
 
 def conversation_key(event: dict[str, Any]) -> str:
     """Return the session key for a message event.
@@ -51,18 +53,27 @@ class ThreadContext:
 
 
 class ContextStore:
-    """In-memory store of per-thread conversation contexts.
+    """Store of per-thread conversation contexts.
 
-    Phase-2 note: contexts (including agent history) live in process memory
-    and are lost on redeploy. Persistence is a planned follow-up.
+    Live contexts sit in process memory; when an archive is configured,
+    each context is also snapshotted after every turn and lazily
+    restored on the first access after a restart, so sessions survive
+    redeploys.
+
+    Parameters
+    ----------
+    archive : ContextArchive, optional
+        Durable snapshot store; None keeps contexts memory-only.
+
     """
 
-    def __init__(self) -> None:
-        """Initialize an empty store."""
+    def __init__(self, archive: ContextArchive | None = None) -> None:
+        """Initialize an empty store with an optional archive."""
         self._contexts: dict[tuple[str, str], ThreadContext] = {}
+        self._archive = archive
 
     def get(self, channel: str, thread_ts: str) -> ThreadContext:
-        """Return the context for a thread, creating it if needed.
+        """Return the context for a thread, restoring or creating it.
 
         Parameters
         ----------
@@ -74,13 +85,37 @@ class ContextStore:
         Returns
         -------
         ThreadContext
-            The (possibly new) context for the thread.
+            The (possibly restored, possibly new) context for the thread.
 
         """
         key = (channel, thread_ts)
         if key not in self._contexts:
-            self._contexts[key] = ThreadContext(channel=channel, thread_ts=thread_ts)
+            self._contexts[key] = self._restore(channel, thread_ts)
         return self._contexts[key]
+
+    def _restore(self, channel: str, thread_ts: str) -> ThreadContext:
+        snapshot = self._archive.load(channel, thread_ts) if self._archive else None
+        if snapshot is None:
+            return ThreadContext(channel=channel, thread_ts=thread_ts)
+        return ThreadContext(
+            channel=channel,
+            thread_ts=thread_ts,
+            messages=list(snapshot.get("messages", [])),
+            agent_history=list(snapshot.get("agent_history", [])),
+        )
+
+    def persist(self, context: ThreadContext) -> None:
+        """Snapshot a context to the archive, if one is configured."""
+        if self._archive is None:
+            return
+        self._archive.save(
+            context.channel,
+            context.thread_ts,
+            {
+                "messages": context.messages[-200:],
+                "agent_history": context.agent_history,
+            },
+        )
 
     def record(self, event: dict[str, Any]) -> ThreadContext:
         """Record a Slack message event into its thread's context.

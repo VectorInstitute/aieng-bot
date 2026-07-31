@@ -125,6 +125,11 @@ class BookstackQAAgent:
         self.bookstack = BookStackClient(base_url, token_id, token_secret)
         self.model = model or get_model_name()
 
+    @property
+    def async_client(self) -> "anthropic.AsyncAnthropic":
+        """The async LLM client, shared with harness services (compaction)."""
+        return self._async_client
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

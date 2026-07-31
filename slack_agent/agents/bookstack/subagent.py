@@ -6,15 +6,18 @@ its streaming events into the thread's reply. Multi-turn follow-ups work
 per thread: the Anthropic message history lives on the thread context.
 """
 
+import asyncio
 import logging
 import re
 import time
+from typing import Any
 
 from ...config import Settings
 from ...context import ThreadContext
 from ...reactions import NO_REPLY, split_reaction
 from ...slack_context import SlackContextService
 from ...streaming import StreamingReply
+from ..compaction import HistoryCompactor
 from ..slack_tools import (
     SLACK_TOOLS,
     STEP_LABELS,
@@ -68,6 +71,12 @@ class BookstackSubAgent:
             token_id=settings.bookstack_token_id,
             token_secret=settings.bookstack_token_secret,
         )
+        self._compactor = HistoryCompactor(
+            client=self._agent.async_client,
+            model=self._agent.model,
+            context_window=settings.context_window_tokens,
+        )
+        self._background: set[asyncio.Task[None]] = set()
 
     async def handle(
         self, question: str, context: ThreadContext, reply: StreamingReply
@@ -128,7 +137,8 @@ class BookstackSubAgent:
                 reply.clear_text()
 
             elif event_type == "answer":
-                context.agent_history = _trimmed(list(event.get("history", [])))
+                history = list(event.get("history", []))
+                context.agent_history = history
                 duration = time.monotonic() - started
                 footer = (
                     _summary(searches, len(pages), duration)
@@ -139,8 +149,10 @@ class BookstackSubAgent:
                 answer = _strip_empty_sources(answer)
                 if answer.strip().upper() == NO_REPLY:
                     await reply.delete()
-                    return reaction or "thumbsup"
-                await reply.finalize(answer, footer)
+                    reaction = reaction or "thumbsup"
+                else:
+                    await reply.finalize(answer, footer)
+                self._schedule_compaction(context, history)
                 return reaction
 
             elif event_type == "error":
@@ -154,6 +166,33 @@ class BookstackSubAgent:
         await reply.fail("the agent returned no answer")
         return None
 
+    def _schedule_compaction(self, context: ThreadContext, history: list[Any]) -> None:
+        """Compact *history* in the background, never blocking the thread.
+
+        The turn's reply and reaction are already delivered and the
+        thread lock is released before compaction runs, so a follow-up
+        question is never kept waiting on a summarization call.
+        """
+        task = asyncio.create_task(self._compact_later(context, history))
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _compact_later(self, context: ThreadContext, history: list[Any]) -> None:
+        """Swap in the compacted history unless a newer turn landed first.
+
+        The identity check plus assignment run without an await between
+        them, so on the single-threaded event loop the swap is atomic;
+        a session that moved on keeps its newer history and simply
+        compacts after its own next turn instead.
+        """
+        try:
+            compacted = await self._compactor.compact(history)
+        except Exception:  # noqa: BLE001
+            logger.exception("background compaction failed")
+            return
+        if compacted is not history and context.agent_history is history:
+            context.agent_history = compacted
+
 
 # A "Sources" heading with nothing under it (belt to the prompt's braces).
 _EMPTY_SOURCES = re.compile(r"\n+\s*(?:#{1,6}\s*|\*\*?)?Sources(?:\*\*?)?:?\s*$")
@@ -162,28 +201,6 @@ _EMPTY_SOURCES = re.compile(r"\n+\s*(?:#{1,6}\s*|\*\*?)?Sources(?:\*\*?)?:?\s*$"
 def _strip_empty_sources(answer: str) -> str:
     """Drop a trailing Sources heading that has no entries beneath it."""
     return _EMPTY_SOURCES.sub("", answer)
-
-
-_HISTORY_LIMIT = 40
-
-
-def _trimmed(history: list[object]) -> list[object]:
-    """Cap session history, cutting only at plain user-question boundaries.
-
-    Tool-use and tool-result entries must never be separated, so the cut
-    lands on the first plain-text user turn inside the retention window.
-    """
-    if len(history) <= _HISTORY_LIMIT:
-        return history
-    for i in range(len(history) - _HISTORY_LIMIT, len(history)):
-        entry = history[i]
-        if (
-            isinstance(entry, dict)
-            and entry.get("role") == "user"
-            and isinstance(entry.get("content"), str)
-        ):
-            return history[i:]
-    return history[-_HISTORY_LIMIT:]
 
 
 def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:
