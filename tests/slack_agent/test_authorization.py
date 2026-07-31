@@ -87,7 +87,7 @@ class TestSubagentRosterSelection:
 
     @pytest.fixture
     def subagent(self, monkeypatch) -> BookstackSubAgent:
-        """A sub-agent with dummy credentials and an explicit policy."""
+        """Build a sub-agent with dummy credentials and an explicit policy."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
         monkeypatch.delenv("LLM_BASE_URL", raising=False)
         settings = Settings(
