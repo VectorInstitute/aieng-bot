@@ -1,0 +1,62 @@
+display_information:
+  name: aieng-bot
+  description: Vector's AI engineering teammate. Mention it, DM it, put it to work.
+  long_description: |-
+    aieng-bot is Vector's AI engineering teammate, built by the AI Engineering team.
+
+    How it works:
+    • Mention @aieng-bot in any channel it has been invited to and it replies in the thread.
+    • Every thread and DM gets its own isolated context, so conversations never bleed into each other.
+    • It follows along quietly in channels to stay in the loop, and only speaks when spoken to.
+    • DM it directly for one-on-one help, no mention needed.
+
+    Where it is going: deep integrations with Vector's engineering stack (GitHub, CI, dashboards, and internal knowledge) so you can hand it real work and let it finish the job.
+
+    Every release deploys automatically, so the bot you talk to is always the latest version.
+  background_color: "#2c2d30"
+features:
+  bot_user:
+    display_name: aieng-bot
+    always_online: true
+  slash_commands:
+    - command: /aieng-bot
+      description: Interact with aieng-bot (try "version" to check the running build)
+      usage_hint: version
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      # Respond when @mentioned
+      - app_mentions:read
+      - chat:write
+      # Slash commands
+      - commands
+      # Background listening in channels the bot is invited to
+      # (this powers per-thread context; the bot only sees channels
+      # it is explicitly added to)
+      - channels:history
+      - groups:history
+      # Direct messages and group DMs
+      - im:history
+      - im:read
+      - im:write
+      - mpim:history
+      - mpim:read
+      # Resolve channel/user names for context
+      - channels:read
+      - groups:read
+      - users:read
+      # Nice-to-haves: ack reactions, read shared files
+      - reactions:write
+      - files:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+      - message.mpim
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

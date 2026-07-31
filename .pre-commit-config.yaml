@@ -57,13 +57,6 @@ repos:
         files: '^dashboard/'
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
-      - id: nextjs-lint-bookstack-ui
-        name: Next.js Lint (bookstack UI)
-        entry: bash -c 'cd bookstack_agent/ui && npm run lint'
-        language: system
-        files: '^bookstack_agent/ui/'
-        types_or: [javascript, jsx, ts, tsx]
-        pass_filenames: false
 
 ci:
     autofix_commit_msg: |
@@ -74,5 +67,5 @@ ci:
     autoupdate_branch: ''
     autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
     autoupdate_schedule: weekly
-    skip: [nextjs-lint, nextjs-lint-bookstack-ui, mypy]
+    skip: [nextjs-lint, mypy]
     submodules: false

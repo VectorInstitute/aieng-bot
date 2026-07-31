@@ -1,0 +1,98 @@
+name: Deploy Slack Agent (Cloud Run)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'slack_agent/**'
+      - 'src/aieng_bot/**'
+      - 'uv.lock'
+      - '.github/workflows/deploy-slack-agent.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID:   coderd
+  GAR_LOCATION: us-central1              # Artifact Registry stays in us-central1
+  REPOSITORY:   catalog
+  REGION:       northamerica-northeast2  # Cloud Run services run in Toronto
+  SERVICE_NAME: aieng-bot-slack-agent
+
+jobs:
+  deploy:
+    name: Deploy Slack agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        id: build
+        run: |
+          IMAGE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}"
+          docker build \
+            -f slack_agent/Dockerfile \
+            -t "${IMAGE}:${{ github.sha }}" \
+            -t "${IMAGE}:latest" \
+            --cache-from type=gha,scope=${{ env.SERVICE_NAME }} \
+            --cache-to   type=gha,mode=max,scope=${{ env.SERVICE_NAME }} \
+            .
+          docker push "${IMAGE}:${{ github.sha }}"
+          docker push "${IMAGE}:latest"
+          echo "image=${IMAGE}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        run: |
+          # Socket Mode holds a persistent outbound WebSocket, so the
+          # service needs exactly one always-on instance with CPU
+          # always allocated; the HTTP port only serves health checks.
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ steps.build.outputs.image }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --no-cpu-throttling \
+            --min-instances=1 \
+            --max-instances=1 \
+            --port=8080 \
+            --set-env-vars="GIT_SHA=${{ github.sha }},SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }},SLACK_APP_TOKEN=${{ secrets.SLACK_APP_TOKEN }},LLM_API_KEY=${{ secrets.BOOKSTACK_API_KEY }},LLM_BASE_URL=${{ secrets.LLM_BASE_URL }},CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL }},BOOKSTACK_URL=https://bookstack.vectorinstitute.ai,BOOKSTACK_TOKEN_ID=${{ secrets.BOOKSTACK_TOKEN_ID }},BOOKSTACK_TOKEN_SECRET=${{ secrets.BOOKSTACK_TOKEN_SECRET }}" \
+            --update-labels="deployed-by=github-actions,commit=${{ github.sha }},service=${{ env.SERVICE_NAME }}" \
+            --quiet
+
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "✓ Deployed at $URL"
+
+      - name: Health-check service
+        run: |
+          URL="${{ steps.deploy.outputs.url }}/health"
+          for i in $(seq 1 20); do
+            if curl -sf --max-time 10 "$URL" > /dev/null; then
+              echo "✓ Slack agent healthy"; exit 0
+            fi
+            echo "Attempt $i/20…"; sleep 5
+          done
+          echo "✗ Health check failed"; exit 1
