@@ -1,6 +1,7 @@
 """Tool definitions and execution for the BookStack QA agent."""
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -172,10 +173,36 @@ def _with_attribution(markdown: str, attribution: str) -> str:
 
 # Visibility policy for bot-written pages: never public, viewable (and
 # editable) by staff only. Enforced by the harness right after creation
-# so the model cannot forget it; role IDs are resolved by name at write
-# time to survive role renumbering.
+# so the model cannot forget it. Role IDs come from the environment
+# (the bot's own token cannot list roles, an admin-only endpoint); the
+# by-name API lookup remains as a fallback for admin tokens.
 _DENY_VIEW_ROLE = "public"
 _ALLOW_VIEW_ROLE = "vectorstaff"
+_STAFF_ROLE_ENV = "BOOKSTACK_STAFF_ROLE_ID"
+_PUBLIC_ROLE_ENV = "BOOKSTACK_PUBLIC_ROLE_ID"
+
+
+def _env_role_id(env_var: str) -> int | None:
+    value = os.environ.get(env_var, "").strip()
+    return int(value) if value.isdigit() else None
+
+
+def _lookup_role_ids(client: BookStackClient) -> dict[str, int]:
+    """Map lowercased role display names to IDs (admin tokens only)."""
+    try:
+        raw_roles = client.list_roles().get("data", [])
+    except Exception:  # noqa: BLE001
+        return {}
+    roles = (
+        [role for role in raw_roles if isinstance(role, dict)]
+        if isinstance(raw_roles, list)
+        else []
+    )
+    return {
+        str(role.get("display_name", "")).lower(): int(role["id"])
+        for role in roles
+        if "id" in role
+    }
 
 
 def _restrict_page(client: BookStackClient, page_id: int) -> str:
@@ -184,21 +211,21 @@ def _restrict_page(client: BookStackClient, page_id: int) -> str:
     Returns a human-readable status for the tool result, so the model
     reports honestly if the restriction could not be applied.
     """
-    raw_roles = client.list_roles().get("data", [])
-    roles = (
-        [role for role in raw_roles if isinstance(role, dict)]
-        if isinstance(raw_roles, list)
-        else []
-    )
-    ids_by_name = {
-        str(role.get("display_name", "")).lower(): int(role["id"])
-        for role in roles
-        if "id" in role
-    }
-    staff_id = ids_by_name.get(_ALLOW_VIEW_ROLE)
-    public_id = ids_by_name.get(_DENY_VIEW_ROLE)
+    staff_id = _env_role_id(_STAFF_ROLE_ENV)
+    public_id = _env_role_id(_PUBLIC_ROLE_ENV)
+    if staff_id is None or public_id is None:
+        ids_by_name = _lookup_role_ids(client)
+        staff_id = (
+            staff_id if staff_id is not None else ids_by_name.get(_ALLOW_VIEW_ROLE)
+        )
+        public_id = (
+            public_id if public_id is not None else ids_by_name.get(_DENY_VIEW_ROLE)
+        )
     if staff_id is None:
-        return "WARNING: VectorStaff role not found; page visibility not set"
+        return (
+            "WARNING: staff role unknown (set BOOKSTACK_STAFF_ROLE_ID); "
+            "page visibility not set"
+        )
     rows: list[dict[str, object]] = [
         {
             "role_id": staff_id,

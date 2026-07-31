@@ -257,3 +257,28 @@ class TestWriteVisibility:
             )
         )
         assert result["visibility"].startswith("WARNING")
+
+
+class TestRoleIdConfiguration:
+    """Env-configured role IDs so non-admin bot tokens can restrict pages."""
+
+    def test_env_role_ids_skip_the_roles_api(
+        self, mock_client: MagicMock, monkeypatch
+    ) -> None:
+        """With both role IDs configured, list_roles is never called."""
+        monkeypatch.setenv("BOOKSTACK_STAFF_ROLE_ID", "5")
+        monkeypatch.setenv("BOOKSTACK_PUBLIC_ROLE_ID", "4")
+        mock_client.create_page.return_value = {"id": 9, "name": "T", "url": "u"}
+
+        result = json.loads(
+            execute_tool(
+                "create_page",
+                {"book_id": 1, "name": "T", "markdown": "# B"},
+                mock_client,
+            )
+        )
+
+        mock_client.list_roles.assert_not_called()
+        rows = mock_client.set_page_permissions.call_args.args[1]
+        assert {r["role_id"]: r["view"] for r in rows} == {4: False, 5: True}
+        assert result["visibility"].startswith("restricted")
