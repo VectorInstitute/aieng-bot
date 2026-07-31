@@ -19,7 +19,7 @@ class SubAgent(Protocol):
 
     async def handle(
         self, question: str, context: ThreadContext, reply: StreamingReply
-    ) -> None:
+    ) -> str | None:
         """Answer *question* in *context*, rendering into *reply*.
 
         Parameters
@@ -30,6 +30,12 @@ class SubAgent(Protocol):
             Isolated context of the Slack thread.
         reply : StreamingReply
             Renderer for the in-thread reply message.
+
+        Returns
+        -------
+        str or None
+            Slack emoji name the agent chose as its reaction to the
+            user's message, or None for the default.
 
         """
         ...

@@ -12,6 +12,7 @@ import time
 from ...config import Settings
 from ...context import ThreadContext
 from ...mrkdwn import to_mrkdwn
+from ...reactions import split_reaction
 from ...slack_context import SlackContextService
 from ...streaming import StreamingReply
 from ..slack_tools import (
@@ -55,7 +56,7 @@ class BookstackSubAgent:
 
     async def handle(
         self, question: str, context: ThreadContext, reply: StreamingReply
-    ) -> None:
+    ) -> str | None:
         """Answer *question* from the wiki, streaming progress into *reply*.
 
         Parameters
@@ -66,6 +67,11 @@ class BookstackSubAgent:
             Thread context carrying the multi-turn agent history.
         reply : StreamingReply
             Renderer for the in-thread reply message.
+
+        Returns
+        -------
+        str or None
+            The model's chosen reaction emoji name, if it signed off.
 
         """
         started = time.monotonic()
@@ -114,18 +120,20 @@ class BookstackSubAgent:
                     if searches or pages
                     else None
                 )
-                await reply.finalize(to_mrkdwn(str(event.get("text", ""))), footer)
-                return
+                answer, reaction = split_reaction(str(event.get("text", "")))
+                await reply.finalize(to_mrkdwn(answer), footer)
+                return reaction
 
             elif event_type == "error":
                 message = str(event.get("message", "unknown error"))
                 logger.error("bookstack sub-agent error: %s", message)
                 await reply.fail(message)
-                return
+                return None
 
             await reply.flush()
 
         await reply.fail("the agent returned no answer")
+        return None
 
 
 def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:

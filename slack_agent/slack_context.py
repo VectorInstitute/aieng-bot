@@ -178,6 +178,20 @@ class SlackContextService:
             list(response.get("messages", [])), char_budget=_RESULT_CHARS
         )
 
+    async def add_reaction(self, channel: str, message_ts: str, emoji: str) -> str:
+        """Add an emoji reaction to a message; returns a status string.
+
+        Errors come back as text (not raised) so the model can read and
+        move on, matching the tool-result convention.
+        """
+        try:
+            await self._client.reactions_add(
+                channel=channel, timestamp=message_ts, name=emoji
+            )
+        except Exception as exc:  # noqa: BLE001
+            return f"Could not react: {exc}"
+        return f"Reacted with :{emoji}:"
+
     # ------------------------------------------------------------------
     # Ambient window (L2)
     # ------------------------------------------------------------------

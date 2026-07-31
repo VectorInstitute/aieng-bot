@@ -66,7 +66,7 @@ class Orchestrator:
 
     async def handle(
         self, question: str, context: ThreadContext, reply: StreamingReply
-    ) -> None:
+    ) -> str | None:
         """Route *question* and delegate to the chosen sub-agent.
 
         Parameters
@@ -78,10 +78,15 @@ class Orchestrator:
         reply : StreamingReply
             Renderer for the in-thread reply message.
 
+        Returns
+        -------
+        str or None
+            The sub-agent's chosen reaction emoji name, if any.
+
         """
         agent = self.route(question, context)
         if agent is None:
             await reply.fail("no agents are configured")
-            return
+            return None
         logger.info("routing to sub-agent %s", agent.name)
-        await agent.handle(question, context, reply)
+        return await agent.handle(question, context, reply)

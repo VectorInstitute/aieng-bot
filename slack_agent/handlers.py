@@ -19,6 +19,7 @@ from . import APP_VERSION
 from .agents.orchestrator import Orchestrator
 from .config import Settings
 from .context import ContextStore, ThreadContext
+from .reactions import DEFAULT_REACTION
 from .slack_context import SlackContextService
 from .streaming import StreamingReply
 
@@ -174,14 +175,16 @@ class SlackHandlers:
 
         async with context.lock:
             try:
-                await self._orchestrator.handle(question, context, reply)
+                reaction = await self._orchestrator.handle(question, context, reply)
             except Exception:
                 logger.exception("agent run failed")
                 await reply.fail("unexpected internal error")
                 await _react(client, channel, event["ts"], "warning", remove="eyes")
                 return
 
-        await _react(client, channel, event["ts"], "white_check_mark", remove="eyes")
+        await _react(
+            client, channel, event["ts"], reaction or DEFAULT_REACTION, remove="eyes"
+        )
 
     async def _enrich_question(
         self, event: dict[str, Any], context: ThreadContext, question: str

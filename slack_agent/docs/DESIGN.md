@@ -99,6 +99,20 @@ Slack event (mention in channel)
 - `agents/bookstack/subagent.py`: composes both toolsets and their step
   labels
 
+### Reactions (human-like emoji)
+
+UX philosophy: instant acknowledgment beats delayed personality, and a
+teammate reacts to *your* message, not their own answer.
+
+- The 👀 ack stays mechanical: the "seen" signal must beat the model.
+- At completion, the model chooses the reaction left on the asker's
+  message via a ``reaction: <emoji>`` sign-off line stripped from the
+  answer (zero extra turns; defaults to ✅; failures keep ⚠️).
+- The ``add_reaction`` tool lets the agent react to *any* message in
+  the current channel the way a person would (🎉 under a launch it read
+  in history). Guardrails: channel-bound, emoji-name validation, at
+  most 3 per run, and prompt guidance that most messages get none.
+
 ### Scope and safety
 
 - Slack tools are hard-bound to the channel the question came from; the
