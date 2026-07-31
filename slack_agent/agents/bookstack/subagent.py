@@ -113,7 +113,7 @@ class BookstackSubAgent:
                 reply.clear_text()
 
             elif event_type == "answer":
-                context.agent_history = list(event.get("history", []))
+                context.agent_history = _trimmed(list(event.get("history", [])))
                 duration = time.monotonic() - started
                 footer = (
                     _summary(searches, len(pages), duration)
@@ -121,6 +121,9 @@ class BookstackSubAgent:
                     else None
                 )
                 answer, reaction = split_reaction(str(event.get("text", "")))
+                if answer.strip().upper() == "NO_REPLY":
+                    await reply.delete()
+                    return reaction or "thumbsup"
                 await reply.finalize(to_mrkdwn(answer), footer)
                 return reaction
 
@@ -134,6 +137,28 @@ class BookstackSubAgent:
 
         await reply.fail("the agent returned no answer")
         return None
+
+
+_HISTORY_LIMIT = 40
+
+
+def _trimmed(history: list[object]) -> list[object]:
+    """Cap session history, cutting only at plain user-question boundaries.
+
+    Tool-use and tool-result entries must never be separated, so the cut
+    lands on the first plain-text user turn inside the retention window.
+    """
+    if len(history) <= _HISTORY_LIMIT:
+        return history
+    for i in range(len(history) - _HISTORY_LIMIT, len(history)):
+        entry = history[i]
+        if (
+            isinstance(entry, dict)
+            and entry.get("role") == "user"
+            and isinstance(entry.get("content"), str)
+        ):
+            return history[i:]
+    return history[-_HISTORY_LIMIT:]
 
 
 def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:

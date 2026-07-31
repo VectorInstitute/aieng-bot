@@ -57,9 +57,14 @@ Tag behaves and how the BookStack capability already works:
 
 - **Channels**: the bot records messages it can see (background
   listening) but speaks only when @mentioned. L5 may relax this later.
-- **DMs**: every message is a direct question; the DM thread is the
-  session. Ambient window does not apply (the thread is the whole
-  conversation).
+- **DMs**: one rolling inline conversation per person (replies go in
+  the main flow, not forced threads; explicit threads are respected and
+  get their own session). Ambient window does not apply. Session
+  history is capped, cut only at plain user-turn boundaries so
+  tool-call pairs never split.
+- **Silence**: the model may decline to reply (NO_REPLY protocol): the
+  placeholder is deleted and only a quiet reaction lands on the user's
+  message, which is what a human does when told "no need to respond".
 - Thread follow-ups: mentioning the bot again in the same thread
   continues the session with full history (L1).
 

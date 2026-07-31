@@ -18,7 +18,7 @@ from typing import Any
 from . import APP_VERSION
 from .agents.orchestrator import Orchestrator
 from .config import Settings
-from .context import ContextStore, ThreadContext
+from .context import ContextStore, ThreadContext, conversation_key
 from .reactions import DEFAULT_REACTION
 from .slack_context import SlackContextService
 from .streaming import StreamingReply
@@ -96,8 +96,7 @@ class SlackHandlers:
             Bolt async web client.
 
         """
-        thread_ts = event.get("thread_ts") or event["ts"]
-        context = self._store.get(event["channel"], thread_ts)
+        context = self._store.get(event["channel"], conversation_key(event))
         await self._answer(event, client, context)
 
     async def handle_command(
@@ -138,15 +137,15 @@ class SlackHandlers:
     async def _answer(
         self, event: dict[str, Any], client: Any, context: ThreadContext
     ) -> None:
-        """Run the orchestrator and stream the reply into the thread."""
+        """Run the orchestrator and stream the reply into the conversation."""
         channel = event["channel"]
-        thread_ts = event.get("thread_ts") or event["ts"]
+        reply_thread = _reply_thread_ts(event)
         question = _MENTION.sub("", event.get("text", "")).strip()
 
         if not question:
             await client.chat_postMessage(
                 channel=channel,
-                thread_ts=thread_ts,
+                thread_ts=reply_thread,
                 text=(
                     "Hi! Ask me anything about Vector's documentation, "
                     "e.g. _how do I get access to the cluster?_"
@@ -157,7 +156,7 @@ class SlackHandlers:
         if not self._orchestrator.agent_names:
             await client.chat_postMessage(
                 channel=channel,
-                thread_ts=thread_ts,
+                thread_ts=reply_thread,
                 text=(
                     f"I'm running (`v{APP_VERSION}`, build "
                     f"`{self._settings.git_sha[:7]}`) but no agents are "
@@ -168,7 +167,7 @@ class SlackHandlers:
 
         await _react(client, channel, event["ts"], "eyes")
         posted = await client.chat_postMessage(
-            channel=channel, thread_ts=thread_ts, text="_Thinking…_"
+            channel=channel, thread_ts=reply_thread, text="_Thinking…_"
         )
         question = await self._enrich_question(event, context, question)
         reply = StreamingReply(client, channel, posted["ts"])
@@ -204,6 +203,19 @@ class SlackHandlers:
             asker_id=event.get("user", ""),
             question=question,
         )
+
+
+def _reply_thread_ts(event: dict[str, Any]) -> str | None:
+    """Return where the reply goes.
+
+    DMs answer inline (like a person typing in the conversation) unless
+    the user is in an explicit thread; channel replies always thread off
+    the mention.
+    """
+    if event.get("channel_type") == "im":
+        thread = event.get("thread_ts")
+        return str(thread) if thread else None
+    return str(event.get("thread_ts") or event["ts"])
 
 
 async def _react(

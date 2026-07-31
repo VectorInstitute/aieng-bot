@@ -274,6 +274,10 @@ class StreamingReply:
             channel=self._channel, ts=self._ts, text=text, blocks=blocks
         )
 
+    async def delete(self) -> None:
+        """Remove the placeholder message (the agent chose not to reply)."""
+        await self._client.chat_delete(channel=self._channel, ts=self._ts)
+
     async def fail(self, message: str) -> None:
         """Render the checklist with the current step failed, plus the error."""
         for step in reversed(self._steps):

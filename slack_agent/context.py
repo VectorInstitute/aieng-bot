@@ -11,6 +11,18 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def conversation_key(event: dict[str, Any]) -> str:
+    """Return the session key for a message event.
+
+    Channel messages key by thread (each thread is a session). A DM's
+    top level is one rolling conversation, so it keys by the channel
+    itself; explicit threads inside a DM still get their own session.
+    """
+    if event.get("channel_type") == "im" and not event.get("thread_ts"):
+        return str(event["channel"])
+    return str(event.get("thread_ts") or event["ts"])
+
+
 @dataclass
 class ThreadContext:
     """Conversation context for a single Slack thread (or DM thread).
@@ -85,8 +97,7 @@ class ContextStore:
 
         """
         channel = event["channel"]
-        thread_ts = event.get("thread_ts") or event["ts"]
-        context = self.get(channel, thread_ts)
+        context = self.get(channel, conversation_key(event))
         context.messages.append(
             {"user": event.get("user", "unknown"), "text": event.get("text", "")}
         )
