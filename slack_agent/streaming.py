@@ -5,19 +5,42 @@ emulated the way Slack's own AI apps do it: post a placeholder reply in the
 thread, then edit it in place as the agent works. Updates are throttled to
 stay well inside ``chat.update`` rate limits.
 
-While the agent is working, the message shows a single muted status line
-describing the current action (the style Claude Tag uses: quiet, no emoji,
-trailing ellipsis). Once answer text starts streaming it replaces the
-status. The final update shows the finished answer and a muted context
-line summarizing what the agent did.
+While the agent is working, the message shows a live step checklist in the
+GitHub Actions style: each step is a bullet whose status transitions in
+place (🟡 running → 🟢 done → 🔴 failed), with the streaming answer text
+below. Short tool-less replies skip the checklist entirely (the pattern
+Claude Tag uses: questions get a direct reply, longer tasks get a live
+checklist edited in place). The final update replaces everything with the
+finished answer and a muted context line.
 """
 
 import time
+from dataclasses import dataclass
 from typing import Any
 
 # Slack rejects messages over 40k chars; leave generous headroom.
 _MAX_TEXT = 12000
 _CURSOR = " ▍"
+
+_RUNNING = "\U0001f7e1"  # yellow circle
+_DONE = "\U0001f7e2"  # green circle
+_FAILED = "\U0001f534"  # red circle
+
+
+@dataclass
+class _Step:
+    """One checklist entry with GitHub Actions-style status transitions."""
+
+    running_label: str
+    done_label: str
+    status: str = "running"
+
+    def render(self) -> str:
+        if self.status == "running":
+            return f"{_RUNNING} {self.running_label}…"
+        if self.status == "failed":
+            return f"{_FAILED} {self.running_label}"
+        return f"{_DONE} {self.done_label}"
 
 
 class StreamingReply:
@@ -44,7 +67,7 @@ class StreamingReply:
         self._channel = channel
         self._ts = ts
         self._min_interval = min_interval
-        self._status = ""
+        self._steps: list[_Step] = []
         self._text = ""
         self._last_flush = 0.0
         self._dirty = False
@@ -53,18 +76,38 @@ class StreamingReply:
     # State mutation (cheap; no network)
     # ------------------------------------------------------------------
 
-    def set_status(self, line: str) -> None:
-        """Replace the current status line (shown while no text streams).
+    def begin_step(self, running_label: str, done_label: str | None = None) -> None:
+        """Start a new checklist step, completing any step still running.
 
         Parameters
         ----------
-        line : str
-            Plain description of the current action, no trailing ellipsis
-            (one is added when rendering).
+        running_label : str
+            Present-tense label shown while the step runs (no ellipsis).
+        done_label : str, optional
+            Past-tense label shown once complete; defaults to the running
+            label.
 
         """
-        self._status = line
+        self.complete_step()
+        self._steps.append(_Step(running_label, done_label or running_label))
         self._dirty = True
+
+    def complete_step(self, done_label: str | None = None) -> None:
+        """Mark the currently running step as done.
+
+        Parameters
+        ----------
+        done_label : str, optional
+            Replacement past-tense label (e.g. a resolved page title).
+
+        """
+        for step in reversed(self._steps):
+            if step.status == "running":
+                step.status = "done"
+                if done_label:
+                    step.done_label = done_label
+                self._dirty = True
+                return
 
     def append_text(self, chunk: str) -> None:
         """Append streamed answer text."""
@@ -81,11 +124,12 @@ class StreamingReply:
     # ------------------------------------------------------------------
 
     def _render_working(self) -> str:
+        parts: list[str] = []
+        if self._steps:
+            parts.append("\n".join(step.render() for step in self._steps))
         if self._text:
-            return self._text[:_MAX_TEXT] + _CURSOR
-        if self._status:
-            return f"_{self._status}…_"
-        return "_Thinking…_"
+            parts.append(self._text[:_MAX_TEXT] + _CURSOR)
+        return "\n\n".join(parts) or "_Thinking…_"
 
     async def flush(self, force: bool = False) -> None:
         """Push pending state to Slack if the throttle window allows.
@@ -138,11 +182,17 @@ class StreamingReply:
         )
 
     async def fail(self, message: str) -> None:
-        """Replace the working message with an error notice."""
+        """Render the checklist with the current step failed, plus the error."""
+        for step in reversed(self._steps):
+            if step.status == "running":
+                step.status = "failed"
+                break
+        parts = []
+        if self._steps:
+            parts.append("\n".join(step.render() for step in self._steps))
+        parts.append(f"⚠️ Something went wrong: {message[:500]}")
         await self._client.chat_update(
-            channel=self._channel,
-            ts=self._ts,
-            text=f"⚠️ Something went wrong: {message[:500]}",
+            channel=self._channel, ts=self._ts, text="\n\n".join(parts)
         )
 
 

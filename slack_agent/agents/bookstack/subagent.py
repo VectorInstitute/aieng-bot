@@ -61,6 +61,7 @@ class BookstackSubAgent:
         started = time.monotonic()
         searches = 0
         pages: list[str] = []
+        drafting = False
 
         async for event in self._agent.ask_stream(
             question, history=context.agent_history
@@ -68,26 +69,19 @@ class BookstackSubAgent:
             event_type = event.get("type")
 
             if event_type == "tool_use":
-                tool = event.get("tool", "")
-                tool_input = event.get("input", {})
-                if tool == "search_bookstack":
-                    searches += 1
-                    query = str(tool_input.get("query", ""))[:80]
-                    reply.set_status(f'Searching BookStack for "{query}"')
-                elif tool == "get_page":
-                    reply.set_status("Reading documentation")
-                elif tool == "list_books":
-                    reply.set_status("Browsing BookStack books")
-                else:
-                    reply.set_status("Working")
+                drafting = False
+                searches += _begin_tool_step(reply, event)
 
             elif event_type == "tool_resolve":
                 title = str(event.get("page_title", ""))
                 if title:
                     pages.append(title)
-                    reply.set_status(f"Reading {title}")
+                    reply.complete_step(f"Read {title}")
 
             elif event_type == "text_chunk":
+                if (searches or pages) and not drafting:
+                    reply.begin_step("Drafting answer", "Drafted answer")
+                    drafting = True
                 reply.append_text(str(event.get("chunk", "")))
 
             elif event_type == "text_clear":
@@ -113,6 +107,30 @@ class BookstackSubAgent:
             await reply.flush()
 
         await reply.fail("the agent returned no answer")
+
+
+def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:
+    """Start the checklist step for a tool call; return 1 if it was a search."""
+    tool = event.get("tool", "")
+    tool_input = event.get("input", {})
+    if tool == "search_bookstack":
+        query = (
+            str(tool_input.get("query", ""))[:80]
+            if isinstance(tool_input, dict)
+            else ""
+        )
+        reply.begin_step(
+            f'Searching BookStack for "{query}"',
+            f'Searched BookStack for "{query}"',
+        )
+        return 1
+    if tool == "get_page":
+        reply.begin_step("Reading documentation", "Read documentation")
+    elif tool == "list_books":
+        reply.begin_step("Browsing BookStack books", "Browsed BookStack books")
+    else:
+        reply.begin_step("Working", "Worked")
+    return 0
 
 
 def _summary(searches: int, pages: int, duration: float) -> str:
