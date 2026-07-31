@@ -67,6 +67,16 @@ ALL_TOOLS: list[ToolParam] = [SEARCH_TOOL, GET_PAGE_TOOL, LIST_BOOKS_TOOL]
 
 BOOKSTACK_TOOL_NAMES = frozenset(str(t["name"]) for t in ALL_TOOLS)
 
+# Access level per tool, consumed by the system-prompt capability
+# manifest. Every tool defined here must be declared, and a future
+# write tool must be marked "write" so the prompt stops claiming the
+# agent is read-only.
+TOOL_ACCESS: dict[str, str] = {
+    "search_bookstack": "read",
+    "get_page": "read",
+    "list_books": "read",
+}
+
 
 def execute_tool(name: str, tool_input: dict[str, Any], client: BookStackClient) -> str:
     """Execute a tool call against the BookStack API and return a JSON string result.

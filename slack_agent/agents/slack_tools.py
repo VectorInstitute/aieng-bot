@@ -90,6 +90,15 @@ SLACK_TOOLS: list[ToolParam] = [
     },
 ]
 
+# Access level per tool, consumed by the system-prompt capability
+# manifest. add_reaction is the one write action: it leaves an emoji
+# reaction, nothing more.
+TOOL_ACCESS: dict[str, str] = {
+    "get_channel_history": "read",
+    "get_thread_replies": "read",
+    "add_reaction": "write",
+}
+
 # Progress-checklist labels for these tools, kept beside the definitions.
 STEP_LABELS: dict[str, tuple[str, str]] = {
     "get_channel_history": (

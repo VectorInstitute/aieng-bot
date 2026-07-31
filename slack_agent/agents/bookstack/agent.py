@@ -333,6 +333,7 @@ class BookstackQAAgent:
         extra_tools: list[Any] | None = None,
         extra_executor: Callable[[str, dict[str, Any]], Awaitable[str]] | None = None,
         extra_system: str = "",
+        system: str | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Answer a question, yielding structured SSE events as they occur.
 
@@ -369,7 +370,12 @@ class BookstackQAAgent:
             Async ``executor(name, tool_input) -> str`` handling any tool
             outside the BookStack set.
         extra_system : str, optional
-            Text appended to the system prompt (e.g. tool guidance).
+            Text appended to the default system prompt (e.g. tool
+            guidance). Ignored when *system* is given.
+        system : str, optional
+            Complete system prompt to use verbatim, replacing the
+            default assembly. Callers with a harness-built prompt (the
+            Slack sub-agent) pass it here.
 
         Yields
         ------
@@ -380,7 +386,8 @@ class BookstackQAAgent:
         messages: MessageHistory = list(history or [])
         messages.append({"role": "user", "content": question})
         tools: list[Any] = [*ALL_TOOLS, *(extra_tools or [])]
-        system = SYSTEM_PROMPT + extra_system
+        if system is None:
+            system = SYSTEM_PROMPT + extra_system
 
         try:
             for _ in range(self.MAX_TURNS):

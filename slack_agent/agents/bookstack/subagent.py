@@ -21,9 +21,24 @@ from ..slack_tools import (
     SYSTEM_SUFFIX,
     build_slack_executor,
 )
+from ..slack_tools import TOOL_ACCESS as SLACK_TOOL_ACCESS
+from ..system_prompt import build_system_prompt
 from .agent import BookstackQAAgent
+from .prompts import SYSTEM_PROMPT
+from .tools import ALL_TOOLS
+from .tools import TOOL_ACCESS as BOOKSTACK_TOOL_ACCESS
 
 logger = logging.getLogger(__name__)
+
+# Assembled once at import: identity and capabilities are generated from
+# the exact tool roster below, so the prompt cannot claim abilities the
+# agent does not have. Fails at startup if a tool lacks an access
+# declaration.
+SYSTEM = build_system_prompt(
+    tools=[*ALL_TOOLS, *SLACK_TOOLS],
+    access={**BOOKSTACK_TOOL_ACCESS, **SLACK_TOOL_ACCESS},
+    sections=[SYSTEM_PROMPT, SYSTEM_SUFFIX],
+)
 
 
 class BookstackSubAgent:
@@ -85,7 +100,7 @@ class BookstackSubAgent:
             history=context.agent_history,
             extra_tools=SLACK_TOOLS,
             extra_executor=slack_executor,
-            extra_system=SYSTEM_SUFFIX,
+            system=SYSTEM,
         ):
             event_type = event.get("type")
 
