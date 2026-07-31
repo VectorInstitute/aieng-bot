@@ -12,7 +12,7 @@ import time
 from ...config import Settings
 from ...context import ThreadContext
 from ...mrkdwn import to_mrkdwn
-from ...reactions import split_reaction
+from ...reactions import NO_REPLY, split_reaction
 from ...slack_context import SlackContextService
 from ...streaming import StreamingReply
 from ..slack_tools import (
@@ -121,7 +121,7 @@ class BookstackSubAgent:
                     else None
                 )
                 answer, reaction = split_reaction(str(event.get("text", "")))
-                if answer.strip().upper() == "NO_REPLY":
+                if answer.strip().upper() == NO_REPLY:
                     await reply.delete()
                     return reaction or "thumbsup"
                 await reply.finalize(to_mrkdwn(answer), footer)

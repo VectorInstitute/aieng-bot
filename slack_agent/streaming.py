@@ -18,6 +18,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from .reactions import visible_stream_text
+
 # Slack rejects messages over 40k chars; leave generous headroom.
 _MAX_TEXT = 12000
 _CURSOR = " ▍"
@@ -194,12 +196,13 @@ class StreamingReply:
             blocks.append(
                 self._plan_block() if self._native_plan else self._steps_context_block()
             )
-        if self._text:
+        visible = visible_stream_text(self._text)
+        if visible:
             # Section blocks cap at 3000 chars; the final render shows it all.
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": self._text[:2900] + _CURSOR},
+                    "text": {"type": "mrkdwn", "text": visible[:2900] + _CURSOR},
                 }
             )
         if not blocks:
@@ -209,7 +212,7 @@ class StreamingReply:
                     "elements": [{"type": "mrkdwn", "text": "Thinking…"}],
                 }
             )
-        fallback = self._text[:200] if self._text else "Working…"
+        fallback = visible[:200] if visible else "Working…"
         return blocks, fallback
 
     async def flush(self, force: bool = False) -> None:
