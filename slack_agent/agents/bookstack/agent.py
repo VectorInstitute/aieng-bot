@@ -342,6 +342,7 @@ class BookstackQAAgent:
         extra_system: str = "",
         system: str | None = None,
         write_attribution: str = "",
+        tools: list[Any] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Answer a question, yielding structured SSE events as they occur.
 
@@ -387,6 +388,11 @@ class BookstackQAAgent:
         write_attribution : str, optional
             Who requested this run; stamped into any page the run
             writes so wiki provenance survives the shared API token.
+        tools : list, optional
+            Complete tool roster for this run, replacing the default
+            assembly. The harness passes a per-principal roster here;
+            the API rejects calls to tools outside it, which is the
+            authorization boundary.
 
         Yields
         ------
@@ -396,7 +402,8 @@ class BookstackQAAgent:
         """
         messages: MessageHistory = list(history or [])
         messages.append({"role": "user", "content": question})
-        tools: list[Any] = [*ALL_TOOLS, *(extra_tools or [])]
+        if tools is None:
+            tools = [*ALL_TOOLS, *(extra_tools or [])]
         if system is None:
             system = SYSTEM_PROMPT + extra_system
 

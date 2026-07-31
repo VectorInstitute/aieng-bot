@@ -6,6 +6,7 @@ New sub-agents implement :class:`~.base.SubAgent` and register in
 
 import logging
 
+from ..authorization import AccessPolicy
 from ..config import Settings
 from ..slack_context import SlackContextService
 from .base import SubAgent
@@ -33,9 +34,10 @@ def build_orchestrator(
         Orchestrator over the enabled sub-agents (possibly none).
 
     """
+    policy = AccessPolicy.from_env()
     agents: list[SubAgent] = []
     if settings.bookstack_configured:
-        agents.append(BookstackSubAgent(settings, slack_context))
+        agents.append(BookstackSubAgent(settings, slack_context, policy=policy))
     else:
         logger.warning(
             "bookstack sub-agent disabled: missing LLM or BookStack credentials"

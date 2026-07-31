@@ -17,6 +17,7 @@ from typing import Any
 
 from . import APP_VERSION
 from .agents.orchestrator import Orchestrator
+from .authorization import ANONYMOUS, Principal
 from .config import Settings
 from .context import ContextStore, ThreadContext, conversation_key
 from .reactions import DEFAULT_REACTION
@@ -182,14 +183,17 @@ class SlackHandlers:
         await reply.start()
         question = await self._enrich_question(event, context, question)
 
-        requester = ""
+        principal = ANONYMOUS
         if event.get("user"):
-            requester = await self._slack_context.display_name(event["user"])
+            principal = Principal(
+                user_id=str(event["user"]),
+                display_name=await self._slack_context.display_name(event["user"]),
+            )
 
         async with context.lock:
             try:
                 reaction = await self._orchestrator.handle(
-                    question, context, reply, requester=requester
+                    question, context, reply, principal=principal
                 )
             except Exception:
                 logger.exception("agent run failed")

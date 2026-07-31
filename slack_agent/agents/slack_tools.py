@@ -90,13 +90,13 @@ SLACK_TOOLS: list[ToolParam] = [
     },
 ]
 
-# Access level per tool, consumed by the system-prompt capability
-# manifest. add_reaction is the one write action: it leaves an emoji
-# reaction, nothing more.
+# Access level per tool, consumed by the capability manifest and the
+# authorization policy. add_reaction is "act": a low-risk, reversible
+# action open to everyone, unlike gated "write" tools.
 TOOL_ACCESS: dict[str, str] = {
     "get_channel_history": "read",
     "get_thread_replies": "read",
-    "add_reaction": "write",
+    "add_reaction": "act",
 }
 
 # Progress-checklist labels for these tools, kept beside the definitions.

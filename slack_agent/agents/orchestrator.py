@@ -13,6 +13,7 @@ plumbing or to the sub-agents themselves.
 
 import logging
 
+from ..authorization import ANONYMOUS, Principal
 from ..context import ThreadContext
 from ..streaming import StreamingReply
 from .base import SubAgent
@@ -69,7 +70,7 @@ class Orchestrator:
         question: str,
         context: ThreadContext,
         reply: StreamingReply,
-        requester: str = "",
+        principal: Principal = ANONYMOUS,
     ) -> str | None:
         """Route *question* and delegate to the chosen sub-agent.
 
@@ -81,8 +82,9 @@ class Orchestrator:
             Isolated context of the Slack thread.
         reply : StreamingReply
             Renderer for the in-thread reply message.
-        requester : str, optional
-            Display name of the asker, for write-action provenance.
+        principal : Principal
+            Who is asking; drives per-principal authorization and
+            write provenance in sub-agents.
 
         Returns
         -------
@@ -95,4 +97,4 @@ class Orchestrator:
             await reply.fail("no agents are configured")
             return None
         logger.info("routing to sub-agent %s", agent.name)
-        return await agent.handle(question, context, reply, requester=requester)
+        return await agent.handle(question, context, reply, principal=principal)

@@ -8,7 +8,7 @@ tests pin the properties that keep it truthful.
 
 import pytest
 
-from slack_agent.agents.bookstack.subagent import SYSTEM
+from slack_agent.agents.bookstack.subagent import WRITER_SYSTEM as SYSTEM
 from slack_agent.agents.bookstack.tools import ALL_TOOLS
 from slack_agent.agents.slack_tools import SLACK_TOOLS
 from slack_agent.agents.system_prompt import IDENTITY, build_system_prompt

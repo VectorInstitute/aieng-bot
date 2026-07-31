@@ -23,7 +23,7 @@ capabilities, and their composition.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-_ACCESS_LEVELS = frozenset({"read", "write"})
+_ACCESS_LEVELS = frozenset({"read", "act", "write"})
 
 IDENTITY = """\
 <identity>
@@ -52,7 +52,7 @@ def _render_capabilities(
     write_lines = [
         f"- {t['name']}: {_summary(str(t['description']))}"
         for t in tools
-        if access[str(t["name"])] == "write"
+        if access[str(t["name"])] in ("act", "write")
     ]
 
     parts = ["<capabilities>", "Read-only tools:", *read_lines]

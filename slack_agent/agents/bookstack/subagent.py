@@ -12,6 +12,13 @@ import re
 import time
 from typing import Any
 
+from ...authorization import (
+    ALL_LEVELS,
+    ANONYMOUS,
+    READ_LEVELS,
+    AccessPolicy,
+    Principal,
+)
 from ...config import Settings
 from ...context import ThreadContext
 from ...reactions import NO_REPLY, split_reaction
@@ -27,21 +34,38 @@ from ..slack_tools import (
 from ..slack_tools import TOOL_ACCESS as SLACK_TOOL_ACCESS
 from ..system_prompt import build_system_prompt
 from .agent import BookstackQAAgent
-from .prompts import SYSTEM_PROMPT
+from .prompts import SYSTEM_PROMPT, WRITING_RULES
 from .tools import ALL_TOOLS
 from .tools import TOOL_ACCESS as BOOKSTACK_TOOL_ACCESS
 
 logger = logging.getLogger(__name__)
 
-# Assembled once at import: identity and capabilities are generated from
-# the exact tool roster below, so the prompt cannot claim abilities the
-# agent does not have. Fails at startup if a tool lacks an access
-# declaration.
-SYSTEM = build_system_prompt(
-    tools=[*ALL_TOOLS, *SLACK_TOOLS],
-    access={**BOOKSTACK_TOOL_ACCESS, **SLACK_TOOL_ACCESS},
-    sections=[SYSTEM_PROMPT, SYSTEM_SUFFIX],
-)
+_FULL_ACCESS = {**BOOKSTACK_TOOL_ACCESS, **SLACK_TOOL_ACCESS}
+_FULL_ROSTER = [*ALL_TOOLS, *SLACK_TOOLS]
+
+
+def _build_roster(levels: frozenset[str]) -> tuple[list[Any], str]:
+    """Tool list and matching system prompt for one set of access levels.
+
+    The roster is the authorization boundary (the API rejects calls to
+    tools not in it) and the manifest is generated from that exact
+    roster, so an unauthorized principal's agent neither has write
+    tools nor claims to. Writing rules ride only with write access.
+    """
+    tools = [t for t in _FULL_ROSTER if _FULL_ACCESS[str(t["name"])] in levels]
+    sections = [SYSTEM_PROMPT]
+    if "write" in levels:
+        sections.append(WRITING_RULES)
+    sections.append(SYSTEM_SUFFIX)
+    system = build_system_prompt(tools=tools, access=_FULL_ACCESS, sections=sections)
+    return tools, system
+
+
+# Assembled once at import per access tier (deterministic, so each tier
+# stays prompt-cache-friendly). Fails at startup if any tool lacks an
+# access declaration.
+WRITER_TOOLS, WRITER_SYSTEM = _build_roster(ALL_LEVELS)
+READER_TOOLS, READER_SYSTEM = _build_roster(READ_LEVELS)
 
 
 class BookstackSubAgent:
@@ -54,7 +78,12 @@ class BookstackSubAgent:
         "BookStack wiki."
     )
 
-    def __init__(self, settings: Settings, slack_context: SlackContextService) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        slack_context: SlackContextService,
+        policy: AccessPolicy | None = None,
+    ) -> None:
         """Build the underlying QA agent from settings.
 
         Parameters
@@ -63,8 +92,12 @@ class BookstackSubAgent:
             Resolved runtime configuration with BookStack credentials.
         slack_context : SlackContextService
             Shared Slack context service powering the history tools.
+        policy : AccessPolicy, optional
+            Authorization policy; defaults to the environment-derived
+            policy (writes disabled unless AGENT_WRITERS is set).
 
         """
+        self._policy = policy or AccessPolicy.from_env()
         self._slack_context = slack_context
         self._agent = BookstackQAAgent(
             base_url=settings.bookstack_url,
@@ -83,7 +116,7 @@ class BookstackSubAgent:
         question: str,
         context: ThreadContext,
         reply: StreamingReply,
-        requester: str = "",
+        principal: Principal = ANONYMOUS,
     ) -> str | None:
         """Answer *question* from the wiki, streaming progress into *reply*.
 
@@ -95,9 +128,9 @@ class BookstackSubAgent:
             Thread context carrying the multi-turn agent history.
         reply : StreamingReply
             Renderer for the in-thread reply message.
-        requester : str, optional
-            Display name of the asker; stamped into any wiki page this
-            run writes.
+        principal : Principal
+            Who is asking; selects the tool roster (write tools only
+            for authorized writers) and provides write provenance.
 
         Returns
         -------
@@ -110,14 +143,15 @@ class BookstackSubAgent:
         pages: list[str] = []
         drafting = False
 
+        tools, system = self._roster_for(principal)
         slack_executor = build_slack_executor(self._slack_context, context.channel)
         async for event in self._agent.ask_stream(
             question,
             history=context.agent_history,
-            extra_tools=SLACK_TOOLS,
             extra_executor=slack_executor,
-            system=SYSTEM,
-            write_attribution=requester,
+            system=system,
+            tools=tools,
+            write_attribution=principal.display_name,
         ):
             event_type = event.get("type")
 
@@ -178,6 +212,12 @@ class BookstackSubAgent:
 
         await reply.fail("the agent returned no answer")
         return None
+
+    def _roster_for(self, principal: Principal) -> tuple[list[Any], str]:
+        """Tool roster and system prompt for *principal* per the policy."""
+        if self._policy.can_write(principal):
+            return WRITER_TOOLS, WRITER_SYSTEM
+        return READER_TOOLS, READER_SYSTEM
 
     def _schedule_compaction(self, context: ThreadContext, history: list[Any]) -> None:
         """Compact *history* in the background, never blocking the thread.

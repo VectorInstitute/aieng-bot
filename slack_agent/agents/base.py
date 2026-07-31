@@ -2,6 +2,7 @@
 
 from typing import Protocol
 
+from ..authorization import ANONYMOUS, Principal
 from ..context import ThreadContext
 from ..streaming import StreamingReply
 
@@ -22,7 +23,7 @@ class SubAgent(Protocol):
         question: str,
         context: ThreadContext,
         reply: StreamingReply,
-        requester: str = "",
+        principal: Principal = ANONYMOUS,
     ) -> str | None:
         """Answer *question* in *context*, rendering into *reply*.
 
@@ -34,9 +35,10 @@ class SubAgent(Protocol):
             Isolated context of the Slack thread.
         reply : StreamingReply
             Renderer for the in-thread reply message.
-        requester : str, optional
-            Display name of the person asking; used for provenance on
-            any write action the run performs.
+        principal : Principal
+            Who is asking. Sub-agents must derive their tool roster
+            from it (via the access policy) and use it for provenance
+            on any write action.
 
         Returns
         -------
