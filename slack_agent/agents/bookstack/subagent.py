@@ -12,7 +12,6 @@ import time
 
 from ...config import Settings
 from ...context import ThreadContext
-from ...mrkdwn import to_mrkdwn
 from ...reactions import NO_REPLY, split_reaction
 from ...slack_context import SlackContextService
 from ...streaming import StreamingReply
@@ -126,7 +125,7 @@ class BookstackSubAgent:
                 if answer.strip().upper() == NO_REPLY:
                     await reply.delete()
                     return reaction or "thumbsup"
-                await reply.finalize(to_mrkdwn(answer), footer)
+                await reply.finalize(answer, footer)
                 return reaction
 
             elif event_type == "error":

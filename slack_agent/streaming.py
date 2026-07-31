@@ -12,10 +12,14 @@ Two engines behind one interface:
   with steps as a native plan block. This keeps DM replies inline, which
   native streaming cannot do.
 
-Either way, the final message is normalized with a ``chat.update`` to
-the canonical answer layout (sections + muted context footer), and
-protocol tokens (NO_REPLY, the reaction sign-off) are masked from the
-visible stream by :func:`~slack_agent.reactions.visible_stream_text`.
+Finalization differs per engine. Edit-in-place messages are normalized
+with a ``chat.update`` to the canonical answer layout (sections + muted
+context footer). Streamed messages cannot be rewritten by ``chat.update``
+(Slack rejects it with ``block_mismatch``: rich-text blocks cannot be
+replaced), so the remainder of the answer and the footer travel on
+``chat.stopStream`` itself. Protocol tokens (NO_REPLY, the reaction
+sign-off) are masked from the visible stream by
+:func:`~slack_agent.reactions.visible_stream_text`.
 """
 
 import logging
@@ -23,6 +27,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from .mrkdwn import to_mrkdwn
 from .reactions import visible_stream_text
 
 logger = logging.getLogger(__name__)
@@ -119,7 +124,10 @@ class StreamingReply:
         self._flush_seq = 0
         self._ts = ""
         self._native = False
-        self._sent_visible_len = 0
+        # Exact text delivered to the native stream so far, and the
+        # retired prefix left behind by clear_text (appends are immutable).
+        self._sent_stream = ""
+        self._stream_base = ""
         self._sent_step_states: list[tuple[str, str]] = []
 
     # ------------------------------------------------------------------
@@ -208,9 +216,10 @@ class StreamingReply:
     def clear_text(self) -> None:
         """Discard streamed text (the agent decided to use a tool instead)."""
         self._text = ""
-        # Native streams cannot retract already-sent text; the final
-        # chat.update replaces everything, so just restart the delta.
-        self._sent_visible_len = 0
+        if self._native and self._sent_stream:
+            # Native streams cannot retract already-sent text; retire it
+            # and continue in a fresh paragraph below.
+            self._stream_base = self._sent_stream + "\n\n"
         self._dirty = True
 
     # ------------------------------------------------------------------
@@ -240,24 +249,29 @@ class StreamingReply:
 
     async def _flush_native(self) -> None:
         """Append new text (and best-effort step updates) to the stream."""
-        if _CAPS["native_tasks"]:
-            chunks = self._step_chunks()
-            if chunks:
-                try:
-                    await self._client.chat_appendStream(
-                        channel=self._channel, ts=self._ts, chunks=chunks
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.info("task chunks rejected; text-only stream: %s", exc)
-                    _CAPS["native_tasks"] = False
-
-        visible = visible_stream_text(self._text)
-        if len(visible) > self._sent_visible_len:
-            delta = visible[self._sent_visible_len :]
-            self._sent_visible_len = len(visible)
+        await self._append_step_chunks()
+        target = self._stream_base + visible_stream_text(self._text)
+        delta = _stream_delta(self._sent_stream, target)
+        if delta:
+            self._sent_stream += delta
             await self._client.chat_appendStream(
                 channel=self._channel, ts=self._ts, markdown_text=delta
             )
+
+    async def _append_step_chunks(self) -> None:
+        """Send changed step states as task-update chunks, best-effort."""
+        if not _CAPS["native_tasks"]:
+            return
+        chunks = self._step_chunks()
+        if not chunks:
+            return
+        try:
+            await self._client.chat_appendStream(
+                channel=self._channel, ts=self._ts, chunks=chunks
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.info("task chunks rejected; text-only stream: %s", exc)
+            _CAPS["native_tasks"] = False
 
     def _step_chunks(self) -> list[dict[str, Any]]:
         """Task-update chunks for steps that changed since the last flush."""
@@ -293,32 +307,73 @@ class StreamingReply:
     # ------------------------------------------------------------------
 
     async def finalize(self, text: str, footer: str | None = None) -> None:
-        """Replace the working message with the final answer.
+        """Complete the reply with the final answer.
 
         Parameters
         ----------
         text : str
-            Final answer in Slack mrkdwn.
+            Final answer in standard markdown. Native streams render it
+            as-is; edit-in-place messages get it converted to mrkdwn.
         footer : str, optional
             Muted context line (activity summary) appended below the answer.
 
         """
-        await self._stop_native_stream()
         text = text[:_MAX_TEXT]
-        blocks: list[dict[str, Any]] = [
-            {"type": "section", "text": {"type": "mrkdwn", "text": chunk}}
-            for chunk in _split_for_blocks(text)
-        ]
-        if footer:
-            blocks.append(
-                {
-                    "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": footer}],
-                }
-            )
+        if self._native:
+            await self._finalize_native(text, footer)
+            return
+        mrkdwn = to_mrkdwn(text)
+        blocks = _answer_blocks(mrkdwn, footer)
         await self._client.chat_update(
-            channel=self._channel, ts=self._ts, text=text, blocks=blocks
+            channel=self._channel, ts=self._ts, text=mrkdwn, blocks=blocks
         )
+
+    async def _finalize_native(self, text: str, footer: str | None) -> None:
+        """Append what the stream is still missing, then stop it.
+
+        A streamed message cannot be rewritten afterwards: ``chat.update``
+        fails with ``block_mismatch`` (rich-text blocks cannot be
+        replaced). The remaining answer delta and the footer must travel
+        on ``chat.stopStream`` itself.
+        """
+        self.complete_step()
+        await self._append_step_chunks()
+        delta = _stream_delta(self._sent_stream, self._stream_base + text)
+        kwargs: dict[str, Any] = {}
+        if delta:
+            kwargs["markdown_text"] = delta
+        if footer:
+            kwargs["blocks"] = [_footer_block(footer)]
+        try:
+            await self._client.chat_stopStream(
+                channel=self._channel, ts=self._ts, **kwargs
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stopStream with final payload failed: %s", exc)
+            await self._repost_answer(to_mrkdwn(text), footer)
+
+    async def _repost_answer(self, mrkdwn: str, footer: str | None) -> None:
+        """Last-resort delivery: replace the stream with a fresh message.
+
+        The truncated stream is stopped and deleted best-effort first so
+        the answer never appears twice.
+        """
+        for call in (
+            self._client.chat_stopStream,
+            self._client.chat_delete,
+        ):
+            try:
+                await call(channel=self._channel, ts=self._ts)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("stream cleanup step failed: %s", exc)
+        response = await self._client.chat_postMessage(
+            channel=self._channel,
+            thread_ts=self._anchor_ts,
+            text=mrkdwn,
+            blocks=_answer_blocks(mrkdwn, footer),
+        )
+        self._ts = response["ts"]
+        self._native = False
 
     async def delete(self) -> None:
         """Remove the reply entirely (the agent chose not to respond)."""
@@ -326,26 +381,51 @@ class StreamingReply:
         await self._client.chat_delete(channel=self._channel, ts=self._ts)
 
     async def fail(self, message: str) -> None:
-        """Render the checklist with the current step failed, plus the error."""
-        await self._stop_native_stream()
+        """Render the checklist with the current step failed, plus the error.
+
+        Never raises: this is the terminal error surface, and an exception
+        here would strand the working message in its half-streamed state.
+        """
         for step in reversed(self._steps):
             if step.status == "running":
                 step.status = "failed"
                 break
-        blocks: list[dict[str, Any]] = []
-        if self._steps:
-            blocks.append(
-                self._plan_block()
-                if _CAPS["native_plan_block"]
-                else self._steps_context_block()
-            )
         error_line = f"⚠️ Something went wrong: {message[:500]}"
-        blocks.append(
-            {"type": "section", "text": {"type": "mrkdwn", "text": error_line}}
-        )
-        await self._client.chat_update(
-            channel=self._channel, ts=self._ts, text=error_line, blocks=blocks
-        )
+        try:
+            if self._native:
+                await self._append_step_chunks()
+                prefix = "\n\n" if self._sent_stream else ""
+                await self._client.chat_stopStream(
+                    channel=self._channel,
+                    ts=self._ts,
+                    markdown_text=prefix + error_line,
+                )
+                return
+            blocks: list[dict[str, Any]] = []
+            if self._steps:
+                blocks.append(
+                    self._plan_block()
+                    if _CAPS["native_plan_block"]
+                    else self._steps_context_block()
+                )
+            blocks.append(
+                {"type": "section", "text": {"type": "mrkdwn", "text": error_line}}
+            )
+            await self._client.chat_update(
+                channel=self._channel, ts=self._ts, text=error_line, blocks=blocks
+            )
+        except Exception:
+            logger.exception("could not render error state")
+            try:
+                await self._client.chat_postMessage(
+                    channel=self._channel,
+                    thread_ts=self._anchor_ts
+                    if self._native
+                    else self._reply_thread_ts,
+                    text=error_line,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("error fallback post failed: %s", exc)
 
     async def _stop_native_stream(self) -> None:
         if not self._native:
@@ -420,6 +500,52 @@ class StreamingReply:
             )
         fallback = visible[:200] if visible else "Working…"
         return blocks, fallback
+
+
+def _stream_delta(sent: str, target: str) -> str:
+    """Text to append so a native stream's content reaches *target*.
+
+    Returns "" when the stream already shows *target*, when *target* does
+    not extend what was sent (the masked tail can shrink while a protocol
+    line is still forming; appends are immutable, so wait rather than
+    duplicate), or when only whitespace would be appended.
+
+    Parameters
+    ----------
+    sent : str
+        Exact text delivered to the stream so far.
+    target : str
+        Full text the stream should show.
+
+    Returns
+    -------
+    str
+        The delta to append, possibly empty.
+
+    """
+    if not target.startswith(sent):
+        return ""
+    delta = target[len(sent) :]
+    return delta if delta.strip() else ""
+
+
+def _footer_block(footer: str) -> dict[str, Any]:
+    """Muted context block for the activity-summary footer."""
+    return {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": footer}],
+    }
+
+
+def _answer_blocks(mrkdwn: str, footer: str | None) -> list[dict[str, Any]]:
+    """Canonical answer layout: section blocks plus an optional footer."""
+    blocks: list[dict[str, Any]] = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": chunk}}
+        for chunk in _split_for_blocks(mrkdwn)
+    ]
+    if footer:
+        blocks.append(_footer_block(footer))
+    return blocks
 
 
 def _split_for_blocks(text: str, limit: int = 2900) -> list[str]:
