@@ -1,0 +1,107 @@
+<mxfile host="app.diagrams.net" agent="aieng-bot" version="24.0.0" type="device">
+  <diagram id="container-view" name="Container View">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1360" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Actors -->
+        <mxCell id="a_user" value="Slack user&lt;br&gt;(@aieng-bot mention or DM)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="40" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Slack platform -->
+        <mxCell id="n_slack" value="Slack platform&lt;br&gt;Events over Socket Mode (outbound WS)&lt;br&gt;chat.update renders plan blocks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- aieng-bot service container -->
+        <mxCell id="c_bot" value="aieng-bot-slack-agent (Cloud Run, coderd / Toronto, 1 always-on instance)" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1;dashed=0" vertex="1" parent="1">
+          <mxGeometry x="380" y="120" width="600" height="520" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_handlers" value="handlers.py&lt;br&gt;event routing, mention stripping,&lt;br&gt;reactions, per-thread locks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="410" y="160" width="250" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n_ctxstore" value="ContextStore (L1)&lt;br&gt;per-(channel, thread) history + lock" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="700" y="160" width="250" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n_slackctx" value="SlackContextService (L2)&lt;br&gt;ambient window: recent channel msgs&lt;br&gt;+ pre-mention thread, name cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="410" y="270" width="250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_orch" value="Orchestrator&lt;br&gt;routes to specialist sub-agents" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="700" y="270" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n_subagent" value="BookStack sub-agent&lt;br&gt;LLM tool loop (Anthropic protocol)&lt;br&gt;BookStack tools + Slack tools (L3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="555" y="380" width="250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_stream" value="StreamingReply&lt;br&gt;native plan block + streaming section,&lt;br&gt;throttled chat.update, fallback render" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="410" y="520" width="250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_slacktools" value="agents/slack_tools.py (L3)&lt;br&gt;get_channel_history, get_thread_replies&lt;br&gt;bound to current channel only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="700" y="520" width="250" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- External systems -->
+        <mxCell id="n_gateway" value="LLM gateway&lt;br&gt;(LLM_BASE_URL, bearer auth)&lt;br&gt;model: Qwen3-Coder-Next" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1060" y="380" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_bookstack" value="BookStack wiki&lt;br&gt;bookstack.vectorinstitute.ai&lt;br&gt;(GCE VM, REST API)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1060" y="500" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_slackapi" value="Slack Web API&lt;br&gt;conversations.history / .replies,&lt;br&gt;users.info (bot token)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1060" y="160" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- CI/CD -->
+        <mxCell id="n_gha" value="GitHub Actions&lt;br&gt;deploy-slack-agent.yml&lt;br&gt;push to main &amp;rarr; Cloud Run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="60" y="520" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="a_user" target="n_slack">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="events" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_slack" target="n_handlers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="L1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_handlers" target="n_ctxstore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="ambient window (new session)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_handlers" target="n_slackctx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="wrapped question" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_handlers" target="n_orch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_orch" target="n_subagent">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="steps + text" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_subagent" target="n_stream">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="chat.update" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_stream" target="n_slack">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="messages / tools" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_subagent" target="n_gateway">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="search / get_page" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_subagent" target="n_bookstack">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="tool calls" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_subagent" target="n_slacktools">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_slacktools" target="n_slackapi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="n_slackctx" target="n_slackapi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" value="deploys" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;" edge="1" parent="1" source="n_gha" target="c_bot">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

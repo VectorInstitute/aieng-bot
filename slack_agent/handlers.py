@@ -19,6 +19,7 @@ from . import APP_VERSION
 from .agents.orchestrator import Orchestrator
 from .config import Settings
 from .context import ContextStore, ThreadContext
+from .slack_context import SlackContextService
 from .streaming import StreamingReply
 
 logger = logging.getLogger(__name__)
@@ -45,11 +46,13 @@ class SlackHandlers:
         settings: Settings,
         store: ContextStore,
         orchestrator: Orchestrator,
+        slack_context: SlackContextService,
     ) -> None:
         """Store collaborators."""
         self._settings = settings
         self._store = store
         self._orchestrator = orchestrator
+        self._slack_context = slack_context
 
     # ------------------------------------------------------------------
     # Event handlers (registered in app.py)
@@ -163,6 +166,7 @@ class SlackHandlers:
             return
 
         await _react(client, channel, event["ts"], "eyes")
+        question = await self._enrich_question(event, context, question)
         posted = await client.chat_postMessage(
             channel=channel, thread_ts=thread_ts, text="_Thinking…_"
         )
@@ -178,6 +182,29 @@ class SlackHandlers:
                 return
 
         await _react(client, channel, event["ts"], "white_check_mark", remove="eyes")
+
+    async def _enrich_question(
+        self, event: dict[str, Any], context: ThreadContext, question: str
+    ) -> str:
+        """Wrap a new channel session's question with ambient context (L2).
+
+        Applies only to the first turn of a channel thread session: DMs are
+        their own conversation, and follow-up turns already carry the
+        ambient block in the session history.
+        """
+        if event.get("channel_type") == "im" or context.agent_history:
+            return question
+
+        thread_ts = event.get("thread_ts") or event["ts"]
+        ambient = await self._slack_context.ambient_window(
+            event["channel"], thread_ts, exclude_ts=event["ts"]
+        )
+        asker = await self._slack_context.display_name(event.get("user", ""))
+        if not ambient:
+            return f"{asker} asks: {question}"
+        return (
+            f"<slack_context>\n{ambient}\n</slack_context>\n\n{asker} asks: {question}"
+        )
 
 
 async def _react(

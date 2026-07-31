@@ -11,13 +11,19 @@ Slack event (mention, DM, channel message, slash command)
   → Socket Mode (outbound WebSocket: no public URL, no inbound firewall rules)
   → handlers.py routes the event
       · channel messages: recorded into per-thread ContextStore (context.py)
+      · mentions: question wrapped with an ambient window of recent channel
+        and thread messages (slack_context.py) on the session's first turn
       · mentions and DMs: handed to the Orchestrator
   → Orchestrator (agents/orchestrator.py) picks a specialist sub-agent
   → sub-agent runs its own LLM loop, streaming into a StreamingReply (streaming.py)
-      · placeholder reply posted in-thread, then edited in place (throttled)
-      · muted status line while working, final answer + context footer when done
+      · tools: BookStack (search, get_page) + Slack history on demand
+        (agents/slack_tools.py; bound to the current channel)
+      · native plan block while working, final answer + context footer when done
   → markdown converted to Slack mrkdwn (mrkdwn.py)
 ```
+
+Design specs for the context layer live in `docs/DESIGN.md`, with the
+architecture diagram in `docs/aieng-bot-slack-architecture.drawio`.
 
 Every Slack thread and DM gets an isolated context keyed by
 `(channel, thread_ts)`, including its own multi-turn agent history, so
@@ -101,6 +107,6 @@ Logo assets live in `assets/`.
 - [x] Socket Mode plumbing with per-thread contexts and background listening
 - [x] BookStack QA capability with streaming replies
 - [ ] Persist thread contexts across deploys
-- [ ] Use recorded channel messages as ambient context for answers
+- [x] Ambient channel context + on-demand Slack history tools
 - [ ] More sub-agents: GitHub, CI failures, dashboards
 - [ ] Slack "Agents & AI Apps" assistant surface (needs `assistant:write` scope + reinstall)

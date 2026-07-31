@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any, cast
 
 import anthropic
@@ -225,6 +225,8 @@ class BookstackQAAgent:
         self,
         messages: MessageHistory,
         state: _TurnState,
+        tools: list[Any],
+        system: str,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Run one LLM streaming call; yield ``text_chunk``/``text_clear`` events.
 
@@ -236,8 +238,8 @@ class BookstackQAAgent:
         async with self._async_client.messages.stream(
             model=self.model,
             max_tokens=8192,
-            system=SYSTEM_PROMPT,
-            tools=ALL_TOOLS,
+            system=system,
+            tools=tools,
             messages=cast(list[MessageParam], messages),
         ) as stream:
             async for event in stream:
@@ -289,17 +291,25 @@ class BookstackQAAgent:
         self,
         tool_uses: list[Any],
         tool_results: list[dict[str, Any]],
+        extra_executor: Callable[[str, dict[str, Any]], str] | None = None,
+        extra_tool_names: frozenset[str] = frozenset(),
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Execute tool calls sequentially; yield ``tool_use`` / ``tool_resolve`` events.
 
         Appends ``tool_result`` dicts to *tool_results* as each call
         completes. Results are passed via the caller-owned list (rather than
         instance state) so one shared agent can serve concurrent requests.
+        Tools outside the BookStack set are dispatched to *extra_executor*.
         """
         for tu in tool_uses:
             ti = dict(tu.input) if isinstance(tu.input, dict) else {}
             yield {"type": "tool_use", "tool": tu.name, "input": ti}
-            result = await asyncio.to_thread(execute_tool, tu.name, ti, self.bookstack)
+            if extra_executor is not None and tu.name in extra_tool_names:
+                result = await asyncio.to_thread(extra_executor, tu.name, ti)
+            else:
+                result = await asyncio.to_thread(
+                    execute_tool, tu.name, ti, self.bookstack
+                )
             if tu.name == "get_page":
                 try:
                     page_data = json.loads(result)
@@ -321,6 +331,9 @@ class BookstackQAAgent:
         self,
         question: str,
         history: MessageHistory | None = None,
+        extra_tools: list[Any] | None = None,
+        extra_executor: Callable[[str, dict[str, Any]], str] | None = None,
+        extra_system: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Answer a question, yielding structured SSE events as they occur.
 
@@ -350,6 +363,13 @@ class BookstackQAAgent:
             The user's question.
         history : MessageHistory, optional
             Prior conversation turns.
+        extra_tools : list, optional
+            Additional Anthropic tool definitions to expose alongside the
+            BookStack tools.
+        extra_executor : callable, optional
+            ``executor(name, tool_input) -> str`` handling the extra tools.
+        extra_system : str, optional
+            Text appended to the system prompt (e.g. tool guidance).
 
         Yields
         ------
@@ -359,11 +379,16 @@ class BookstackQAAgent:
         """
         messages: MessageHistory = list(history or [])
         messages.append({"role": "user", "content": question})
+        tools: list[Any] = [*ALL_TOOLS, *(extra_tools or [])]
+        system = SYSTEM_PROMPT + extra_system
+        extra_names = frozenset(str(t.get("name", "")) for t in (extra_tools or []))
 
         try:
             for _ in range(self.MAX_TURNS):
                 state = _TurnState()
-                async for event in self._stream_llm_turn(messages, state):
+                async for event in self._stream_llm_turn(
+                    messages, state, tools, system
+                ):
                     yield event
 
                 final_response = state.final_response
@@ -398,7 +423,9 @@ class BookstackQAAgent:
                     }
                 )
                 tool_results: list[dict[str, Any]] = []
-                async for event in self._execute_tool_calls(tool_uses, tool_results):
+                async for event in self._execute_tool_calls(
+                    tool_uses, tool_results, extra_executor, extra_names
+                ):
                     yield event
                 messages.append({"role": "user", "content": tool_results})
 

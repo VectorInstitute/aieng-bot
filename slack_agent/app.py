@@ -19,6 +19,7 @@ from .agents import build_orchestrator
 from .config import Settings
 from .context import ContextStore
 from .handlers import SlackHandlers
+from .slack_context import SlackContextService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,13 +44,14 @@ def create_app(settings: Settings) -> AsyncApp:
     """
     store = ContextStore()
     orchestrator = build_orchestrator(settings)
-    handlers = SlackHandlers(settings, store, orchestrator)
     logger.info(
         "sub-agents enabled: %s",
         ", ".join(orchestrator.agent_names) or "none",
     )
 
     app = AsyncApp(token=settings.slack_bot_token)
+    slack_context = SlackContextService(app.client)
+    handlers = SlackHandlers(settings, store, orchestrator, slack_context)
     app.event("app_mention")(handlers.handle_app_mention)
     app.event("message")(handlers.handle_message)
     app.command("/aieng-bot")(handlers.handle_command)

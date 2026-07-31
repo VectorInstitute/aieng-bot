@@ -13,6 +13,7 @@ from ...config import Settings
 from ...context import ThreadContext
 from ...mrkdwn import to_mrkdwn
 from ...streaming import StreamingReply
+from ..slack_tools import SLACK_TOOLS, SYSTEM_SUFFIX, build_slack_executor
 from .agent import BookstackQAAgent
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class BookstackSubAgent:
             Resolved runtime configuration with BookStack credentials.
 
         """
+        self._settings = settings
         self._agent = BookstackQAAgent(
             base_url=settings.bookstack_url,
             token_id=settings.bookstack_token_id,
@@ -63,8 +65,15 @@ class BookstackSubAgent:
         pages: list[str] = []
         drafting = False
 
+        slack_executor = build_slack_executor(
+            self._settings.slack_bot_token, context.channel
+        )
         async for event in self._agent.ask_stream(
-            question, history=context.agent_history
+            question,
+            history=context.agent_history,
+            extra_tools=SLACK_TOOLS,
+            extra_executor=slack_executor,
+            extra_system=SYSTEM_SUFFIX,
         ):
             event_type = event.get("type")
 
@@ -132,6 +141,12 @@ def _begin_tool_step(reply: StreamingReply, event: dict[str, object]) -> int:
         reply.begin_step("Reading documentation", "Read documentation")
     elif tool == "list_books":
         reply.begin_step("Browsing BookStack books", "Browsed BookStack books")
+    elif tool == "get_channel_history":
+        reply.begin_step(
+            "Reading recent channel messages", "Read recent channel messages"
+        )
+    elif tool == "get_thread_replies":
+        reply.begin_step("Reading a thread", "Read a thread")
     else:
         reply.begin_step("Working", "Worked")
     return 0
