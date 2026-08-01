@@ -2,15 +2,21 @@
 
 Two engines behind one interface:
 
-- **Native streaming** (channels and threaded DMs): Slack's
+- **Native streaming** (channels and DMs alike): Slack's
   ``chat.startStream`` / ``chat.appendStream`` / ``chat.stopStream``
   render token streaming with Slack's own typing treatment; step
-  transitions are sent best-effort as task-update chunks. Streamed
-  messages are always thread replies, which channels want anyway.
-- **Edit-in-place** (top-level DMs, and any workspace where the native
-  API is unavailable): a placeholder message updated under a throttle,
-  with steps as a native plan block. This keeps DM replies inline, which
-  native streaming cannot do.
+  transitions are sent best-effort as task-update chunks. Channel
+  streams thread off the mention; top-level DMs try an inline stream
+  first and fall back to a threaded one only if Slack demands it.
+- **Edit-in-place** (fallback when the native API is unavailable, or
+  when a live stream dies mid-run): a placeholder message updated under
+  a throttle, with steps as a native plan block.
+
+Slack can end a native stream server-side (long runs hit stream
+lifetime limits), after which every append fails with
+``streaming_mode_mismatch``. That must never kill the run: the reply
+demotes itself to the edit-in-place engine on a fresh message (deleting
+the dead half-streamed one) and the answer still arrives.
 
 Finalization differs per engine. Edit-in-place messages are normalized
 with a ``chat.update`` to the canonical answer layout (sections + muted
@@ -43,6 +49,25 @@ _FAILED = "\U0001f534"  # red circle
 # Workspace capability flags, discovered on first failure and remembered
 # for the process lifetime so every reply does not retry a dead API.
 _CAPS = {"native_stream": True, "native_tasks": True, "native_plan_block": True}
+
+# Slack error codes meaning this particular stream is over (expired,
+# stopped server-side, or gone), as opposed to the API being unavailable.
+_DEAD_STREAM_ERRORS = frozenset({"streaming_mode_mismatch", "message_not_found"})
+
+
+def _slack_error(exc: Exception) -> str:
+    """Extract the Slack API error code from an exception, if any.
+
+    Duck-typed (``exc.response["error"]``) so this module keeps working
+    without importing slack_sdk, which test environments may not have.
+    """
+    response = getattr(exc, "response", None)
+    if response is None:
+        return ""
+    try:
+        return str(response["error"])
+    except (KeyError, TypeError):
+        return ""
 
 
 @dataclass
@@ -86,8 +111,8 @@ class StreamingReply:
     reply_thread_ts : str or None
         Thread for edit-in-place replies; None posts inline (DMs).
     native_allowed : bool
-        Whether native streaming may be used (False for top-level DMs,
-        where it would force a thread).
+        Whether native streaming may be used (True everywhere today;
+        False keeps a reply on the edit-in-place engine).
     recipient_user_id : str
         Asker's user ID (required by native streaming in channels).
     recipient_team_id : str
@@ -137,20 +162,31 @@ class StreamingReply:
     async def start(self) -> None:
         """Open the reply: a native stream where possible, else a placeholder."""
         if self._native_allowed and _CAPS["native_stream"]:
-            try:
-                response = await self._client.chat_startStream(
-                    channel=self._channel,
-                    thread_ts=self._anchor_ts,
-                    recipient_user_id=self._recipient_user_id,
-                    recipient_team_id=self._recipient_team_id,
-                    task_display_mode="plan",
-                )
-                self._ts = response["ts"]
-                self._native = True
-                return
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("native streaming unavailable: %s", exc)
-                _CAPS["native_stream"] = False
+            # Top-level DMs (no reply thread) try an inline stream first,
+            # falling back to threading off the user's message only if
+            # Slack requires streams to live in threads.
+            attempts = (
+                [self._anchor_ts] if self._reply_thread_ts else [None, self._anchor_ts]
+            )
+            last_error: Exception | None = None
+            for thread_ts in attempts:
+                try:
+                    kwargs: dict[str, Any] = {
+                        "channel": self._channel,
+                        "recipient_user_id": self._recipient_user_id,
+                        "recipient_team_id": self._recipient_team_id,
+                        "task_display_mode": "plan",
+                    }
+                    if thread_ts:
+                        kwargs["thread_ts"] = thread_ts
+                    response = await self._client.chat_startStream(**kwargs)
+                    self._ts = response["ts"]
+                    self._native = True
+                    return
+                except Exception as exc:  # noqa: BLE001,PERF203
+                    last_error = exc
+            logger.warning("native streaming unavailable: %s", last_error)
+            _CAPS["native_stream"] = False
 
         response = await self._client.chat_postMessage(
             channel=self._channel,
@@ -248,18 +284,54 @@ class StreamingReply:
             await self._flush_update()
 
     async def _flush_native(self) -> None:
-        """Append new text (and best-effort step updates) to the stream."""
-        await self._append_step_chunks()
-        target = self._stream_base + visible_stream_text(self._text)
-        delta = _stream_delta(self._sent_stream, target)
-        if delta:
-            self._sent_stream += delta
-            await self._client.chat_appendStream(
-                channel=self._channel, ts=self._ts, markdown_text=delta
-            )
+        """Append new text (and best-effort step updates) to the stream.
+
+        Slack ends long-lived streams server-side; once that happens
+        every append fails with a dead-stream error. That demotes this
+        reply to the edit-in-place engine instead of failing the run.
+        """
+        try:
+            await self._append_step_chunks()
+            target = self._stream_base + visible_stream_text(self._text)
+            delta = _stream_delta(self._sent_stream, target)
+            if delta:
+                self._sent_stream += delta
+                await self._client.chat_appendStream(
+                    channel=self._channel, ts=self._ts, markdown_text=delta
+                )
+        except Exception as exc:
+            if _slack_error(exc) not in _DEAD_STREAM_ERRORS:
+                raise
+            logger.warning("native stream ended by Slack; switching to edit-in-place")
+            await self._demote_to_update()
+
+    async def _demote_to_update(self) -> None:
+        """Replace a dead native stream with an edit-in-place message.
+
+        The half-streamed message is deleted best-effort (its content
+        lives on in ``self._text`` and ``self._steps``), then the run
+        continues on a fresh placeholder exactly as if native streaming
+        had never been available.
+        """
+        try:
+            await self._client.chat_delete(channel=self._channel, ts=self._ts)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("dead stream cleanup failed: %s", exc)
+        response = await self._client.chat_postMessage(
+            channel=self._channel,
+            thread_ts=self._reply_thread_ts,
+            text="_Thinking…_",
+        )
+        self._ts = response["ts"]
+        self._native = False
+        await self._flush_update()
 
     async def _append_step_chunks(self) -> None:
-        """Send changed step states as task-update chunks, best-effort."""
+        """Send changed step states as task-update chunks, best-effort.
+
+        A dead-stream error propagates (the caller demotes the reply);
+        any other rejection just disables task chunks for the process.
+        """
         if not _CAPS["native_tasks"]:
             return
         chunks = self._step_chunks()
@@ -269,7 +341,9 @@ class StreamingReply:
             await self._client.chat_appendStream(
                 channel=self._channel, ts=self._ts, chunks=chunks
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            if _slack_error(exc) in _DEAD_STREAM_ERRORS:
+                raise
             logger.info("task chunks rejected; text-only stream: %s", exc)
             _CAPS["native_tasks"] = False
 
@@ -337,19 +411,19 @@ class StreamingReply:
         on ``chat.stopStream`` itself.
         """
         self.complete_step()
-        await self._append_step_chunks()
-        delta = _stream_delta(self._sent_stream, self._stream_base + text)
-        kwargs: dict[str, Any] = {}
-        if delta:
-            kwargs["markdown_text"] = delta
-        if footer:
-            kwargs["blocks"] = [_footer_block(footer)]
         try:
+            await self._append_step_chunks()
+            delta = _stream_delta(self._sent_stream, self._stream_base + text)
+            kwargs: dict[str, Any] = {}
+            if delta:
+                kwargs["markdown_text"] = delta
+            if footer:
+                kwargs["blocks"] = [_footer_block(footer)]
             await self._client.chat_stopStream(
                 channel=self._channel, ts=self._ts, **kwargs
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("stopStream with final payload failed: %s", exc)
+            logger.warning("native finalize failed: %s", exc)
             await self._repost_answer(to_mrkdwn(text), footer)
 
     async def _repost_answer(self, mrkdwn: str, footer: str | None) -> None:
@@ -393,14 +467,21 @@ class StreamingReply:
         error_line = f"⚠️ Something went wrong: {message[:500]}"
         try:
             if self._native:
-                await self._append_step_chunks()
-                prefix = "\n\n" if self._sent_stream else ""
-                await self._client.chat_stopStream(
-                    channel=self._channel,
-                    ts=self._ts,
-                    markdown_text=prefix + error_line,
-                )
-                return
+                try:
+                    await self._append_step_chunks()
+                    prefix = "\n\n" if self._sent_stream else ""
+                    await self._client.chat_stopStream(
+                        channel=self._channel,
+                        ts=self._ts,
+                        markdown_text=prefix + error_line,
+                    )
+                    return
+                except Exception as exc:
+                    if _slack_error(exc) not in _DEAD_STREAM_ERRORS:
+                        raise
+                    # Stream already ended server-side: continue below on
+                    # a fresh edit-in-place message.
+                    await self._demote_to_update()
             blocks: list[dict[str, Any]] = []
             if self._steps:
                 blocks.append(

@@ -12,13 +12,31 @@ from slack_agent import streaming
 from slack_agent.streaming import StreamingReply, _stream_delta
 
 
+class DeadStreamError(Exception):
+    """Duck-typed slack_sdk error for a stream Slack already ended."""
+
+    def __init__(self) -> None:
+        """Carry the response payload slack_sdk errors expose."""
+        super().__init__("streaming_mode_mismatch")
+        self.response = {"ok": False, "error": "streaming_mode_mismatch"}
+
+
 class FakeSlackClient:
     """Records chat_* calls; optionally fails selected methods."""
 
-    def __init__(self, fail_methods: set[str] | None = None) -> None:
-        """Set up call recording, failing any method named in *fail_methods*."""
+    def __init__(
+        self,
+        fail_methods: set[str] | None = None,
+        errors: dict[str, Exception] | None = None,
+    ) -> None:
+        """Set up call recording, failing any method named in *fail_methods*.
+
+        *errors* raises a specific exception per method instead of the
+        generic RuntimeError.
+        """
         self.calls: list[tuple[str, dict]] = []
         self.fail_methods = fail_methods or set()
+        self.errors = errors or {}
         self._seq = 0
 
     def __getattr__(self, name: str):
@@ -28,6 +46,8 @@ class FakeSlackClient:
 
         async def _call(**kwargs):
             self.calls.append((name, kwargs))
+            if name in self.errors:
+                raise self.errors[name]
             if name in self.fail_methods:
                 raise RuntimeError(f"{name} rejected")
             self._seq += 1
@@ -232,6 +252,123 @@ class TestEditInPlace:
         assert client.named("chat_postMessage")
         assert client.named("chat_stopStream") == []
         assert client.named("chat_update")[-1]["text"] == "Answer text."
+
+
+class TestStreamDemotion:
+    """A stream Slack ended server-side must not kill the run.
+
+    Regression for the production failure: a long BookStack run outlived
+    the native stream, every ``chat.appendStream`` then failed with
+    ``streaming_mode_mismatch``, and the user got "unexpected internal
+    error" instead of the finished answer.
+    """
+
+    @pytest.mark.asyncio
+    async def test_dead_stream_demotes_and_answer_still_arrives(self):
+        """flush() survives a dead stream and finalize() delivers the answer."""
+        client = FakeSlackClient(errors={"chat_appendStream": DeadStreamError()})
+        reply = _native_reply(client)
+        await reply.start()
+        dead_ts = client.named("chat_startStream") and reply._ts
+
+        reply.begin_step("Searching", "Searched")
+        reply.append_text("Partial answer")
+        await reply.flush()
+
+        # Demoted: dead message deleted, fresh placeholder posted, state
+        # re-rendered via chat.update.
+        assert client.named("chat_delete")[0]["ts"] == dead_ts
+        assert client.named("chat_postMessage")
+        assert client.named("chat_update")
+
+        await reply.finalize("Full answer.", footer="footer")
+        final = client.named("chat_update")[-1]
+        assert final["text"] == "Full answer."
+
+    @pytest.mark.asyncio
+    async def test_fail_on_dead_stream_renders_error_via_update(self):
+        """fail() demotes instead of stranding the half-streamed message."""
+        client = FakeSlackClient(
+            errors={
+                "chat_appendStream": DeadStreamError(),
+                "chat_stopStream": DeadStreamError(),
+            }
+        )
+        reply = _native_reply(client)
+        await reply.start()
+        await reply.fail("boom")
+
+        update = client.named("chat_update")[-1]
+        assert "Something went wrong: boom" in update["text"]
+
+    @pytest.mark.asyncio
+    async def test_other_append_errors_still_raise(self):
+        """Only dead-stream errors demote; real API failures propagate."""
+        client = FakeSlackClient(fail_methods={"chat_appendStream"})
+        reply = _native_reply(client)
+        await reply.start()
+        reply.append_text("hi")
+
+        with pytest.raises(RuntimeError):
+            await reply.flush()
+
+
+class TestDmNativeStart:
+    """Top-level DMs stream natively, inline when Slack allows it."""
+
+    def _dm_reply(self, client) -> StreamingReply:
+        return StreamingReply(
+            client,
+            "D123",
+            anchor_ts="1000.0001",
+            reply_thread_ts=None,
+            native_allowed=True,
+            recipient_user_id="U1",
+            recipient_team_id="T1",
+            min_interval=0.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_dm_streams_inline_without_thread(self):
+        """A top-level DM opens the stream without forcing a thread."""
+        client = FakeSlackClient()
+        reply = self._dm_reply(client)
+        await reply.start()
+
+        (start,) = client.named("chat_startStream")
+        assert "thread_ts" not in start
+        reply.append_text("Hello!")
+        await reply.flush()
+        assert client.streamed_text() == "Hello!"
+
+    @pytest.mark.asyncio
+    async def test_dm_falls_back_to_threaded_stream(self):
+        """If Slack requires threads for streams, the DM threads once."""
+
+        class ThreadRequiredClient(FakeSlackClient):
+            def __getattr__(self, name):
+                call = super().__getattr__(name)
+                if name != "chat_startStream":
+                    return call
+
+                async def _start(**kwargs):
+                    if "thread_ts" not in kwargs:
+                        self.calls.append((name, kwargs))
+                        raise RuntimeError("thread required")
+                    return await call(**kwargs)
+
+                return _start
+
+        client = ThreadRequiredClient()
+        reply = self._dm_reply(client)
+        await reply.start()
+
+        starts = client.named("chat_startStream")
+        assert len(starts) == 2
+        assert starts[1]["thread_ts"] == "1000.0001"
+        assert streaming._CAPS["native_stream"] is True
+        await reply.finalize("Answer.")
+        assert client.named("chat_stopStream")
 
 
 class TestStreamDelta:
