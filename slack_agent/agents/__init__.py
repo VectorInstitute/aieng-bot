@@ -11,6 +11,7 @@ from ..config import Settings
 from ..slack_context import SlackContextService
 from .base import SubAgent
 from .bookstack import BookstackSubAgent
+from .github import GithubSubAgent
 from .orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -42,4 +43,8 @@ def build_orchestrator(
         logger.warning(
             "bookstack sub-agent disabled: missing LLM or BookStack credentials"
         )
+    if settings.github_configured:
+        agents.append(GithubSubAgent(settings, slack_context))
+    else:
+        logger.warning("github sub-agent disabled: missing LLM or GitHub credentials")
     return Orchestrator(agents)

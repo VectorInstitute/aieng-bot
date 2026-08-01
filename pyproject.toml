@@ -79,6 +79,8 @@ docs = [
 slack-agent = [
     "aiohttp>=3.11.0",
     "slack-bolt>=1.21.0",
+    "cryptography>=48.0.1", # RS256 signing backend for GitHub App JWTs
+    "pyjwt>=2.13.0", # GitHub App installation-token flow
 ]
 
 

@@ -1,5 +1,6 @@
 """Environment-driven settings for the Slack agent."""
 
+import base64
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,18 @@ class Settings:
     state_dir : str
         Directory for durable session snapshots (a GCS volume mount in
         production); empty disables persistence.
+    github_org : str
+        GitHub organization all GitHub tools are pinned to.
+    github_app_id : str
+        GitHub App ID for installation-token auth (empty if unconfigured).
+    github_app_installation_id : str
+        Installation ID override; empty auto-discovers from the org.
+    github_app_private_key : str
+        The App's private key in PEM form (resolved from file, base64,
+        or inline env var; empty if unconfigured).
+    github_token : str
+        Fine-grained PAT fallback for local development (empty if
+        unconfigured). App credentials take precedence.
 
     """
 
@@ -53,6 +66,11 @@ class Settings:
     bookstack_token_secret: str
     context_window_tokens: int
     state_dir: str
+    github_org: str = "VectorInstitute"
+    github_app_id: str = ""
+    github_app_installation_id: str = ""
+    github_app_private_key: str = ""
+    github_token: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -92,6 +110,11 @@ class Settings:
                 os.environ.get("CONTEXT_WINDOW_TOKENS", "262144")
             ),
             state_dir=os.environ.get("STATE_DIR", ""),
+            github_org=os.environ.get("GITHUB_ORG", "VectorInstitute"),
+            github_app_id=os.environ.get("GITHUB_APP_ID", ""),
+            github_app_installation_id=os.environ.get("GITHUB_APP_INSTALLATION_ID", ""),
+            github_app_private_key=_resolve_github_private_key(),
+            github_token=os.environ.get("GITHUB_TOKEN", ""),
         )
 
     @property
@@ -108,3 +131,31 @@ class Settings:
             bool(self.bookstack_token_id and self.bookstack_token_secret)
             and self.llm_configured
         )
+
+    @property
+    def github_configured(self) -> bool:
+        """Return True if the GitHub QA capability can be enabled."""
+        has_app = bool(self.github_app_id and self.github_app_private_key)
+        return (has_app or bool(self.github_token)) and self.llm_configured
+
+
+def _resolve_github_private_key() -> str:
+    """Resolve the GitHub App private key from the environment.
+
+    Three forms, most specific first: a file path (local development,
+    where the downloaded ``.pem`` stays on disk), a base64-encoded value
+    (Cloud Run, where the deploy flag cannot carry PEM newlines), or the
+    inline PEM with literal ``\\n`` escapes.
+    """
+    key_file = os.environ.get("GITHUB_APP_PRIVATE_KEY_FILE", "").strip()
+    if key_file:
+        path = Path(key_file)
+        if path.is_file():
+            return path.read_text()
+    key_b64 = os.environ.get("GITHUB_APP_PRIVATE_KEY_B64", "").strip()
+    if key_b64:
+        try:
+            return base64.b64decode(key_b64).decode()
+        except (ValueError, UnicodeDecodeError):
+            return ""
+    return os.environ.get("GITHUB_APP_PRIVATE_KEY", "").replace("\\n", "\n")

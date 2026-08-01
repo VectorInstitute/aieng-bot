@@ -39,6 +39,9 @@ class ThreadContext:
         Raw Slack messages observed in this thread (``user`` and ``text``).
     agent_history : list[Any]
         Anthropic message history for multi-turn agent conversations.
+    active_agent : str
+        Name of the sub-agent serving this session; keeps follow-ups
+        routed to the same agent (empty until first routed).
     lock : asyncio.Lock
         Serializes agent runs within the thread so concurrent questions
         cannot interleave their histories.
@@ -49,6 +52,7 @@ class ThreadContext:
     thread_ts: str
     messages: list[dict[str, str]] = field(default_factory=list)
     agent_history: list[Any] = field(default_factory=list)
+    active_agent: str = ""
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -102,6 +106,7 @@ class ContextStore:
             thread_ts=thread_ts,
             messages=list(snapshot.get("messages", [])),
             agent_history=list(snapshot.get("agent_history", [])),
+            active_agent=str(snapshot.get("active_agent", "")),
         )
 
     def persist(self, context: ThreadContext) -> None:
@@ -114,6 +119,7 @@ class ContextStore:
             {
                 "messages": context.messages[-200:],
                 "agent_history": context.agent_history,
+                "active_agent": context.active_agent,
             },
         )
 

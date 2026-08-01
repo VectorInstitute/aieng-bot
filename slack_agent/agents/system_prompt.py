@@ -41,7 +41,9 @@ def _summary(description: str) -> str:
 
 
 def _render_capabilities(
-    tools: Sequence[Mapping[str, Any]], access: Mapping[str, str]
+    tools: Sequence[Mapping[str, Any]],
+    access: Mapping[str, str],
+    products: Sequence[str],
 ) -> str:
     """Render the <capabilities> section from the actual tool roster."""
     read_lines = [
@@ -69,7 +71,7 @@ def _render_capabilities(
     parts += [
         "",
         f"This list is complete; there are no hidden abilities. {boundary}",
-        "The products behind these tools (BookStack, Slack) have many",
+        f"The products behind these tools ({', '.join(products)}) have many",
         "features you do not have access to, so never infer an ability from",
         "general knowledge about those products: if a tool for something is",
         "not listed above, you cannot do it.",
@@ -89,6 +91,7 @@ def build_system_prompt(
     access: Mapping[str, str],
     sections: Sequence[str],
     identity: str = IDENTITY,
+    products: Sequence[str] = ("BookStack", "Slack"),
 ) -> str:
     """Assemble a sub-agent system prompt.
 
@@ -105,6 +108,9 @@ def build_system_prompt(
         after identity and capabilities, in order.
     identity : str, optional
         The ``<identity>`` block; defaults to the aieng-bot identity.
+    products : Sequence[str], optional
+        Product names behind the tools, named in the no-hidden-abilities
+        boundary text.
 
     Returns
     -------
@@ -127,6 +133,6 @@ def build_system_prompt(
     if invalid:
         raise ValueError(f"unknown access levels: {', '.join(invalid)}")
 
-    blocks = [identity, _render_capabilities(tools, access)]
+    blocks = [identity, _render_capabilities(tools, access, products)]
     blocks += [s.strip() for s in sections if s.strip()]
     return "\n\n".join(blocks)

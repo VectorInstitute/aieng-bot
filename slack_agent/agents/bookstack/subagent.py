@@ -77,6 +77,23 @@ class BookstackSubAgent:
         "(cluster access, onboarding, tooling, processes) by searching the "
         "BookStack wiki."
     )
+    # Routing hints consumed by the orchestrator's keyword dispatcher.
+    # The wiki agent is also the fallback for unmatched questions, so
+    # these only need to win ties against other domains.
+    keywords = frozenset(
+        {
+            "wiki",
+            "bookstack",
+            "documentation",
+            "docs",
+            "onboarding",
+            "cluster",
+            "vaughan",
+            "killarney",
+            "page",
+            "handbook",
+        }
+    )
 
     def __init__(
         self,

@@ -4,14 +4,21 @@ The orchestrator is the single entry point the Slack handlers talk to. It
 owns the roster of sub-agents and decides which one serves a request; the
 chosen sub-agent runs its own LLM loop and streams into the reply.
 
-Routing today is trivial because one sub-agent exists (BookStack QA).
-When a second sub-agent lands, :meth:`Orchestrator.route` grows a real
-dispatcher — cheap heuristics or a small classifier call over the
-sub-agents' ``description`` fields — without any change to the Slack
-plumbing or to the sub-agents themselves.
+Routing is two cheap rules, no extra LLM call:
+
+1. **Sticky sessions** — a thread that already has agent history stays
+   with the agent serving it, so follow-ups never switch domains (and
+   never hand one agent's tool history to another).
+2. **Keyword scoring** — a fresh session goes to the agent whose
+   ``keywords`` hints match the question best; no match falls back to
+   the first registered agent (BookStack, the broadest domain).
+
+When keyword scoring proves too coarse, this is the one place to swap
+in a classifier call over the sub-agents' ``description`` fields.
 """
 
 import logging
+import re
 
 from ..authorization import ANONYMOUS, Principal
 from ..context import ThreadContext
@@ -20,6 +27,8 @@ from .base import SubAgent
 
 logger = logging.getLogger(__name__)
 
+_WORDS = re.compile(r"[a-z0-9_]+")
+
 
 class Orchestrator:
     """Dispatches user requests to specialist sub-agents.
@@ -27,7 +36,8 @@ class Orchestrator:
     Parameters
     ----------
     agents : list[SubAgent]
-        Available sub-agents in registration order.
+        Available sub-agents in registration order; the first is the
+        fallback for questions no agent's keywords claim.
 
     """
 
@@ -43,17 +53,13 @@ class Orchestrator:
     def route(self, question: str, context: ThreadContext) -> SubAgent | None:
         """Pick the sub-agent that should serve *question*.
 
-        With a single registered sub-agent the choice is direct. With
-        several, this becomes the dispatch point: classify the question
-        against each agent's ``description`` and pick the best match.
-
         Parameters
         ----------
         question : str
             The user's question.
         context : ThreadContext
-            Thread context (may inform routing, e.g. sticky routing to the
-            agent already active in the thread).
+            Thread context; a session already served by an agent stays
+            with it (sticky routing).
 
         Returns
         -------
@@ -63,7 +69,26 @@ class Orchestrator:
         """
         if not self._agents:
             return None
-        return self._agents[0]
+        if len(self._agents) == 1:
+            return self._agents[0]
+
+        if context.agent_history and context.active_agent:
+            for agent in self._agents:
+                if agent.name == context.active_agent:
+                    return agent
+
+        return self._classify(question)
+
+    def _classify(self, question: str) -> SubAgent:
+        """Score agents by keyword hits; ties and no-hits pick the first."""
+        words = frozenset(_WORDS.findall(question.lower()))
+        best = self._agents[0]
+        best_score = 0
+        for agent in self._agents:
+            score = len(agent.keywords & words)
+            if score > best_score:
+                best, best_score = agent, score
+        return best
 
     async def handle(
         self,
@@ -96,5 +121,8 @@ class Orchestrator:
         if agent is None:
             await reply.fail("no agents are configured")
             return None
+        # Recorded before the run so the session stays sticky even if
+        # this first turn fails midway.
+        context.active_agent = agent.name
         logger.info("routing to sub-agent %s", agent.name)
         return await agent.handle(question, context, reply, principal=principal)

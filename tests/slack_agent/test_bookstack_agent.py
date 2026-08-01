@@ -92,8 +92,8 @@ def _make_stream_ctx(
 def agent() -> BookstackQAAgent:
     """Return an agent with all external clients mocked."""
     with (
-        patch("slack_agent.agents.bookstack.agent.anthropic.Anthropic"),
-        patch("slack_agent.agents.bookstack.agent.anthropic.AsyncAnthropic"),
+        patch("slack_agent.agents.toolloop.anthropic.Anthropic"),
+        patch("slack_agent.agents.toolloop.anthropic.AsyncAnthropic"),
         patch("slack_agent.agents.bookstack.agent.BookStackClient"),
     ):
         return BookstackQAAgent(

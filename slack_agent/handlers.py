@@ -149,8 +149,9 @@ class SlackHandlers:
                 channel=channel,
                 thread_ts=reply_thread,
                 text=(
-                    "Hi! Ask me anything about Vector's documentation, "
-                    "e.g. _how do I get access to the cluster?_"
+                    "Hi! Ask me anything about Vector's documentation or "
+                    "GitHub repos, e.g. _how do I get access to the cluster?_ "
+                    "or _what does the aieng-bot repo do?_"
                 ),
             )
             return
@@ -173,10 +174,9 @@ class SlackHandlers:
             channel,
             anchor_ts=event["ts"],
             reply_thread_ts=reply_thread,
-            # Native streams are always thread replies, which would force
-            # threads in top-level DMs; those keep the inline engine.
-            native_allowed=reply_thread is not None
-            or event.get("channel_type") != "im",
+            # DMs and channels share the native streaming experience;
+            # top-level DMs try an inline stream first (see start()).
+            native_allowed=True,
             recipient_user_id=event.get("user", ""),
             recipient_team_id=event.get("team", ""),
         )

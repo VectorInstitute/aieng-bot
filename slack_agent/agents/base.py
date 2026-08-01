@@ -13,10 +13,15 @@ class SubAgent(Protocol):
     Each sub-agent owns one domain (BookStack documentation, GitHub, CI, …),
     runs its own LLM loop with its own tools, and renders its progress and
     final answer into the thread's :class:`StreamingReply`.
+
+    ``keywords`` are routing hints: lowercase terms whose presence in a
+    question signals this agent's domain. The orchestrator scores agents
+    by keyword hits and falls back to the first registered agent.
     """
 
     name: str
     description: str
+    keywords: frozenset[str]
 
     async def handle(
         self,
