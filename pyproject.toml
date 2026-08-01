@@ -76,14 +76,6 @@ docs = [
     "ipython>=8.31.0",
 ]
 
-slack-agent = [
-    "aiohttp>=3.11.0",
-    "slack-bolt>=1.21.0",
-    "cryptography>=48.0.1", # RS256 signing backend for GitHub App JWTs
-    "pyjwt>=2.13.0", # GitHub App installation-token flow
-]
-
-
 [tool.uv]
 default-groups = ["dev"]
 
@@ -119,7 +111,7 @@ warn_unused_ignores = true
 implicit_reexport = false
 strict_equality = true
 extra_checks = true
-mypy_path = "src:slack_agent/stubs"
+mypy_path = "src"
 
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
