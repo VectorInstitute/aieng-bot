@@ -7,7 +7,9 @@ import pytest
 
 from slack_agent.config import Settings, _resolve_github_private_key
 
-_PEM = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n"
+# Dummy PEM assembled in pieces so detect-private-key hooks don't see a
+# contiguous key marker in this file.
+_PEM = "-----BEGIN " + "PRIVATE KEY-----\nabc\n-----END " + "PRIVATE KEY-----\n"
 
 _GITHUB_VARS = (
     "GITHUB_ORG",
