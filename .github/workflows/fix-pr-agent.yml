@@ -135,7 +135,12 @@ jobs:
       - name: Install bot dependencies
         run: |
           cd bot-repo
-          pip install -e .
+          # uv sync --frozen installs exactly what's pinned in uv.lock. A bare
+          # `pip install -e .` here would resolve deps unpinned against
+          # pyproject.toml's loose bounds, silently drifting from what's
+          # tested locally (e.g. picking up a breaking anthropic major bump).
+          uv sync --frozen --no-dev
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
       - name: Install Claude Code CLI
         run: |
