@@ -34,7 +34,7 @@ def sample_activity():
         "status": "SUCCESS",
         "failure_types": ["lint"],
         "failure_type": "lint",
-        "trace_path": "data/traces/test-repo/41/111111.json",
+        "cost_usd": 0.1,
         "fix_time_hours": 0.25,
     }
 
@@ -357,7 +357,7 @@ class TestLogFix:
                 github_run_url="https://github.com/.../actions/runs/123456789",
                 status="SUCCESS",
                 failure_types=["test"],
-                trace_path="data/traces/test-repo/42/123456789.json",
+                cost_usd=0.42,
                 fix_time_hours=0.5,
             )
 
@@ -395,7 +395,7 @@ class TestLogFix:
                 github_run_url="https://github.com/.../actions/runs/123456789",
                 status="SUCCESS",
                 failure_types=["test"],
-                trace_path="data/traces/test-repo/42/123456789.json",
+                cost_usd=0.42,
                 fix_time_hours=0.5,
             )
 
@@ -419,7 +419,7 @@ class TestLogFix:
                 github_run_url="https://github.com/.../actions/runs/123456789",
                 status="SUCCESS",
                 failure_types=["lint"],
-                trace_path="data/traces/test-repo/42/123456789.json",
+                cost_usd=0.42,
                 fix_time_hours=0.25,
             )
 
@@ -447,7 +447,7 @@ class TestLogFix:
                     github_run_url="https://github.com/.../actions/runs/123456789",
                     status=status,
                     failure_types=["lint"],
-                    trace_path="data/traces/test-repo/42/123456789.json",
+                    cost_usd=0.42,
                     fix_time_hours=0.25,
                 )
 
@@ -485,7 +485,7 @@ class TestLogFix:
                     github_run_url="https://github.com/.../actions/runs/123456789",
                     status="SUCCESS",
                     failure_types=[ft],
-                    trace_path="data/traces/test-repo/42/123456789.json",
+                    cost_usd=0.42,
                     fix_time_hours=0.25,
                 )
 

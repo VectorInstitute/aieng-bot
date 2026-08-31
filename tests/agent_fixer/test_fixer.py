@@ -286,7 +286,10 @@ class TestAgenticLoop:
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot.agent_fixer.fixer.query", side_effect=mock_query),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query",
+                side_effect=mock_query,
+            ),
             patch.object(
                 AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
             ),
@@ -320,7 +323,9 @@ class TestAgenticLoop:
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aieng_bot.agent_fixer.fixer.query", mock_query_func),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
             patch.object(
                 AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
             ),
@@ -344,7 +349,7 @@ class TestAgenticLoop:
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
             patch(
-                "aieng_bot.agent_fixer.fixer.query",
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query",
                 side_effect=RuntimeError("Agent failed"),
             ),
             patch.object(
@@ -381,7 +386,7 @@ class TestAgenticLoop:
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
             patch(
-                "aieng_bot.agent_fixer.fixer.query",
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query",
                 side_effect=lambda *args, **kwargs: mock_stream(),
             ),
             patch.object(

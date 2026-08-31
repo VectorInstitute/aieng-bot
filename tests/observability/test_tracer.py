@@ -1,8 +1,7 @@
 """Tests for agent execution tracer module."""
 
-import subprocess
 from typing import Any
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import mock_open, patch
 
 import pytest
 
@@ -260,35 +259,6 @@ class TestAgentExecutionTracer:
         mock_file.assert_called()
         captured = capsys.readouterr()
         assert "Trace saved" in captured.err
-
-    @patch("subprocess.run")
-    def test_upload_to_gcs_success(self, mock_run, tracer, capsys):
-        """Test successful GCS upload."""
-        mock_run.return_value = MagicMock()
-
-        result = tracer.upload_to_gcs(
-            "test-bucket", "/tmp/trace.json", "traces/2025/01/01/trace.json"
-        )
-
-        assert result is True
-        mock_run.assert_called_once()
-        captured = capsys.readouterr()
-        assert "Trace uploaded" in captured.err
-
-    @patch("subprocess.run")
-    def test_upload_to_gcs_failure(self, mock_run, tracer, capsys):
-        """Test failed GCS upload."""
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, "gcloud", stderr="Upload failed"
-        )
-
-        result = tracer.upload_to_gcs(
-            "test-bucket", "/tmp/trace.json", "traces/2025/01/01/trace.json"
-        )
-
-        assert result is False
-        captured = capsys.readouterr()
-        assert "Failed to upload trace to GCS" in captured.err
 
     def test_get_summary_success(self, tracer):
         """Test get_summary for successful execution."""

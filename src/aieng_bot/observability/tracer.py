@@ -1,8 +1,10 @@
 """Agent execution tracer for Claude Agent SDK.
 
-This module provides comprehensive observability for Claude Agent SDK executions.
-It captures tool calls, reasoning, actions, and errors in a structured format
-similar to LangSmith/Langfuse for later analysis and dashboard display.
+This module captures tool calls, reasoning, actions, and errors from a Claude
+Agent SDK run in a local structured format, used to build the PR-comment
+summary and file-change metrics. Detailed per-run traces (tool calls,
+generations, cost) are captured separately via Langfuse - see
+:mod:`aieng_bot.observability.langfuse_tracing`.
 """
 
 from __future__ import annotations
@@ -22,12 +24,15 @@ from .storage import TraceStorage
 class AgentExecutionTracer:
     """Capture and structure agent execution traces from Claude Agent SDK.
 
+    Detailed per-run traces (tool calls, generations, cost) are viewed in
+    Langfuse; this tracer only captures what's needed locally to build the
+    PR-comment summary and file-change metrics.
+
     Features:
     - Full message content capture (no truncation)
     - Event classification (REASONING, TOOL_CALL, ACTION, ERROR)
     - Tool invocation parsing from message content
     - Structured JSON output with comprehensive schema
-    - GCS upload support
 
     Parameters
     ----------
@@ -345,35 +350,6 @@ class AgentExecutionTracer:
 
         """
         TraceStorage.save_to_file(self.trace, filepath)
-
-    def upload_to_gcs(
-        self, bucket_name: str, trace_filepath: str, destination_blob_name: str
-    ) -> bool:
-        """Upload trace JSON to Google Cloud Storage.
-
-        Parameters
-        ----------
-        bucket_name : str
-            GCS bucket name (without gs:// prefix).
-        trace_filepath : str
-            Local path to trace JSON file.
-        destination_blob_name : str
-            Target path in GCS bucket.
-
-        Returns
-        -------
-        bool
-            True if upload succeeded, False otherwise.
-
-        Notes
-        -----
-        Uses gcloud CLI (must be authenticated in workflow).
-        Prints status messages to stdout.
-
-        """
-        return TraceStorage.upload_to_gcs(
-            trace_filepath, bucket_name, destination_blob_name
-        )
 
     def get_summary(self) -> str:
         """Generate human-readable summary of execution.

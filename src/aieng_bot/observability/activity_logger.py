@@ -266,7 +266,7 @@ class ActivityLogger:
         github_run_url: str,
         status: ActivityStatus,
         failure_types: list[str],
-        trace_path: str,
+        cost_usd: float | None,
         fix_time_hours: float,
     ) -> bool:
         """Log a fix and merge activity.
@@ -297,8 +297,8 @@ class ActivityLogger:
         failure_types : list[str]
             Types of failure/action (lint, test, build, security,
             merge_conflict, merge_only, unknown). Multiple types can be present.
-        trace_path : str
-            Path to trace file in GCS.
+        cost_usd : float or None
+            Total Anthropic API cost for the fix run in USD, if known.
         fix_time_hours : float
             Time spent on fix in hours.
 
@@ -324,7 +324,7 @@ class ActivityLogger:
             "status": status,
             "failure_types": failure_types,
             "failure_type": failure_types[0] if failure_types else "unknown",
-            "trace_path": trace_path,
+            "cost_usd": cost_usd,
             "fix_time_hours": fix_time_hours,
         }
 

@@ -1,21 +1,21 @@
-"""Trace storage utilities for agent execution traces.
+"""Local trace storage utilities for agent execution traces.
 
-This module provides utilities for saving traces to JSON files
-and uploading them to Google Cloud Storage.
+Detailed per-run traces are viewed in Langfuse; this module only persists
+the local trace JSON used to derive the PR-comment summary and file-change
+metrics for a run.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 from typing import Any
 
-from ..utils.logging import log_error, log_success
+from ..utils.logging import log_success
 
 
 class TraceStorage:
-    """Handle trace storage operations (local and cloud)."""
+    """Handle local trace file storage."""
 
     @staticmethod
     def save_to_file(trace: dict[str, Any], filepath: str) -> None:
@@ -39,51 +39,3 @@ class TraceStorage:
             json.dump(trace, f, indent=2)
 
         log_success(f"Trace saved to {filepath}")
-
-    @staticmethod
-    def upload_to_gcs(
-        trace_filepath: str, bucket_name: str, destination_blob_name: str
-    ) -> bool:
-        """Upload trace JSON to Google Cloud Storage.
-
-        Parameters
-        ----------
-        trace_filepath : str
-            Local path to trace JSON file.
-        bucket_name : str
-            GCS bucket name (without gs:// prefix).
-        destination_blob_name : str
-            Target path in GCS bucket.
-
-        Returns
-        -------
-        bool
-            True if upload succeeded, False otherwise.
-
-        Notes
-        -----
-        Uses gcloud CLI (must be authenticated in workflow).
-        Prints status messages to stdout.
-
-        """
-        try:
-            # Use gcloud CLI for simplicity (already authenticated in workflow)
-            cmd = [
-                "gcloud",
-                "storage",
-                "cp",
-                trace_filepath,
-                f"gs://{bucket_name}/{destination_blob_name}",
-            ]
-
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-            log_success(f"Trace uploaded to gs://{bucket_name}/{destination_blob_name}")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            log_error(f"Failed to upload trace to GCS: {e.stderr}")
-            return False
-        except Exception as e:
-            log_error(f"Unexpected error uploading to GCS: {e}")
-            return False

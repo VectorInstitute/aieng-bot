@@ -1,8 +1,12 @@
 /**
- * Data fetching utilities for GCS storage
+ * Data fetching utilities for GCS storage.
+ *
+ * Detailed per-run traces are viewed in Langfuse; the dashboard only reads
+ * the aggregate PR activity log (status, cost, duration) for the PR list
+ * and analytics views.
  */
 
-import type { AgentTrace, BotMetrics, BotActivityLog, PRSummary } from './types'
+import type { BotMetrics, BotActivityLog, PRSummary } from './types'
 
 const GCS_BUCKET_URL = 'https://storage.googleapis.com/bot-dashboard-vectorinstitute'
 
@@ -32,56 +36,6 @@ export async function fetchBotActivityLog(): Promise<BotActivityLog | null> {
 }
 
 /**
- * Fetch specific agent trace
- */
-export async function fetchAgentTrace(tracePath: string): Promise<AgentTrace | null> {
-  try {
-    // Add cache-busting parameter to bypass CDN cache
-    const cacheBuster = Date.now()
-    const response = await fetch(`${GCS_BUCKET_URL}/${tracePath}?t=${cacheBuster}`, {
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      console.error('Failed to fetch agent trace:', response.statusText)
-      return null
-    }
-
-    return await response.json()
-  } catch (error) {
-    console.error('Error fetching agent trace:', error)
-    return null
-  }
-}
-
-/**
- * Fetch trace for specific PR (finds most recent trace)
- */
-export async function fetchPRTrace(repo: string, prNumber: number): Promise<AgentTrace | null> {
-  try {
-    // Fetch the activity log to find the trace path
-    const activityLog = await fetchBotActivityLog()
-
-    if (activityLog) {
-      // Find matching activity entry
-      const activity = activityLog.activities
-        .filter(a => a.repo === repo && a.pr_number === prNumber)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
-
-      if (activity && activity.trace_path) {
-        return await fetchAgentTrace(activity.trace_path)
-      }
-    }
-
-    console.warn('Activity log not found or PR has no trace')
-    return null
-  } catch (error) {
-    console.error('Error fetching PR trace:', error)
-    return null
-  }
-}
-
-/**
  * Convert bot activity log to PR summaries for overview table
  */
 export function activityLogToPRSummaries(log: BotActivityLog): PRSummary[] {
@@ -96,45 +50,8 @@ export function activityLogToPRSummaries(log: BotActivityLog): PRSummary[] {
     workflow_run_url: activity.github_run_url,
     failure_type: activity.failure_type,
     fix_time_hours: activity.fix_time_hours || null,
-    trace_path: activity.trace_path || '',
-    cost_usd: null, // Will be enriched from trace if available
+    cost_usd: activity.cost_usd ?? null,
   }))
-}
-
-/**
- * Enrich PR summaries with trace data for detailed execution info
- */
-export async function enrichPRSummaries(summaries: PRSummary[]): Promise<PRSummary[]> {
-  const enriched = await Promise.all(
-    summaries.map(async (summary) => {
-      // Skip entries without trace paths
-      if (!summary.trace_path) {
-        return summary
-      }
-
-      // Fetch trace to get detailed execution info
-      const trace = await fetchAgentTrace(summary.trace_path)
-
-      if (!trace) {
-        return summary
-      }
-
-      const duration = trace.execution.duration_seconds
-        ? trace.execution.duration_seconds / 3600
-        : null
-
-      const costUsd = trace.execution.metrics?.total_cost_usd ?? null
-
-      return {
-        ...summary,
-        status: trace.result.status,
-        fix_time_hours: duration || summary.fix_time_hours,
-        cost_usd: costUsd,
-      }
-    })
-  )
-
-  return enriched
 }
 
 /**

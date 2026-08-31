@@ -17,6 +17,7 @@ from aieng_bot._cli.commands.fix import (
     _handle_result,
     _log_activity_to_gcs,
     _prepare_agent_environment,
+    _read_cost_usd,
     _run_fix_loop,
 )
 from aieng_bot.agent_fixer import AgentFixResult
@@ -607,6 +608,40 @@ class TestHandleResult:
             mock_log_gcs.assert_called_once()
 
 
+class TestReadCostUsd:
+    """Tests for _read_cost_usd function."""
+
+    def test_reads_cost_from_trace_file(self):
+        """Test that cost is read from the trace's execution metrics."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write('{"execution": {"metrics": {"total_cost_usd": 0.1234}}}')
+            path = f.name
+
+        try:
+            assert _read_cost_usd(path) == pytest.approx(0.1234)
+        finally:
+            os.unlink(path)
+
+    def test_returns_none_for_empty_path(self):
+        """Test that an empty trace_file path returns None."""
+        assert _read_cost_usd("") is None
+
+    def test_returns_none_when_file_missing(self):
+        """Test that a missing trace file returns None instead of raising."""
+        assert _read_cost_usd("/tmp/does-not-exist-aieng-bot.json") is None
+
+    def test_returns_none_when_metrics_absent(self):
+        """Test that a trace with no metrics returns None."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write('{"execution": {"metrics": null}}')
+            path = f.name
+
+        try:
+            assert _read_cost_usd(path) is None
+        finally:
+            os.unlink(path)
+
+
 class TestLogActivityToGCS:
     """Tests for _log_activity_to_gcs function."""
 
@@ -624,7 +659,7 @@ class TestLogActivityToGCS:
                 workflow_run_id="run123",
                 github_run_url="https://github.com/...",
                 status="SUCCESS",
-                trace_path="/tmp/trace.json",
+                cost_usd=0.42,
                 fix_time_hours=0.5,
                 failure_types=["lint"],
             )
@@ -650,7 +685,7 @@ class TestLogActivityToGCS:
                 workflow_run_id="run123",
                 github_run_url="https://github.com/...",
                 status="SUCCESS",
-                trace_path="/tmp/trace.json",
+                cost_usd=0.42,
                 fix_time_hours=0.5,
                 failure_types=["lint"],
             )
@@ -669,7 +704,7 @@ class TestLogActivityToGCS:
                 workflow_run_id="run",
                 github_run_url="url",
                 status="SUCCESS",
-                trace_path="",
+                cost_usd=None,
                 fix_time_hours=0.1,
                 failure_types=["test"],
             )

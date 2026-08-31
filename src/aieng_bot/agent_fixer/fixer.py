@@ -2,12 +2,15 @@
 
 import json
 import os
+from contextlib import nullcontext
 from pathlib import Path
 
-from claude_agent_sdk import ClaudeAgentOptions, query
+import claude_agent_sdk
+from claude_agent_sdk import ClaudeAgentOptions
+from langfuse import propagate_attributes
 
 from ..config import get_model_name
-from ..observability import AgentExecutionTracer
+from ..observability import AgentExecutionTracer, instrument_claude_agent_sdk
 from ..utils.logging import log_error, log_info, log_success
 from .models import AgentFixResult, AgenticLoopRequest
 from .prompts import AGENTIC_LOOP_PROMPT
@@ -43,6 +46,8 @@ class AgentFixer:
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+
+        self.langfuse = instrument_claude_agent_sdk()
 
     async def run_agentic_loop(self, request: AgenticLoopRequest) -> AgentFixResult:
         """Run the full agentic fix loop for a PR.
@@ -89,13 +94,49 @@ class AgentFixer:
                 model=get_model_name(),
             )
 
-            # Run agent with tracing
-            agent_stream = query(prompt=prompt, options=options)
-            traced_stream = tracer.capture_agent_stream(agent_stream)
+            observation = (
+                self.langfuse.start_as_current_observation(
+                    as_type="agent",
+                    name="fix-pr",
+                    input={
+                        "repo": request.repo,
+                        "pr_number": request.pr_number,
+                        "pr_title": request.pr_title,
+                        "failure_types": request.failure_types,
+                    },
+                    metadata={
+                        "pr_url": request.pr_url,
+                        "pr_author": request.pr_author,
+                        "workflow_run_id": request.workflow_run_id,
+                        "github_run_url": request.github_run_url,
+                        "max_retries": request.max_retries,
+                    },
+                )
+                if self.langfuse
+                else nullcontext()
+            )
+            attributes = (
+                propagate_attributes(
+                    session_id=f"{request.repo}#{request.pr_number}",
+                    tags=["fixer", request.repo, *request.failure_types],
+                )
+                if self.langfuse
+                else nullcontext()
+            )
 
-            # Consume the traced stream
-            async for _ in traced_stream:
-                pass  # Tracer handles logging
+            # Run agent with tracing (local summary/file-metrics tracer +
+            # Langfuse via the OpenInference Claude Agent SDK instrumentor).
+            # Call via the claude_agent_sdk module (not a `from ... import query`
+            # bound at module load) so this always resolves the instrumented
+            # query() - instrument_claude_agent_sdk() above patches the module
+            # attribute at runtime, after this module's own imports have run.
+            with observation, attributes:
+                agent_stream = claude_agent_sdk.query(prompt=prompt, options=options)
+                traced_stream = tracer.capture_agent_stream(agent_stream)
+
+                # Consume the traced stream
+                async for _ in traced_stream:
+                    pass  # Tracer handles logging
 
             log_success("Agentic loop completed")
         except Exception as e:

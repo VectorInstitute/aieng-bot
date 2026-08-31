@@ -18,7 +18,6 @@ from ...agent_fixer.models import AgentFixResult, AgenticLoopRequest
 from ...classifier import PRFailureClassifier
 from ...classifier.models import ClassificationResult, FailureType, PRContext
 from ...observability import ActivityLogger, ActivityStatus
-from ...observability.storage import TraceStorage
 from ...utils import RepoWorkspace
 from ...utils.github_client import GitHubClient
 from ...utils.logging import log_error, log_info, log_success, log_warning
@@ -448,20 +447,6 @@ def _handle_result(
         status = "FAILED"
         exit_code = 1
 
-    # Upload trace to GCS and get the GCS path
-    gcs_trace_path = ""
-    if log_to_gcs and result.trace_file:
-        gcs_bucket = "bot-dashboard-vectorinstitute"
-        # Create a unique blob name: data/traces/{repo}/{pr_number}/{workflow_run_id}.json
-        safe_repo = repo.replace("/", "-")
-        gcs_blob_name = f"data/traces/{safe_repo}/{pr_number}/{workflow_run_id}.json"
-
-        if TraceStorage.upload_to_gcs(result.trace_file, gcs_bucket, gcs_blob_name):
-            gcs_trace_path = gcs_blob_name
-            log_info(f"Trace uploaded to gs://{gcs_bucket}/{gcs_blob_name}")
-        else:
-            log_warning("Failed to upload trace to GCS")
-
     if log_to_gcs:
         _log_activity_to_gcs(
             repo=repo,
@@ -471,12 +456,39 @@ def _handle_result(
             workflow_run_id=workflow_run_id,
             github_run_url=github_run_url,
             status=status,
-            trace_path=gcs_trace_path,
+            cost_usd=_read_cost_usd(result.trace_file),
             fix_time_hours=elapsed_hours,
             failure_types=failure_types,
         )
 
     sys.exit(exit_code)
+
+
+def _read_cost_usd(trace_file: str) -> float | None:
+    """Read the total Anthropic API cost from a local trace file, if present.
+
+    Parameters
+    ----------
+    trace_file : str
+        Path to the local trace JSON file written by AgentExecutionTracer.
+
+    Returns
+    -------
+    float or None
+        Total cost in USD, or None if unavailable.
+
+    """
+    if not trace_file:
+        return None
+    try:
+        with open(trace_file) as f:
+            trace = json.load(f)
+        metrics = trace.get("execution", {}).get("metrics") or {}
+        cost = metrics.get("total_cost_usd")
+        return float(cost) if cost is not None else None
+    except Exception as e:
+        log_warning(f"Could not read cost from trace file: {e}")
+        return None
 
 
 def _log_activity_to_gcs(
@@ -487,7 +499,7 @@ def _log_activity_to_gcs(
     workflow_run_id: str,
     github_run_url: str,
     status: ActivityStatus,
-    trace_path: str,
+    cost_usd: float | None,
     fix_time_hours: float,
     failure_types: list[str],
 ) -> None:
@@ -509,8 +521,8 @@ def _log_activity_to_gcs(
         GitHub workflow run URL.
     status : ActivityStatus
         Fix status (SUCCESS, FAILED, PARTIAL).
-    trace_path : str
-        Path to trace file in GCS.
+    cost_usd : float or None
+        Total Anthropic API cost for the fix run in USD, if known.
     fix_time_hours : float
         Time spent on fix in hours.
     failure_types : list[str]
@@ -531,7 +543,7 @@ def _log_activity_to_gcs(
             github_run_url=github_run_url,
             status=status,
             failure_types=failure_types,
-            trace_path=trace_path,
+            cost_usd=cost_usd,
             fix_time_hours=fix_time_hours,
         )
     except Exception as e:
@@ -816,13 +828,18 @@ def fix(
 
     \b
     Environment Variables:
-      ANTHROPIC_API_KEY  Claude API key (console.anthropic.com)
-      GITHUB_TOKEN       GitHub token (or GH_TOKEN)
+      ANTHROPIC_API_KEY    Claude API key (console.anthropic.com)
+      GITHUB_TOKEN         GitHub token (or GH_TOKEN)
+      LANGFUSE_PUBLIC_KEY  Optional. Enables Langfuse tracing (with
+      LANGFUSE_SECRET_KEY  LANGFUSE_SECRET_KEY and LANGFUSE_HOST).
 
     \b
     GCS Logging (--log flag):
-      Requires gcloud CLI authenticated with access to the
-      bot-dashboard-vectorinstitute bucket.
+      Records a PR outcome summary (status, cost, duration) to the
+      bot-dashboard-vectorinstitute bucket for the dashboard's PR list
+      and analytics. Requires gcloud CLI authenticated with bucket access.
+      Detailed per-run traces are captured separately in Langfuse (set
+      LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST).
     """
     start_time = time.time()
 
