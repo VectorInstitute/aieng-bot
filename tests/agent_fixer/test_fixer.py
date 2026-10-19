@@ -418,13 +418,14 @@ class TestAgenticLoop:
             assert result.summary_file == ""
 
     @staticmethod
-    def _session_stream(session_id):
+    def _session_stream(session_id, result_text="Done"):
         """Build a query() side effect yielding one ResultMessage per call."""
 
         def mock_query(*args, **kwargs):
             async def stream():
                 result = MagicMock(spec=ResultMessage)
                 result.session_id = session_id
+                result.result = result_text
                 yield result
 
             return stream()
@@ -438,7 +439,7 @@ class TestAgenticLoop:
         """Test the harness waits for CI and resumes the same session."""
         github_status.side_effect = [
             PRStatus(state="OPEN", pending=["docker-build"]),
-            PRStatus(state="OPEN", passed=["docker-build"]),
+            PRStatus(state="OPEN", failed=["docker-build"]),
             PRStatus(state="MERGED", passed=["docker-build"]),
         ]
         mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
@@ -462,16 +463,19 @@ class TestAgenticLoop:
         assert first.kwargs["options"].resume is None
         assert second.kwargs["options"].resume == "sess-1"
         assert "CI has finished for PR #123" in second.kwargs["prompt"]
-        assert "1 passed" in second.kwargs["prompt"]
+        assert "failed: docker-build" in second.kwargs["prompt"]
 
     @pytest.mark.asyncio
     async def test_run_agentic_loop_fails_when_pr_not_merged(
         self, agentic_request, mock_tracer, github_status
     ):
         """Test a clean agent exit is FAILED when GitHub shows the PR unmerged."""
-        github_status.return_value = PRStatus(
-            state="OPEN", failed=["docker-build"], passed=["unit-tests"]
-        )
+        github_status.side_effect = [
+            PRStatus(state="OPEN", pending=["docker-build"]),
+            PRStatus(state="OPEN", failed=["docker-build"], passed=["unit-tests"]),
+            PRStatus(state="OPEN", pending=["docker-build"]),
+            PRStatus(state="OPEN", failed=["docker-build"], passed=["unit-tests"]),
+        ]
         mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
 
         with (
@@ -561,9 +565,73 @@ class TestAgenticLoop:
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             fixer = AgentFixer()
             client = MagicMock(get_pr_status=github_status)
-            status = await fixer._wait_for_checks(
+            status, waited = await fixer._wait_for_checks(
                 client, agentic_request, deadline=float("inf")
             )
 
         assert status.passed == ["unit-tests"]
+        assert waited
         assert github_status.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_stops_when_agent_declines(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test the agent is not resumed when CI had already failed at stop."""
+        github_status.return_value = PRStatus(
+            state="OPEN", failed=["docker-build"], passed=["unit-tests"]
+        )
+        mock_query_func = MagicMock(
+            side_effect=self._session_stream(
+                "sess-1", "Not merging: docker-build also fails on main."
+            )
+        )
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()) as mock_file,
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        mock_query_func.assert_called_once()
+        # The reason is saved for the workflow's failure comment
+        mock_file.assert_any_call("/tmp/fix-error.txt", "w")
+        mock_file().write.assert_any_call(result.error_message)
+        assert result.error_message is not None
+        assert "failed: docker-build" in result.error_message
+        assert "also fails on main" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_resumes_green_unmerged_pr(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a green but unmerged PR resumes the agent to merge it."""
+        github_status.side_effect = [
+            PRStatus(state="OPEN", passed=["unit-tests"]),
+            PRStatus(state="MERGED", passed=["unit-tests"]),
+        ]
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "SUCCESS"
+        assert mock_query_func.call_count == 2

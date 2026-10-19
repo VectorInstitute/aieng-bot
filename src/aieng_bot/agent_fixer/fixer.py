@@ -21,6 +21,7 @@ from .prompts import AGENTIC_LOOP_PROMPT, CI_STATUS_PROMPT
 
 TRACE_FILE = "/tmp/agent-execution-trace.json"
 SUMMARY_FILE = "/tmp/fix-summary.txt"
+ERROR_FILE = "/tmp/fix-error.txt"
 
 # Upper bound on agent sessions (initial run plus resumes after CI waits)
 MAX_AGENT_SESSIONS = 10
@@ -29,6 +30,8 @@ CI_POLL_SECONDS = 60
 # Seconds to wait for checks to register on a fresh push before treating an
 # empty check list as "no CI configured"
 CHECKS_REGISTER_GRACE_SECONDS = 180
+# Characters of the agent's final message kept in a failure reason
+MAX_AGENT_REASON_CHARS = 500
 
 # Tools available to the agentic fix loop
 AGENTIC_LOOP_TOOLS = [
@@ -157,6 +160,8 @@ class AgentFixer:
 
         status = "FAILED" if error_message else "SUCCESS"
         trace_file, summary_file = self._finalize_and_save(tracer, status)
+        if error_message:
+            self._save_error(error_message)
 
         return AgentFixResult(
             status=status,
@@ -179,6 +184,11 @@ class AgentFixer:
         from GitHub rather than inferred from the agent's stream ending: the
         harness waits for checks to finish and resumes the session with the
         results until the goal is reached or the time budget runs out.
+
+        The session is only resumed when the agent stopped to wait on CI, or
+        left the PR green but unmerged. If CI had already failed when it
+        stopped, the agent chose not to proceed, and its own explanation is
+        returned instead of resuming it with the same results.
 
         Parameters
         ----------
@@ -209,11 +219,12 @@ class AgentFixer:
                     if session_id
                     else replace(options, continue_conversation=True)
                 )
-            session_id = (
-                await self._run_agent_session(prompt, options, tracer) or session_id
+            new_session_id, agent_result = await self._run_agent_session(
+                prompt, options, tracer
             )
+            session_id = new_session_id or session_id
 
-            status = await self._wait_for_checks(github, request, deadline)
+            status, waited = await self._wait_for_checks(github, request, deadline)
             log_info(f"PR status after agent session {session}: {status.summary()}")
 
             if self._goal_reached(request, status):
@@ -224,6 +235,12 @@ class AgentFixer:
                 return (
                     f"Timed out after {request.timeout_minutes} minutes: "
                     f"{status.summary()}"
+                )
+            if not waited and not (request.merge_pr and status.ci_passed):
+                reason = (agent_result or "").strip()[:MAX_AGENT_REASON_CHARS]
+                return (
+                    f"Agent stopped with CI unresolved ({status.summary()}): "
+                    f"{reason or 'no explanation given'}"
                 )
 
             prompt = CI_STATUS_PROMPT.format(
@@ -238,20 +255,38 @@ class AgentFixer:
         prompt: str,
         options: ClaudeAgentOptions,
         tracer: AgentExecutionTracer,
-    ) -> str | None:
-        """Run one agent session to completion and return its session ID."""
+    ) -> tuple[str | None, str | None]:
+        """Run one agent session to completion.
+
+        Returns
+        -------
+        tuple[str | None, str | None]
+            (session_id, final result text) from the session's ResultMessage.
+
+        """
         session_id: str | None = None
+        result_text: str | None = None
         agent_stream = claude_agent_sdk.query(prompt=prompt, options=options)
         async for message in tracer.capture_agent_stream(agent_stream):
             if isinstance(message, ResultMessage):
                 session_id = message.session_id
-        return session_id
+                result_text = message.result
+        return session_id, result_text
 
     async def _wait_for_checks(
         self, github: GitHubClient, request: AgenticLoopRequest, deadline: float
-    ) -> PRStatus:
-        """Poll the PR until no checks are pending, it closes, or time runs out."""
+    ) -> tuple[PRStatus, bool]:
+        """Poll the PR until no checks are pending, it closes, or time runs out.
+
+        Returns
+        -------
+        tuple[PRStatus, bool]
+            The final status, and whether CI was still unresolved on the
+            first poll (i.e. the agent stopped while waiting on CI).
+
+        """
         register_deadline = time.monotonic() + CHECKS_REGISTER_GRACE_SECONDS
+        waited = False
         while True:
             try:
                 status = await asyncio.to_thread(
@@ -272,7 +307,8 @@ class AgentFixer:
                     or not (status.pending or awaiting_registration)
                     or now >= deadline
                 ):
-                    return status
+                    return status, waited
+                waited = True
                 log_info(f"Waiting for CI: {status.summary()}")
             await asyncio.sleep(CI_POLL_SECONDS)
 
@@ -282,6 +318,15 @@ class AgentFixer:
         if request.merge_pr:
             return status.merged
         return status.merged or (status.state == "OPEN" and status.ci_passed)
+
+    @staticmethod
+    def _save_error(error_message: str) -> None:
+        """Write the failure reason for the workflow's PR comment."""
+        try:
+            with open(ERROR_FILE, "w") as f:
+                f.write(error_message)
+        except OSError as e:
+            log_error(f"Failed to save error reason: {e}")
 
     def _finalize_and_save(
         self, tracer: AgentExecutionTracer, status: str
