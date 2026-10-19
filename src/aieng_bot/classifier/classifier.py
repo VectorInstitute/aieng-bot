@@ -29,9 +29,9 @@ from .prompts import CLASSIFICATION_PROMPT_WITH_TOOLS
 
 
 class PRFailureClassifier:
-    """Classifies PR failures using Claude Sonnet 4.6.
+    """Classifies PR failures using Claude Sonnet 5.5.
 
-    This classifier uses Claude Sonnet 4.6 for accurate classification
+    This classifier uses Claude Sonnet 5.5 for accurate classification
 
     Attributes
     ----------
@@ -203,7 +203,6 @@ class PRFailureClassifier:
             response = self.client.messages.create(
                 model=get_model_name(),
                 max_tokens=8192,
-                temperature=0.0,
                 tools=[bash_tool],
                 messages=messages,
             )
@@ -232,21 +231,8 @@ class PRFailureClassifier:
 
                 break
 
-            # Build assistant message with response content blocks
-            assistant_content: list[Any] = []
-            for block in response.content:
-                if block.type == "text":
-                    assistant_content.append({"type": "text", "text": block.text})
-                elif block.type == "tool_use":
-                    assistant_content.append(
-                        {
-                            "type": "tool_use",
-                            "id": block.id,
-                            "name": block.name,
-                            "input": block.input,
-                        }
-                    )
-            messages.append({"role": "assistant", "content": assistant_content})
+            # Pass content back unchanged so thinking blocks are preserved
+            messages.append({"role": "assistant", "content": response.content})
 
             # Execute tool uses
             tool_result_blocks: list[ToolResultBlockParam] = []
@@ -398,7 +384,7 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         )
 
         # Call Claude API with tools to search log file
-        # Using Sonnet 4.6 for classification with tools
+        # Using Sonnet 5.5 for classification with tools
         try:
             log_info(f"Calling Claude API with tools (log file: {failure_logs_file})")
             log_info(f"Prompt length: {len(prompt)} chars")
