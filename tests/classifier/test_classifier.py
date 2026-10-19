@@ -788,6 +788,72 @@ class TestRunAgenticLoop:
                 assert "failure_type" in result
                 mock_execute.assert_called_once()
 
+    def test_agentic_loop_request_is_sonnet_5_5_compatible(self, monkeypatch):
+        """Test requests omit sampling params and preserve thinking blocks."""
+        monkeypatch.delenv("CLAUDE_MODEL", raising=False)
+        with patch(
+            "aieng_bot.classifier.classifier.anthropic.Anthropic"
+        ) as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+
+            thinking_block = MagicMock(spec=["type", "thinking", "signature"])
+            thinking_block.type = "thinking"
+            thinking_block.thinking = ""
+            thinking_block.signature = "sig"
+
+            tool_use_block = MagicMock()
+            tool_use_block.type = "tool_use"
+            tool_use_block.id = "tool_1"
+            tool_use_block.name = "bash"
+            tool_use_block.input = {"command": "grep error logs.txt"}
+
+            first_response = MagicMock()
+            first_response.content = [thinking_block, tool_use_block]
+
+            text_block = MagicMock()
+            text_block.type = "text"
+            text_block.text = '{"failure_type": "test", "confidence": 0.9}'
+
+            second_response = MagicMock()
+            second_response.content = [thinking_block, text_block]
+            second_response.stop_reason = "end_turn"
+
+            sent_messages: list[list] = []
+
+            def record_create(**kwargs):
+                sent_messages.append(list(kwargs["messages"]))
+                return [first_response, second_response][len(sent_messages) - 1]
+
+            mock_client.messages.create.side_effect = record_create
+
+            classifier = PRFailureClassifier(api_key="test-key")
+
+            with patch.object(classifier, "_execute_tool_use") as mock_execute:
+                mock_execute.return_value = {
+                    "type": "tool_result",
+                    "tool_use_id": "tool_1",
+                    "content": "Error: test failed",
+                }
+
+                messages = [{"role": "user", "content": "classify this"}]  # type: ignore[list-item]
+                bash_tool = {"type": "bash_20250124", "name": "bash"}  # type: ignore[assignment]
+
+                result = classifier._run_agentic_loop(messages, bash_tool)
+
+            assert result == '{"failure_type": "test", "confidence": 0.9}'
+            for call in mock_client.messages.create.call_args_list:
+                assert call.kwargs["model"] == "claude-sonnet-5-5"
+                assert "temperature" not in call.kwargs
+                assert "top_p" not in call.kwargs
+                assert "top_k" not in call.kwargs
+
+            # Second request replays the first response's content unchanged
+            assistant_turn = sent_messages[1][1]
+            assert assistant_turn["role"] == "assistant"
+            assert assistant_turn["content"] is first_response.content
+            assert assistant_turn["content"][0] is thinking_block
+
     def test_agentic_loop_max_turns_exceeded(self):
         """Test that agentic loop raises error when max turns exceeded."""
         with patch(
