@@ -1,9 +1,10 @@
 """Tests for agent fixer module."""
 
 import os
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
+from claude_agent_sdk import ResultMessage
 
 from aieng_bot.agent_fixer import (
     AgentFixer,
@@ -11,6 +12,7 @@ from aieng_bot.agent_fixer import (
     AgenticLoopRequest,
 )
 from aieng_bot.agent_fixer.fixer import AGENTIC_LOOP_TOOLS
+from aieng_bot.utils.github_client import PRStatus
 
 
 class TestAgentFixResult:
@@ -195,6 +197,19 @@ class TestAgenticLoop:
         )
         return tracer
 
+    @pytest.fixture
+    def github_status(self):
+        """Patch the fixer's GitHub client; tests set get_pr_status results."""
+        client = MagicMock()
+        client.get_pr_status.return_value = PRStatus(
+            state="MERGED", passed=["unit-tests"]
+        )
+        with (
+            patch("aieng_bot.agent_fixer.fixer.GitHubClient", return_value=client),
+            patch("aieng_bot.agent_fixer.fixer.asyncio.sleep", new=AsyncMock()),
+        ):
+            yield client.get_pr_status
+
     def test_write_agentic_context(self, agentic_request, tmp_path):
         """Test writing agentic loop context to JSON file."""
         import json  # noqa: PLC0415 - Import after test setup
@@ -275,7 +290,9 @@ class TestAgenticLoop:
             assert tracer.trace["execution"]["model"]
 
     @pytest.mark.asyncio
-    async def test_run_agentic_loop_success(self, agentic_request, mock_tracer):
+    async def test_run_agentic_loop_success(
+        self, agentic_request, mock_tracer, github_status
+    ):
         """Test successful agentic loop execution."""
 
         async def mock_stream():
@@ -312,7 +329,7 @@ class TestAgenticLoop:
 
     @pytest.mark.asyncio
     async def test_run_agentic_loop_uses_correct_options(
-        self, agentic_request, mock_tracer
+        self, agentic_request, mock_tracer, github_status
     ):
         """Test that the agent is invoked with the full agentic tool set."""
 
@@ -343,7 +360,7 @@ class TestAgenticLoop:
 
     @pytest.mark.asyncio
     async def test_run_agentic_loop_failure_saves_trace(
-        self, agentic_request, mock_tracer
+        self, agentic_request, mock_tracer, github_status
     ):
         """Test that a failed run still finalizes and saves the trace."""
         with (
@@ -374,7 +391,7 @@ class TestAgenticLoop:
 
     @pytest.mark.asyncio
     async def test_run_agentic_loop_trace_save_failure(
-        self, agentic_request, mock_tracer
+        self, agentic_request, mock_tracer, github_status
     ):
         """Test that a trace-save failure yields empty file paths."""
 
@@ -399,3 +416,154 @@ class TestAgenticLoop:
             assert result.status == "SUCCESS"
             assert result.trace_file == ""
             assert result.summary_file == ""
+
+    @staticmethod
+    def _session_stream(session_id):
+        """Build a query() side effect yielding one ResultMessage per call."""
+
+        def mock_query(*args, **kwargs):
+            async def stream():
+                result = MagicMock(spec=ResultMessage)
+                result.session_id = session_id
+                yield result
+
+            return stream()
+
+        return mock_query
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_resumes_after_ci_wait(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test the harness waits for CI and resumes the same session."""
+        github_status.side_effect = [
+            PRStatus(state="OPEN", pending=["docker-build"]),
+            PRStatus(state="OPEN", passed=["docker-build"]),
+            PRStatus(state="MERGED", passed=["docker-build"]),
+        ]
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "SUCCESS"
+        assert mock_query_func.call_count == 2
+        first, second = mock_query_func.call_args_list
+        assert first.kwargs["options"].resume is None
+        assert second.kwargs["options"].resume == "sess-1"
+        assert "CI has finished for PR #123" in second.kwargs["prompt"]
+        assert "1 passed" in second.kwargs["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_fails_when_pr_not_merged(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a clean agent exit is FAILED when GitHub shows the PR unmerged."""
+        github_status.return_value = PRStatus(
+            state="OPEN", failed=["docker-build"], passed=["unit-tests"]
+        )
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch("aieng_bot.agent_fixer.fixer.MAX_AGENT_SESSIONS", 2),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        assert mock_query_func.call_count == 2
+        assert result.error_message is not None
+        assert "failed: docker-build" in result.error_message
+        mock_tracer.finalize.assert_called_once_with(
+            status="FAILED",
+            changes_made=3,
+            files_modified=["/src/app.py", "/tests/test_app.py"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_fails_when_pr_closed(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a PR closed without merging is reported as FAILED."""
+        github_status.return_value = PRStatus(state="CLOSED")
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query",
+                side_effect=self._session_stream("sess-1"),
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        assert result.error_message == "PR is CLOSED but was not merged by the bot"
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_no_merge_succeeds_on_green_ci(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test --no-merge runs succeed once every check passes."""
+        agentic_request.merge_pr = False
+        github_status.return_value = PRStatus(state="OPEN", passed=["unit-tests"])
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "SUCCESS"
+        mock_query_func.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_wait_for_checks_waits_for_checks_to_register(
+        self, agentic_request, github_status
+    ):
+        """Test an empty check list right after a push is not read as a pass."""
+        github_status.side_effect = [
+            PRStatus(state="OPEN"),
+            PRStatus(state="OPEN", pending=["unit-tests"]),
+            PRStatus(state="OPEN", passed=["unit-tests"]),
+        ]
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            client = MagicMock(get_pr_status=github_status)
+            status = await fixer._wait_for_checks(
+                client, agentic_request, deadline=float("inf")
+            )
+
+        assert status.passed == ["unit-tests"]
+        assert github_status.call_count == 3

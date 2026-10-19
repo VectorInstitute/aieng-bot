@@ -1,22 +1,34 @@
 """Agent fixer implementation using Claude Agent SDK with Skills."""
 
+import asyncio
 import json
 import os
+import time
 from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 import claude_agent_sdk
-from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage
 from langfuse import propagate_attributes
 
 from ..config import get_model_name
 from ..observability import AgentExecutionTracer, instrument_claude_agent_sdk
-from ..utils.logging import log_error, log_info, log_success
+from ..utils.github_client import GitHubClient, PRStatus
+from ..utils.logging import log_error, log_info, log_success, log_warning
 from .models import AgentFixResult, AgenticLoopRequest
-from .prompts import AGENTIC_LOOP_PROMPT
+from .prompts import AGENTIC_LOOP_PROMPT, CI_STATUS_PROMPT
 
 TRACE_FILE = "/tmp/agent-execution-trace.json"
 SUMMARY_FILE = "/tmp/fix-summary.txt"
+
+# Upper bound on agent sessions (initial run plus resumes after CI waits)
+MAX_AGENT_SESSIONS = 10
+# Seconds between GitHub check-status polls while CI is running
+CI_POLL_SECONDS = 60
+# Seconds to wait for checks to register on a fresh push before treating an
+# empty check list as "no CI configured"
+CHECKS_REGISTER_GRACE_SECONDS = 180
 
 # Tools available to the agentic fix loop
 AGENTIC_LOOP_TOOLS = [
@@ -131,14 +143,14 @@ class AgentFixer:
             # query() - instrument_claude_agent_sdk() above patches the module
             # attribute at runtime, after this module's own imports have run.
             with observation, attributes:
-                agent_stream = claude_agent_sdk.query(prompt=prompt, options=options)
-                traced_stream = tracer.capture_agent_stream(agent_stream)
+                error_message = await self._run_until_resolved(
+                    request, prompt, options, tracer
+                )
 
-                # Consume the traced stream
-                async for _ in traced_stream:
-                    pass  # Tracer handles logging
-
-            log_success("Agentic loop completed")
+            if error_message:
+                log_error(f"Agentic loop did not resolve the PR: {error_message}")
+            else:
+                log_success("Agentic loop completed")
         except Exception as e:
             log_error(f"Agentic loop failed: {e}")
             error_message = str(e)
@@ -152,6 +164,124 @@ class AgentFixer:
             summary_file=summary_file,
             error_message=error_message,
         )
+
+    async def _run_until_resolved(
+        self,
+        request: AgenticLoopRequest,
+        prompt: str,
+        options: ClaudeAgentOptions,
+        tracer: AgentExecutionTracer,
+    ) -> str | None:
+        """Run the agent, resuming it until GitHub shows the PR resolved.
+
+        A headless agent session cannot block on a background wait, so it may
+        end its turn while CI is still running. The outcome is therefore read
+        from GitHub rather than inferred from the agent's stream ending: the
+        harness waits for checks to finish and resumes the session with the
+        results until the goal is reached or the time budget runs out.
+
+        Parameters
+        ----------
+        request : AgenticLoopRequest
+            The agentic loop request containing PR context and configuration.
+        prompt : str
+            Initial prompt for the agent.
+        options : ClaudeAgentOptions
+            Agent options for the initial session.
+        tracer : AgentExecutionTracer
+            Tracer capturing every session's messages.
+
+        Returns
+        -------
+        str | None
+            None when the PR reached its goal, otherwise why it did not.
+
+        """
+        github = GitHubClient()
+        deadline = time.monotonic() + request.timeout_minutes * 60
+        session_id: str | None = None
+        status: PRStatus | None = None
+
+        for session in range(1, MAX_AGENT_SESSIONS + 1):
+            if session > 1:
+                options = (
+                    replace(options, resume=session_id)
+                    if session_id
+                    else replace(options, continue_conversation=True)
+                )
+            session_id = (
+                await self._run_agent_session(prompt, options, tracer) or session_id
+            )
+
+            status = await self._wait_for_checks(github, request, deadline)
+            log_info(f"PR status after agent session {session}: {status.summary()}")
+
+            if self._goal_reached(request, status):
+                return None
+            if status.state != "OPEN":
+                return f"PR is {status.state} but was not merged by the bot"
+            if time.monotonic() >= deadline:
+                return (
+                    f"Timed out after {request.timeout_minutes} minutes: "
+                    f"{status.summary()}"
+                )
+
+            prompt = CI_STATUS_PROMPT.format(
+                pr_number=request.pr_number, status=status.summary()
+            )
+
+        summary = status.summary() if status else "unknown"
+        return f"Agent stopped {MAX_AGENT_SESSIONS} times without resolving: {summary}"
+
+    async def _run_agent_session(
+        self,
+        prompt: str,
+        options: ClaudeAgentOptions,
+        tracer: AgentExecutionTracer,
+    ) -> str | None:
+        """Run one agent session to completion and return its session ID."""
+        session_id: str | None = None
+        agent_stream = claude_agent_sdk.query(prompt=prompt, options=options)
+        async for message in tracer.capture_agent_stream(agent_stream):
+            if isinstance(message, ResultMessage):
+                session_id = message.session_id
+        return session_id
+
+    async def _wait_for_checks(
+        self, github: GitHubClient, request: AgenticLoopRequest, deadline: float
+    ) -> PRStatus:
+        """Poll the PR until no checks are pending, it closes, or time runs out."""
+        register_deadline = time.monotonic() + CHECKS_REGISTER_GRACE_SECONDS
+        while True:
+            try:
+                status = await asyncio.to_thread(
+                    github.get_pr_status, request.repo, request.pr_number
+                )
+            except Exception as e:
+                log_warning(f"Failed to fetch PR status, retrying: {e}")
+            else:
+                now = time.monotonic()
+                # Right after a push, GitHub can report no checks before the
+                # new head's workflows register; that is not a pass.
+                awaiting_registration = (
+                    not (status.pending or status.failed or status.passed)
+                    and now < register_deadline
+                )
+                if (
+                    status.state != "OPEN"
+                    or not (status.pending or awaiting_registration)
+                    or now >= deadline
+                ):
+                    return status
+                log_info(f"Waiting for CI: {status.summary()}")
+            await asyncio.sleep(CI_POLL_SECONDS)
+
+    @staticmethod
+    def _goal_reached(request: AgenticLoopRequest, status: PRStatus) -> bool:
+        """Return whether the PR is merged, or green when merging is disabled."""
+        if request.merge_pr:
+            return status.merged
+        return status.merged or (status.state == "OPEN" and status.ci_passed)
 
     def _finalize_and_save(
         self, tracer: AgentExecutionTracer, status: str
