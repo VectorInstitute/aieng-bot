@@ -20,6 +20,8 @@ _FAILED_CONCLUSIONS = {
 }
 _PENDING_STATUS_STATES = {"PENDING", "EXPECTED"}
 _FAILED_STATUS_STATES = {"FAILURE", "ERROR"}
+# Review decisions under which branch protection refuses the merge
+_BLOCKING_REVIEW_DECISIONS = {"REVIEW_REQUIRED", "CHANGES_REQUESTED"}
 
 
 @dataclass
@@ -36,6 +38,9 @@ class PRStatus:
         Names of checks that finished unsuccessfully.
     passed : list[str]
         Names of checks that succeeded or were skipped.
+    review_decision : str
+        REVIEW_REQUIRED, CHANGES_REQUESTED, APPROVED, or empty when the
+        repository requires no review.
 
     """
 
@@ -43,6 +48,7 @@ class PRStatus:
     pending: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     passed: list[str] = field(default_factory=list)
+    review_decision: str = ""
 
     @property
     def merged(self) -> bool:
@@ -54,6 +60,11 @@ class PRStatus:
         """Return whether every check has finished and none failed."""
         return not self.pending and not self.failed
 
+    @property
+    def review_blocked(self) -> bool:
+        """Return whether a required review is blocking the merge."""
+        return self.review_decision in _BLOCKING_REVIEW_DECISIONS
+
     def summary(self) -> str:
         """Return a one-line description of the PR and its checks."""
         parts = [f"state={self.state}"]
@@ -62,6 +73,8 @@ class PRStatus:
         if self.pending:
             parts.append(f"pending: {', '.join(self.pending)}")
         parts.append(f"{len(self.passed)} passed")
+        if self.review_decision:
+            parts.append(f"review={self.review_decision}")
         return "; ".join(parts)
 
 
@@ -385,7 +398,8 @@ class GitHubClient:
         Returns
         -------
         PRStatus
-            PR state (OPEN, CLOSED, MERGED) with checks grouped by outcome.
+            PR state (OPEN, CLOSED, MERGED) with checks grouped by outcome
+            and the review decision.
 
         """
         result = self._run_gh_command(
@@ -396,12 +410,15 @@ class GitHubClient:
                 "--repo",
                 repo,
                 "--json",
-                "state,statusCheckRollup",
+                "state,statusCheckRollup,reviewDecision",
             ]
         )
 
         pr_data = json.loads(result.stdout)
-        status = PRStatus(state=pr_data.get("state", ""))
+        status = PRStatus(
+            state=pr_data.get("state", ""),
+            review_decision=pr_data.get("reviewDecision") or "",
+        )
 
         for check in pr_data.get("statusCheckRollup") or []:
             # CheckRun entries carry name/status/conclusion; StatusContext

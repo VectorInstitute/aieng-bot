@@ -33,6 +33,15 @@ CHECKS_REGISTER_GRACE_SECONDS = 180
 # Characters of the agent's final message kept in a failure reason
 MAX_AGENT_REASON_CHARS = 500
 
+# Environment for the agent's CLI. Nothing re-invokes a headless session whose
+# turn ended on a background job, so background tasks are disabled and long
+# commands (uv sync, pytest) run in the foreground with room to finish.
+AGENT_ENV = {
+    "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+    "BASH_DEFAULT_TIMEOUT_MS": str(30 * 60 * 1000),
+    "BASH_MAX_TIMEOUT_MS": str(60 * 60 * 1000),
+}
+
 # Tools available to the agentic fix loop
 AGENTIC_LOOP_TOOLS = [
     "Read",
@@ -107,6 +116,7 @@ class AgentFixer:
                 cwd=request.cwd,
                 setting_sources=["project"],  # Load .claude/skills/
                 model=get_model_name(),
+                env=AGENT_ENV,
             )
 
             observation = (
@@ -186,9 +196,11 @@ class AgentFixer:
         results until the goal is reached or the time budget runs out.
 
         The session is only resumed when the agent stopped to wait on CI, or
-        left the PR green but unmerged. If CI had already failed when it
-        stopped, the agent chose not to proceed, and its own explanation is
-        returned instead of resuming it with the same results.
+        (once) when it left the PR green but unmerged. If CI had already
+        failed when it stopped, the agent chose not to proceed, and its own
+        explanation is returned instead of resuming it with the same results.
+        A green PR that branch protection holds for an approving review is
+        reported without resuming, since the agent cannot approve it.
 
         Parameters
         ----------
@@ -211,6 +223,7 @@ class AgentFixer:
         deadline = time.monotonic() + request.timeout_minutes * 60
         session_id: str | None = None
         status: PRStatus | None = None
+        merge_resumed = False
 
         for session in range(1, MAX_AGENT_SESSIONS + 1):
             if session > 1:
@@ -229,19 +242,19 @@ class AgentFixer:
 
             if self._goal_reached(request, status):
                 return None
-            if status.state != "OPEN":
-                return f"PR is {status.state} but was not merged by the bot"
-            if time.monotonic() >= deadline:
-                return (
-                    f"Timed out after {request.timeout_minutes} minutes: "
-                    f"{status.summary()}"
-                )
-            if not waited and not (request.merge_pr and status.ci_passed):
-                reason = (agent_result or "").strip()[:MAX_AGENT_REASON_CHARS]
-                return (
-                    f"Agent stopped with CI unresolved ({status.summary()}): "
-                    f"{reason or 'no explanation given'}"
-                )
+            stop_reason = self._stop_reason(
+                request=request,
+                status=status,
+                waited=waited,
+                agent_result=agent_result,
+                deadline=deadline,
+                merge_resumed=merge_resumed,
+            )
+            if stop_reason:
+                return stop_reason
+            # Without a CI wait, the only way to get here is a green but
+            # unmerged PR, which is resumed once to let the agent merge it.
+            merge_resumed = merge_resumed or not waited
 
             prompt = CI_STATUS_PROMPT.format(
                 pr_number=request.pr_number, status=status.summary()
@@ -249,6 +262,61 @@ class AgentFixer:
 
         summary = status.summary() if status else "unknown"
         return f"Agent stopped {MAX_AGENT_SESSIONS} times without resolving: {summary}"
+
+    @staticmethod
+    def _stop_reason(
+        *,
+        request: AgenticLoopRequest,
+        status: PRStatus,
+        waited: bool,
+        agent_result: str | None,
+        deadline: float,
+        merge_resumed: bool,
+    ) -> str | None:
+        """Return why the loop should stop without resuming, or None to resume.
+
+        Parameters
+        ----------
+        request : AgenticLoopRequest
+            The agentic loop request containing PR context and configuration.
+        status : PRStatus
+            PR status after the session and any CI wait.
+        waited : bool
+            Whether CI was still running when the session ended.
+        agent_result : str | None
+            The agent's final message for the session.
+        deadline : float
+            Monotonic time at which the run's budget ends.
+        merge_resumed : bool
+            Whether the agent was already resumed to merge a green PR.
+
+        Returns
+        -------
+        str | None
+            The failure reason, or None when the session should be resumed.
+
+        """
+        if status.state != "OPEN":
+            return f"PR is {status.state} but was not merged by the bot"
+        if time.monotonic() >= deadline:
+            return (
+                f"Timed out after {request.timeout_minutes} minutes: {status.summary()}"
+            )
+        green_unmerged = request.merge_pr and status.ci_passed
+        if green_unmerged and status.review_blocked:
+            return (
+                "CI passed but branch protection requires an approving review "
+                f"before merging ({status.summary()})"
+            )
+        if waited or (green_unmerged and not merge_resumed):
+            return None
+        reason = (agent_result or "").strip()[:MAX_AGENT_REASON_CHARS]
+        outcome = (
+            "CI passed but the agent did not merge"
+            if green_unmerged
+            else "Agent stopped with CI unresolved"
+        )
+        return f"{outcome} ({status.summary()}): {reason or 'no explanation given'}"
 
     async def _run_agent_session(
         self,

@@ -208,6 +208,7 @@ def _fetch_initial_failure_logs(
 
 
 def _classify_failure(
+    *,
     repo: str,
     pr_number: int,
     pr_title: str,
@@ -386,6 +387,7 @@ def _cleanup_temporary_files(
 
 
 def _handle_result(
+    *,
     result: AgentFixResult,
     repo: str,
     pr_number: int,
@@ -492,6 +494,7 @@ def _read_cost_usd(trace_file: str) -> float | None:
 
 
 def _log_activity_to_gcs(
+    *,
     repo: str,
     pr_number: int,
     pr_title: str,
@@ -551,6 +554,7 @@ def _log_activity_to_gcs(
 
 
 def _run_fix_loop(
+    *,
     working_dir: str,
     repo: str,
     pr_number: int,
@@ -770,6 +774,7 @@ def _run_fix_loop(
     help="Fix PR but do not merge (only fix and push).",
 )
 def fix(
+    *,
     repo: str,
     pr_number: int,
     max_retries: int,

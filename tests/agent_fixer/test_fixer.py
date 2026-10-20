@@ -357,6 +357,10 @@ class TestAgenticLoop:
             assert options.permission_mode == "acceptEdits"
             assert options.cwd == agentic_request.cwd
             assert options.setting_sources == ["project"]
+            # Long commands must not be backgrounded: nothing resumes the
+            # session when a background job finishes
+            assert options.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1"
+            assert int(options.env["BASH_DEFAULT_TIMEOUT_MS"]) >= 30 * 60 * 1000
 
     @pytest.mark.asyncio
     async def test_run_agentic_loop_failure_saves_trace(
@@ -635,3 +639,94 @@ class TestAgenticLoop:
 
         assert result.status == "SUCCESS"
         assert mock_query_func.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_resumes_green_unmerged_pr_once(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a green PR the agent keeps declining to merge is resumed once."""
+        github_status.return_value = PRStatus(state="OPEN", passed=["unit-tests"])
+        mock_query_func = MagicMock(
+            side_effect=self._session_stream("sess-1", "Merge rejected by ruleset.")
+        )
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        assert mock_query_func.call_count == 2
+        assert result.error_message is not None
+        assert "CI passed but the agent did not merge" in result.error_message
+        assert "Merge rejected by ruleset." in result.error_message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("waited", [False, True])
+    async def test_run_agentic_loop_stops_when_review_required(
+        self, agentic_request, mock_tracer, github_status, waited
+    ):
+        """Test a green PR held for a required review is not resumed."""
+        green = PRStatus(
+            state="OPEN", passed=["unit-tests"], review_decision="REVIEW_REQUIRED"
+        )
+        github_status.side_effect = (
+            [PRStatus(state="OPEN", pending=["unit-tests"]), green]
+            if waited
+            else [green]
+        )
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        mock_query_func.assert_called_once()
+        assert result.error_message is not None
+        assert "requires an approving review" in result.error_message
+        assert "review=REVIEW_REQUIRED" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_no_merge_ignores_review_requirement(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a required review does not fail a run that is not merging."""
+        agentic_request.merge_pr = False
+        github_status.return_value = PRStatus(
+            state="OPEN", passed=["unit-tests"], review_decision="REVIEW_REQUIRED"
+        )
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "SUCCESS"
+        mock_query_func.assert_called_once()

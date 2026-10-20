@@ -257,6 +257,7 @@ class ActivityLogger:
 
     def log_fix(
         self,
+        *,
         repo: str,
         pr_number: int,
         pr_title: str,

@@ -90,6 +90,7 @@ class AgentExecutionTracer:
 
     def __init__(
         self,
+        *,
         pr_info: dict[str, Any],
         failure_info: dict[str, Any],
         workflow_run_id: str,

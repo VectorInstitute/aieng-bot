@@ -817,3 +817,41 @@ class TestGitHubClientGetPRStatus:
         assert status.merged
         assert status.ci_passed
         assert status.summary() == "state=MERGED; 0 passed"
+
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_get_pr_status_review_decision(self, mock_run):
+        """Test a required review is reported as blocking the merge."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps(
+            {
+                "state": "OPEN",
+                "reviewDecision": "REVIEW_REQUIRED",
+                "statusCheckRollup": [
+                    {"name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"}
+                ],
+            }
+        )
+        mock_run.return_value = mock_result
+
+        client = GitHubClient(github_token="test-token")
+        status = client.get_pr_status("VectorInstitute/test-repo", 123)
+
+        assert status.ci_passed
+        assert status.review_blocked
+        assert status.summary() == "state=OPEN; 1 passed; review=REVIEW_REQUIRED"
+        assert "reviewDecision" in mock_run.call_args.args[0][-1]
+
+    @pytest.mark.parametrize("decision", ["APPROVED", None])
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_get_pr_status_review_not_blocking(self, mock_run, decision):
+        """Test approved PRs and repos without review rules are not blocked."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps(
+            {"state": "OPEN", "reviewDecision": decision, "statusCheckRollup": []}
+        )
+        mock_run.return_value = mock_result
+
+        client = GitHubClient(github_token="test-token")
+        status = client.get_pr_status("VectorInstitute/test-repo", 123)
+
+        assert not status.review_blocked
