@@ -17,8 +17,8 @@ class ActivityLogger:
 
     Each fix is written to a unique per-run sidecar file in GCS so that
     concurrent workflow jobs never overwrite each other's entries. After writing
-    the sidecar, the combined ``bot_activity_log.json`` is rebuilt from all
-    sidecars plus any historical entries in the existing log.
+    the sidecar, the combined ``bot_activity_log.json`` is updated with every
+    sidecar it does not already contain.
 
     Parameters
     ----------
@@ -190,18 +190,23 @@ class ActivityLogger:
         except subprocess.CalledProcessError:
             return []
 
-    def _rebuild_combined_log(self) -> bool:
-        """Rebuild ``bot_activity_log.json`` from all sidecar entries.
+    def _rebuild_combined_log(self, activity: dict | None = None) -> bool:
+        """Update ``bot_activity_log.json`` with sidecars it does not yet contain.
 
-        Reads every sidecar under ``entries_prefix`` and merges them with any
-        existing entries in the combined log (preserving historical records that
-        predate the sidecar approach). Deduplicates by
-        ``(repo, pr_number, workflow_run_id)`` and sorts by timestamp.
+        The combined log already holds every sidecar from earlier rebuilds, so
+        only sidecars whose run ID is missing from it are read (this run's own
+        entry and those of concurrent runs). Reading every sidecar instead made
+        each rebuild take time proportional to the bot's whole history.
 
-        Because this method only writes a freshly computed view of all known
-        entries, concurrent calls are safe: the last writer will include all
-        sidecars that existed at the time of its read, and any entries written
-        concurrently will be picked up on the next rebuild.
+        Concurrent calls are safe: the last writer includes every sidecar that
+        existed when it listed them, and an entry dropped by a racing writer
+        is missing from the combined log, so the next rebuild reads it again.
+
+        Parameters
+        ----------
+        activity : dict, optional
+            This run's entry. It replaces any entry with the same key, so a
+            re-run attempt of a workflow updates its earlier result.
 
         Returns
         -------
@@ -209,31 +214,43 @@ class ActivityLogger:
             True on success, False on failure.
 
         """
-        # Collect entries from all sidecars
+        existing = self._gcs_read_json(self.gcs_uri)
+        if existing is None:
+            # Overwriting after a failed read would discard the logged history
+            log_error("Skipping combined activity log rebuild: could not read it")
+            return False
+        existing_activities: list[dict] = []
+        if isinstance(existing.get("activities"), list):
+            existing_activities = existing["activities"]
+
+        # Sidecars are named <workflow_run_id>.json
+        logged_run_ids = {
+            str(a.get("workflow_run_id", "")) for a in existing_activities
+        }
         sidecar_activities: list[dict] = []
         for uri in self._list_entry_sidecars():
+            run_id = uri.rsplit("/", 1)[-1].removesuffix(".json")
+            if run_id in logged_run_ids:
+                continue
             data = self._gcs_read_json(uri)
             if data and isinstance(data, dict) and "repo" in data:
                 sidecar_activities.append(data)
 
-        # Collect entries from existing combined log (historical, pre-sidecar)
-        existing = self._gcs_read_json(self.gcs_uri)
-        existing_activities: list[dict] = []
-        if existing and isinstance(existing.get("activities"), list):
-            existing_activities = existing["activities"]
-
-        # Merge and deduplicate — sidecars are authoritative for overlapping keys
+        # Merge and deduplicate. Earlier sources win for overlapping keys: this
+        # run's entry, then sidecars, then the combined log.
         seen: set[tuple] = set()
         merged: list[dict] = []
-        for activity in sidecar_activities + existing_activities:
+        for entry in (
+            ([activity] if activity else []) + sidecar_activities + existing_activities
+        ):
             key = (
-                activity.get("repo", ""),
-                activity.get("pr_number", 0),
-                activity.get("workflow_run_id", ""),
+                entry.get("repo", ""),
+                entry.get("pr_number", 0),
+                entry.get("workflow_run_id", ""),
             )
             if key not in seen:
                 seen.add(key)
-                merged.append(activity)
+                merged.append(entry)
 
         merged.sort(key=lambda a: a.get("timestamp") or "")
 
@@ -273,7 +290,8 @@ class ActivityLogger:
         """Log a fix and merge activity.
 
         Writes the activity to a unique sidecar file first (safe against
-        concurrent jobs), then rebuilds the combined log from all sidecars.
+        concurrent jobs), then adds it and any other unlogged sidecars to the
+        combined log.
         If the rebuild fails the activity is still durably recorded in the
         sidecar and will be included on the next successful rebuild.
 
@@ -342,7 +360,7 @@ class ActivityLogger:
         )
 
         # Step 2: Rebuild combined log — best-effort; data is safe in the sidecar
-        if not self._rebuild_combined_log():
+        if not self._rebuild_combined_log(activity):
             log_error(
                 f"Failed to rebuild combined activity log after {repo}#{pr_number} "
                 "(activity is safe in sidecar and will appear on next rebuild)"

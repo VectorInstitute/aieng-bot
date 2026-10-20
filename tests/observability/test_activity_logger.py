@@ -239,76 +239,125 @@ class TestListEntrySidecars:
 class TestRebuildCombinedLog:
     """Tests for _rebuild_combined_log method."""
 
-    def test_rebuild_merges_sidecars_and_existing(
+    SIDECAR_PREFIX = "gs://test-bucket/data/test_activity_entries/"
+
+    @staticmethod
+    def _run_rebuild(activity_logger, combined, sidecars, activity=None):
+        """Run a rebuild against fake GCS contents.
+
+        Returns
+        -------
+        tuple
+            (result, uploaded combined log or None, sidecar URIs read)
+
+        """
+        reads: list[str] = []
+        uploaded: list[dict] = []
+
+        def read_json(uri):
+            reads.append(uri)
+            return combined if uri == activity_logger.gcs_uri else sidecars[uri]
+
+        def upload(local_path, gcs_uri):
+            assert gcs_uri == activity_logger.gcs_uri
+            with open(local_path) as f:
+                uploaded.append(json.load(f))
+            return True
+
+        with (
+            patch.object(
+                activity_logger, "_list_entry_sidecars", return_value=list(sidecars)
+            ),
+            patch.object(activity_logger, "_gcs_read_json", side_effect=read_json),
+            patch.object(activity_logger, "_gcs_upload", side_effect=upload),
+        ):
+            result = activity_logger._rebuild_combined_log(activity)
+
+        sidecar_reads = [uri for uri in reads if uri != activity_logger.gcs_uri]
+        return result, (uploaded[0] if uploaded else None), sidecar_reads
+
+    def test_rebuild_reads_only_unlogged_sidecars(
         self, activity_logger, sample_activity
     ):
-        """Test that rebuild merges sidecars with existing log entries."""
-        new_activity = {**sample_activity, "pr_number": 42, "workflow_run_id": "222222"}
-        existing_log = {
-            "activities": [sample_activity],
-            "last_updated": "2025-12-19T10:00:00Z",
+        """Test sidecars already in the combined log are not read again."""
+        new_activity = {
+            **sample_activity,
+            "pr_number": 42,
+            "workflow_run_id": "222222",
+            "timestamp": "2025-12-20T10:00:00Z",
         }
+        logged_uri = f"{self.SIDECAR_PREFIX}111111.json"
+        new_uri = f"{self.SIDECAR_PREFIX}222222.json"
 
-        with (
-            patch.object(
-                activity_logger,
-                "_list_entry_sidecars",
-                return_value=[
-                    "gs://test-bucket/data/test_activity_entries/222222.json"
-                ],
-            ),
-            patch.object(
-                activity_logger,
-                "_gcs_read_json",
-                side_effect=[new_activity, existing_log],
-            ),
-            patch.object(activity_logger, "_gcs_upload", return_value=True),
-            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
-            patch("os.unlink"),
-        ):
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/x.json"
-            mock_file.__enter__ = Mock(return_value=mock_file)
-            mock_file.__exit__ = Mock(return_value=False)
-            mock_tempfile.return_value = mock_file
+        result, uploaded, sidecar_reads = self._run_rebuild(
+            activity_logger,
+            combined={"activities": [sample_activity], "last_updated": None},
+            sidecars={logged_uri: sample_activity, new_uri: new_activity},
+        )
 
-            result = activity_logger._rebuild_combined_log()
+        assert result is True
+        assert sidecar_reads == [new_uri]
+        assert uploaded["activities"] == [sample_activity, new_activity]
+        assert uploaded["last_updated"] is not None
 
-            assert result is True
+    def test_rebuild_current_activity_replaces_logged_entry(
+        self, activity_logger, sample_activity
+    ):
+        """Test a re-run attempt's entry replaces the one already logged."""
+        rerun = {**sample_activity, "status": "FAILED"}
 
-    def test_rebuild_deduplicates_by_run_id(self, activity_logger, sample_activity):
-        """Test that rebuild deduplicates entries with the same workflow_run_id."""
-        existing_log = {
-            "activities": [sample_activity],
-            "last_updated": "2025-12-19T10:00:00Z",
-        }
+        result, uploaded, sidecar_reads = self._run_rebuild(
+            activity_logger,
+            combined={"activities": [sample_activity], "last_updated": None},
+            sidecars={f"{self.SIDECAR_PREFIX}111111.json": rerun},
+            activity=rerun,
+        )
 
-        with (
-            patch.object(
-                activity_logger,
-                "_list_entry_sidecars",
-                return_value=[
-                    "gs://test-bucket/data/test_activity_entries/111111.json"
-                ],
-            ),
-            patch.object(
-                activity_logger,
-                "_gcs_read_json",
-                # sidecar has same workflow_run_id as existing entry
-                side_effect=[sample_activity, existing_log],
-            ),
-            patch.object(activity_logger, "_gcs_upload", return_value=True),
-            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
-            patch("os.unlink"),
-        ):
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/x.json"
-            mock_file.__enter__ = Mock(return_value=mock_file)
-            mock_file.__exit__ = Mock(return_value=False)
-            mock_tempfile.return_value = mock_file
+        assert result is True
+        assert sidecar_reads == []
+        assert uploaded["activities"] == [rerun]
 
-            result = activity_logger._rebuild_combined_log()
-            assert result is True
+    def test_rebuild_from_missing_combined_log(self, activity_logger, sample_activity):
+        """Test a missing combined log is rebuilt from every sidecar."""
+        uri = f"{self.SIDECAR_PREFIX}111111.json"
+
+        result, uploaded, sidecar_reads = self._run_rebuild(
+            activity_logger,
+            combined={"activities": [], "last_updated": None},
+            sidecars={uri: sample_activity},
+        )
+
+        assert result is True
+        assert sidecar_reads == [uri]
+        assert uploaded["activities"] == [sample_activity]
+
+    def test_rebuild_skips_invalid_sidecars(self, activity_logger, sample_activity):
+        """Test unreadable or malformed sidecars are left out."""
+        result, uploaded, _ = self._run_rebuild(
+            activity_logger,
+            combined={"activities": [sample_activity], "last_updated": None},
+            sidecars={
+                f"{self.SIDECAR_PREFIX}222222.json": None,
+                f"{self.SIDECAR_PREFIX}333333.json": {"activities": []},
+            },
+        )
+
+        assert result is True
+        assert uploaded["activities"] == [sample_activity]
+
+    def test_rebuild_does_not_overwrite_unreadable_log(
+        self, activity_logger, sample_activity
+    ):
+        """Test a failed read of the combined log never overwrites it."""
+        result, uploaded, sidecar_reads = self._run_rebuild(
+            activity_logger,
+            combined=None,
+            sidecars={f"{self.SIDECAR_PREFIX}111111.json": sample_activity},
+        )
+
+        assert result is False
+        assert uploaded is None
+        assert sidecar_reads == []
 
     def test_rebuild_upload_failure(self, activity_logger):
         """Test rebuild returns False when upload fails."""
@@ -320,15 +369,7 @@ class TestRebuildCombinedLog:
                 return_value={"activities": [], "last_updated": None},
             ),
             patch.object(activity_logger, "_gcs_upload", return_value=False),
-            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
-            patch("os.unlink"),
         ):
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/x.json"
-            mock_file.__enter__ = Mock(return_value=mock_file)
-            mock_file.__exit__ = Mock(return_value=False)
-            mock_tempfile.return_value = mock_file
-
             result = activity_logger._rebuild_combined_log()
 
             assert result is False
@@ -374,8 +415,8 @@ class TestLogFix:
             assert activity["failure_types"] == ["test"]
             assert activity["fix_time_hours"] == 0.5
 
-            # Combined log is rebuilt
-            mock_rebuild.assert_called_once()
+            # Combined log is updated with this run's entry
+            mock_rebuild.assert_called_once_with(activity)
 
     def test_log_fix_sidecar_failure_returns_false(self, activity_logger):
         """Test that sidecar write failure causes log_fix to return False."""
