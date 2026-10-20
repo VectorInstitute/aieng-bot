@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import subprocess
 import time
 from contextlib import nullcontext
 from dataclasses import replace
@@ -232,12 +233,17 @@ class AgentFixer:
                     if session_id
                     else replace(options, continue_conversation=True)
                 )
+            head_before = self._local_head(request.cwd)
             new_session_id, agent_result = await self._run_agent_session(
                 prompt, options, tracer
             )
             session_id = new_session_id or session_id
+            head_after = self._local_head(request.cwd)
+            new_head = head_after if head_after != head_before else None
 
-            status, waited = await self._wait_for_checks(github, request, deadline)
+            status, waited = await self._wait_for_checks(
+                github, request, deadline, new_head=new_head
+            )
             log_info(f"PR status after agent session {session}: {status.summary()}")
 
             if self._goal_reached(request, status):
@@ -341,10 +347,42 @@ class AgentFixer:
                 result_text = message.result
         return session_id, result_text
 
+    @staticmethod
+    def _local_head(cwd: str) -> str | None:
+        """Return the commit checked out in the agent's working tree."""
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.stdout.strip() or None
+
     async def _wait_for_checks(
-        self, github: GitHubClient, request: AgenticLoopRequest, deadline: float
+        self,
+        github: GitHubClient,
+        request: AgenticLoopRequest,
+        deadline: float,
+        new_head: str | None = None,
     ) -> tuple[PRStatus, bool]:
         """Poll the PR until no checks are pending, it closes, or time runs out.
+
+        Parameters
+        ----------
+        github : GitHubClient
+            Client used to read the PR status.
+        request : AgenticLoopRequest
+            The agentic loop request containing PR context and configuration.
+        deadline : float
+            Monotonic time at which the run's budget ends.
+        new_head : str, optional
+            Commit the agent created during the session, if any. Its checks
+            are waited for even when GitHub still reports finished checks.
 
         Returns
         -------
@@ -355,6 +393,7 @@ class AgentFixer:
         """
         register_deadline = time.monotonic() + CHECKS_REGISTER_GRACE_SECONDS
         waited = False
+        new_head_running = False
         while True:
             try:
                 status = await asyncio.to_thread(
@@ -364,11 +403,15 @@ class AgentFixer:
                 log_warning(f"Failed to fetch PR status, retrying: {e}")
             else:
                 now = time.monotonic()
-                # Right after a push, GitHub can report no checks before the
-                # new head's workflows register; that is not a pass.
-                awaiting_registration = (
+                if new_head and status.head_sha == new_head and status.pending:
+                    new_head_running = True
+                # Right after a push, GitHub can report no checks, the previous
+                # commit's checks, or only the checks that registered first.
+                # None of those is a result for the pushed commit, so wait
+                # until its CI is seen running or the grace period ends.
+                awaiting_registration = now < register_deadline and (
                     not (status.pending or status.failed or status.passed)
-                    and now < register_deadline
+                    or (new_head is not None and not new_head_running)
                 )
                 if (
                     status.state != "OPEN"

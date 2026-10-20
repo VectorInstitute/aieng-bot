@@ -41,6 +41,8 @@ class PRStatus:
     review_decision : str
         REVIEW_REQUIRED, CHANGES_REQUESTED, APPROVED, or empty when the
         repository requires no review.
+    head_sha : str
+        Commit the PR's head branch points to, which the checks belong to.
 
     """
 
@@ -49,6 +51,7 @@ class PRStatus:
     failed: list[str] = field(default_factory=list)
     passed: list[str] = field(default_factory=list)
     review_decision: str = ""
+    head_sha: str = ""
 
     @property
     def merged(self) -> bool:
@@ -410,7 +413,7 @@ class GitHubClient:
                 "--repo",
                 repo,
                 "--json",
-                "state,statusCheckRollup,reviewDecision",
+                "state,statusCheckRollup,reviewDecision,headRefOid",
             ]
         )
 
@@ -418,6 +421,7 @@ class GitHubClient:
         status = PRStatus(
             state=pr_data.get("state", ""),
             review_decision=pr_data.get("reviewDecision") or "",
+            head_sha=pr_data.get("headRefOid") or "",
         )
 
         for check in pr_data.get("statusCheckRollup") or []:

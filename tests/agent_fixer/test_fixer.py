@@ -1,6 +1,7 @@
 """Tests for agent fixer module."""
 
 import os
+import subprocess
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
@@ -207,6 +208,8 @@ class TestAgenticLoop:
         with (
             patch("aieng_bot.agent_fixer.fixer.GitHubClient", return_value=client),
             patch("aieng_bot.agent_fixer.fixer.asyncio.sleep", new=AsyncMock()),
+            # The agent does not commit unless a test says otherwise
+            patch.object(AgentFixer, "_local_head", return_value="abc123"),
         ):
             yield client.get_pr_status
 
@@ -730,3 +733,128 @@ class TestAgenticLoop:
 
         assert result.status == "SUCCESS"
         mock_query_func.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_wait_for_checks_ignores_stale_checks_after_push(
+        self, agentic_request, github_status
+    ):
+        """Test checks from before a push are not read as the pushed result."""
+        github_status.side_effect = [
+            # GitHub still shows the previous commit's failed checks
+            PRStatus(state="OPEN", failed=["pre-commit.ci"], head_sha="old"),
+            # Only the fastest check has reported on the pushed commit
+            PRStatus(state="OPEN", passed=["pre-commit.ci"], head_sha="new"),
+            PRStatus(
+                state="OPEN",
+                pending=["integration-tests"],
+                passed=["pre-commit.ci"],
+                head_sha="new",
+            ),
+            PRStatus(
+                state="OPEN",
+                passed=["integration-tests", "pre-commit.ci"],
+                head_sha="new",
+            ),
+        ]
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            fixer = AgentFixer()
+            client = MagicMock(get_pr_status=github_status)
+            status, waited = await fixer._wait_for_checks(
+                client, agentic_request, deadline=float("inf"), new_head="new"
+            )
+
+        assert status.ci_passed
+        assert status.passed == ["integration-tests", "pre-commit.ci"]
+        assert waited
+        assert github_status.call_count == 4
+
+    @pytest.mark.asyncio
+    async def test_wait_for_checks_accepts_push_without_ci_after_grace(
+        self, agentic_request, github_status
+    ):
+        """Test a pushed commit whose CI never starts is accepted after grace."""
+        github_status.return_value = PRStatus(
+            state="OPEN", passed=["unit-tests"], head_sha="new"
+        )
+        # First reading sets the grace deadline; polls follow at 0s, 100s, 200s
+        clock = MagicMock(side_effect=[0, 0, 100, 200])
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            # Patch the fixer's reference only; asyncio also reads the clock
+            patch("aieng_bot.agent_fixer.fixer.time", MagicMock(monotonic=clock)),
+        ):
+            fixer = AgentFixer()
+            client = MagicMock(get_pr_status=github_status)
+            status, waited = await fixer._wait_for_checks(
+                client, agentic_request, deadline=float("inf"), new_head="new"
+            )
+
+        assert status.ci_passed
+        assert waited
+        assert github_status.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_waits_for_pushed_commit_ci(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a push followed by stale failed checks resumes after real CI."""
+        github_status.side_effect = [
+            PRStatus(state="OPEN", failed=["pre-commit.ci"], head_sha="old"),
+            PRStatus(state="OPEN", pending=["unit-tests"], head_sha="new"),
+            PRStatus(state="OPEN", passed=["unit-tests"], head_sha="new"),
+            PRStatus(state="MERGED", passed=["unit-tests"], head_sha="new"),
+        ]
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            # Session 1 pushes "new"; session 2 merges without a new commit
+            patch.object(
+                AgentFixer, "_local_head", side_effect=["old", "new", "new", "new"]
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "SUCCESS"
+        assert mock_query_func.call_count == 2
+        assert "state=OPEN; 1 passed" in mock_query_func.call_args.kwargs["prompt"]
+
+    def test_local_head(self, tmp_path):
+        """Test the working tree's commit is read, and None outside a repo."""
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@example.com",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "init",
+            ],
+            cwd=tmp_path,
+            check=True,
+        )
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+        assert AgentFixer._local_head(str(tmp_path)) == head
+        assert AgentFixer._local_head(str(tmp_path / "missing")) is None

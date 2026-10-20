@@ -826,6 +826,7 @@ class TestGitHubClientGetPRStatus:
             {
                 "state": "OPEN",
                 "reviewDecision": "REVIEW_REQUIRED",
+                "headRefOid": "abc123",
                 "statusCheckRollup": [
                     {"name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"}
                 ],
@@ -839,7 +840,9 @@ class TestGitHubClientGetPRStatus:
         assert status.ci_passed
         assert status.review_blocked
         assert status.summary() == "state=OPEN; 1 passed; review=REVIEW_REQUIRED"
+        assert status.head_sha == "abc123"
         assert "reviewDecision" in mock_run.call_args.args[0][-1]
+        assert "headRefOid" in mock_run.call_args.args[0][-1]
 
     @pytest.mark.parametrize("decision", ["APPROVED", None])
     @patch.object(GitHubClient, "_run_gh_command")
