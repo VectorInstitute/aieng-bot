@@ -243,7 +243,12 @@ class AgentFixer:
             if self._goal_reached(request, status):
                 return None
             stop_reason = self._stop_reason(
-                request, status, waited, agent_result, deadline, merge_resumed
+                request=request,
+                status=status,
+                waited=waited,
+                agent_result=agent_result,
+                deadline=deadline,
+                merge_resumed=merge_resumed,
             )
             if stop_reason:
                 return stop_reason
@@ -260,6 +265,7 @@ class AgentFixer:
 
     @staticmethod
     def _stop_reason(
+        *,
         request: AgenticLoopRequest,
         status: PRStatus,
         waited: bool,
