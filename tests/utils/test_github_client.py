@@ -763,3 +763,95 @@ class TestGitHubClientCheckMergeConflicts:
         assert "VectorInstitute/test-repo" in call_args
         assert "--json" in call_args
         assert "mergeable" in call_args
+
+
+class TestGitHubClientGetPRStatus:
+    """Test suite for get_pr_status method."""
+
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_get_pr_status_groups_checks(self, mock_run):
+        """Test check runs and status contexts are grouped by outcome."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps(
+            {
+                "state": "OPEN",
+                "statusCheckRollup": [
+                    {
+                        "name": "unit-tests",
+                        "status": "COMPLETED",
+                        "conclusion": "SUCCESS",
+                    },
+                    {"name": "deploy", "status": "COMPLETED", "conclusion": "SKIPPED"},
+                    {"name": "docker", "status": "COMPLETED", "conclusion": "FAILURE"},
+                    {"name": "lint", "status": "IN_PROGRESS", "conclusion": ""},
+                    {"name": "build", "status": "QUEUED", "conclusion": None},
+                    {"context": "pre-commit.ci - pr", "state": "SUCCESS"},
+                    {"context": "codecov", "state": "PENDING"},
+                    {"context": "license", "state": "ERROR"},
+                ],
+            }
+        )
+        mock_run.return_value = mock_result
+
+        client = GitHubClient(github_token="test-token")
+        status = client.get_pr_status("VectorInstitute/test-repo", 123)
+
+        assert status.state == "OPEN"
+        assert status.passed == ["unit-tests", "deploy", "pre-commit.ci - pr"]
+        assert status.failed == ["docker", "license"]
+        assert status.pending == ["lint", "build", "codecov"]
+        assert not status.merged
+        assert not status.ci_passed
+        assert "--json" in mock_run.call_args.args[0]
+
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_get_pr_status_merged_without_checks(self, mock_run):
+        """Test a merged PR with no checks reports merged and CI passed."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({"state": "MERGED", "statusCheckRollup": None})
+        mock_run.return_value = mock_result
+
+        client = GitHubClient(github_token="test-token")
+        status = client.get_pr_status("VectorInstitute/test-repo", 123)
+
+        assert status.merged
+        assert status.ci_passed
+        assert status.summary() == "state=MERGED; 0 passed"
+
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_get_pr_status_review_decision(self, mock_run):
+        """Test a required review is reported as blocking the merge."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps(
+            {
+                "state": "OPEN",
+                "reviewDecision": "REVIEW_REQUIRED",
+                "statusCheckRollup": [
+                    {"name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"}
+                ],
+            }
+        )
+        mock_run.return_value = mock_result
+
+        client = GitHubClient(github_token="test-token")
+        status = client.get_pr_status("VectorInstitute/test-repo", 123)
+
+        assert status.ci_passed
+        assert status.review_blocked
+        assert status.summary() == "state=OPEN; 1 passed; review=REVIEW_REQUIRED"
+        assert "reviewDecision" in mock_run.call_args.args[0][-1]
+
+    @pytest.mark.parametrize("decision", ["APPROVED", None])
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_get_pr_status_review_not_blocking(self, mock_run, decision):
+        """Test approved PRs and repos without review rules are not blocked."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps(
+            {"state": "OPEN", "reviewDecision": decision, "statusCheckRollup": []}
+        )
+        mock_run.return_value = mock_result
+
+        client = GitHubClient(github_token="test-token")
+        status = client.get_pr_status("VectorInstitute/test-repo", 123)
+
+        assert not status.review_blocked

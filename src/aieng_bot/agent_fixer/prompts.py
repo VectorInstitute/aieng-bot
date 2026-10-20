@@ -38,11 +38,11 @@ git rebase origin/{base_ref}
 git push origin HEAD:{head_ref} --force-with-lease
 ```
 
-### Step 3: Wait for CI
+### Step 3: Check CI
 ```bash
 gh pr checks {pr_number} --repo {repo}
 ```
-Poll every 30-60 seconds until all checks complete. **Do not proceed until CI finishes.**
+If checks are still running, end your turn with a one-line status. The harness waits for CI to finish and resumes this session with the results. Do not poll, sleep, or start a background wait.
 
 ### Step 4: Evaluate Results
 
@@ -69,14 +69,14 @@ Poll every 30-60 seconds until all checks complete. **Do not proceed until CI fi
 
 ## Critical Rules
 
-1. **NEVER stop after pushing** - always wait for CI{critical_rule_suffix}
+1. **NEVER stop after pushing without checking CI** - if checks are pending, end your turn and the harness resumes you when they finish{critical_rule_suffix}
 2. **NEVER stop after fixing files** - always commit, push, wait for CI
 3. **Fetch fresh logs** after each CI failure
 4. **Never commit**: `.claude/`, `.pr-context.json`, `.failure-logs.txt`
 5. **Use uv for Python**: `uv sync`, `uv run pytest`, `uv run pre-commit run --all-files`
 6. **Minimal scope**: Only modify files directly implicated by the CI failure logs. Do not touch unrelated files, refactor code, or make "improvements" outside the failure's scope.
 7. **Preserve functionality**: Never delete existing functions, classes, or logic. Never change behavior of application code. Fixes must be limited to: dependency versions, lock files, lint/format issues, and conflict markers.
-8. **Verify before committing**: Run `uv run pytest` after applying fixes to confirm existing tests still pass. If tests fail after your changes, revert and re-examine the failure logs.
+8. **Verify before committing**: Run `uv run pytest` after applying fixes to confirm existing tests still pass. If tests fail after your changes, revert and re-examine the failure logs. Run commands in the foreground and wait for their output; never end your turn while a local command is still running.
 9. **Stage explicitly**: Never use `git add -A`. Stage only the specific files you intentionally modified:
    ```bash
    git add <file1> <file2> ...
@@ -91,4 +91,11 @@ Poll every 30-60 seconds until all checks complete. **Do not proceed until CI fi
 
 1. Read `.pr-context.json`
 2. Execute the workflow loop above
+"""
+
+CI_STATUS_PROMPT = r"""CI has finished for PR #{pr_number}. Current status from GitHub:
+
+{status}
+
+Continue the workflow from Step 4 using this result.
 """

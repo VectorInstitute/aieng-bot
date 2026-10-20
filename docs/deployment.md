@@ -138,8 +138,8 @@ Or via GitHub UI: Actions → Select workflow → "..." → Disable workflow
 ## Cost Estimation
 
 ### Claude API
-- Classification: Claude Sonnet 4.6 (default, override via `CLAUDE_MODEL`)
-- Fixing: Claude Sonnet 4.6 (default, override via `CLAUDE_MODEL`)
+- Classification: Claude Sonnet 5.5 (default, override via `CLAUDE_MODEL`)
+- Fixing: Claude Sonnet 5.5 (default, override via `CLAUDE_MODEL`)
 - Estimated: $5-20/month depending on volume
 
 ### GitHub

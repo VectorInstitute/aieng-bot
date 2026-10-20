@@ -5,9 +5,77 @@ import os
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass, field
 
 from ..classifier.models import CheckFailure, PRContext
 from .logging import log_error, log_info, log_warning
+
+# Check outcomes as reported by `gh pr view --json statusCheckRollup`
+_FAILED_CONCLUSIONS = {
+    "FAILURE",
+    "TIMED_OUT",
+    "CANCELLED",
+    "ACTION_REQUIRED",
+    "STARTUP_FAILURE",
+}
+_PENDING_STATUS_STATES = {"PENDING", "EXPECTED"}
+_FAILED_STATUS_STATES = {"FAILURE", "ERROR"}
+# Review decisions under which branch protection refuses the merge
+_BLOCKING_REVIEW_DECISIONS = {"REVIEW_REQUIRED", "CHANGES_REQUESTED"}
+
+
+@dataclass
+class PRStatus:
+    """Snapshot of a PR's state and its CI checks.
+
+    Attributes
+    ----------
+    state : str
+        PR state: OPEN, CLOSED, or MERGED.
+    pending : list[str]
+        Names of checks that have not finished.
+    failed : list[str]
+        Names of checks that finished unsuccessfully.
+    passed : list[str]
+        Names of checks that succeeded or were skipped.
+    review_decision : str
+        REVIEW_REQUIRED, CHANGES_REQUESTED, APPROVED, or empty when the
+        repository requires no review.
+
+    """
+
+    state: str
+    pending: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+    passed: list[str] = field(default_factory=list)
+    review_decision: str = ""
+
+    @property
+    def merged(self) -> bool:
+        """Return whether the PR has been merged."""
+        return self.state == "MERGED"
+
+    @property
+    def ci_passed(self) -> bool:
+        """Return whether every check has finished and none failed."""
+        return not self.pending and not self.failed
+
+    @property
+    def review_blocked(self) -> bool:
+        """Return whether a required review is blocking the merge."""
+        return self.review_decision in _BLOCKING_REVIEW_DECISIONS
+
+    def summary(self) -> str:
+        """Return a one-line description of the PR and its checks."""
+        parts = [f"state={self.state}"]
+        if self.failed:
+            parts.append(f"failed: {', '.join(self.failed)}")
+        if self.pending:
+            parts.append(f"pending: {', '.join(self.pending)}")
+        parts.append(f"{len(self.passed)} passed")
+        if self.review_decision:
+            parts.append(f"review={self.review_decision}")
+        return "; ".join(parts)
 
 
 class GitHubClient:
@@ -316,3 +384,59 @@ class GitHubClient:
         mergeable = pr_data.get("mergeable", "")
 
         return mergeable == "CONFLICTING"
+
+    def get_pr_status(self, repo: str, pr_number: int) -> PRStatus:
+        """Fetch the PR's state and the current result of each check.
+
+        Parameters
+        ----------
+        repo : str
+            Repository in format "owner/repo".
+        pr_number : int
+            Pull request number.
+
+        Returns
+        -------
+        PRStatus
+            PR state (OPEN, CLOSED, MERGED) with checks grouped by outcome
+            and the review decision.
+
+        """
+        result = self._run_gh_command(
+            [
+                "pr",
+                "view",
+                str(pr_number),
+                "--repo",
+                repo,
+                "--json",
+                "state,statusCheckRollup,reviewDecision",
+            ]
+        )
+
+        pr_data = json.loads(result.stdout)
+        status = PRStatus(
+            state=pr_data.get("state", ""),
+            review_decision=pr_data.get("reviewDecision") or "",
+        )
+
+        for check in pr_data.get("statusCheckRollup") or []:
+            # CheckRun entries carry name/status/conclusion; StatusContext
+            # entries (e.g. pre-commit.ci) carry context/state instead.
+            name = check.get("name") or check.get("context") or "unknown"
+            if "context" in check and "name" not in check:
+                state = check.get("state", "")
+                if state in _PENDING_STATUS_STATES:
+                    status.pending.append(name)
+                elif state in _FAILED_STATUS_STATES:
+                    status.failed.append(name)
+                else:
+                    status.passed.append(name)
+            elif check.get("status") != "COMPLETED":
+                status.pending.append(name)
+            elif check.get("conclusion") in _FAILED_CONCLUSIONS:
+                status.failed.append(name)
+            else:
+                status.passed.append(name)
+
+        return status

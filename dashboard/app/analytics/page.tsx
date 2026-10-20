@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { isAuthenticated, getCurrentUser } from '@/lib/session'
-import { fetchBotActivityLog, activityLogToPRSummaries, enrichPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
+import { fetchBotActivityLog, activityLogToPRSummaries, computeMetricsFromPRSummaries } from '@/lib/data-fetcher'
 import OverviewTable from '@/components/overview-table'
 import PRVelocityChart from '@/components/pr-velocity-chart'
 import PerformanceMetrics from '@/components/performance-metrics'
@@ -30,10 +30,7 @@ export default async function DashboardPage() {
     const activityLog = await fetchBotActivityLog()
     if (activityLog && activityLog.activities.length > 0) {
       // Convert activities to PR summaries
-      const summaries = activityLogToPRSummaries(activityLog)
-
-      // Enrich with trace data for detailed execution info
-      allPRSummaries = await enrichPRSummaries(summaries)
+      allPRSummaries = activityLogToPRSummaries(activityLog)
 
       // Compute metrics from all activities
       metrics = computeMetricsFromPRSummaries(allPRSummaries)

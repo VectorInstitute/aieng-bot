@@ -1,79 +1,9 @@
 /**
  * Type definitions for Bot Dashboard
+ *
+ * Detailed per-run execution traces (tool calls, generations) are viewed in
+ * Langfuse, not modeled here - the dashboard only tracks PR outcome summaries.
  */
-
-// Agent execution trace types
-export interface AgentTrace {
-  metadata: {
-    workflow_run_id: string
-    github_run_url?: string
-    workflow_url?: string
-    timestamp?: string
-    pr: {
-      repo: string
-      number: number
-      title: string
-      author: string
-      url: string
-    }
-    failure?: {
-      type: string  // Primary type for backward compatibility
-      types?: string[]  // Array of all failure types
-      checks: string[]
-    }
-  }
-  execution: {
-    start_time: string
-    end_time?: string | null
-    duration_seconds: number | null
-    model: string | null
-    tools_allowed?: string[]
-    metrics?: {
-      subtype: 'success' | 'error'
-      duration_ms: number
-      duration_api_ms: number
-      is_error: boolean
-      num_turns: number
-      session_id: string
-      total_cost_usd: number
-      usage: {
-        input_tokens: number
-        cache_creation_input_tokens?: number
-        cache_read_input_tokens?: number
-        output_tokens: number
-        server_tool_use?: {
-          web_search_requests: number
-          web_fetch_requests: number
-        }
-        service_tier?: string
-        cache_creation?: {
-          ephemeral_1h_input_tokens: number
-          ephemeral_5m_input_tokens: number
-        }
-      }
-    } | null
-  }
-  events: AgentEvent[]
-  result: {
-    status: 'SUCCESS' | 'FAILED'
-    changes_made: number
-    files_modified: string[]
-    commit_sha: string | null
-    commit_url: string | null
-  }
-}
-
-export interface AgentEvent {
-  seq: number
-  timestamp: string
-  type: 'REASONING' | 'TOOL_CALL' | 'TOOL_RESULT' | 'ACTION' | 'ERROR' | 'INFO'
-  content: string
-  tool?: string
-  parameters?: Record<string, unknown>
-  result_summary?: string
-  tool_use_id?: string
-  is_error?: boolean
-}
 
 // Bot metrics types (computed from activity log)
 export interface BotMetrics {
@@ -118,7 +48,7 @@ export interface BotActivity {
   status: 'SUCCESS' | 'FAILED'
   failure_type: string  // Primary type for backward compatibility
   failure_types?: string[]  // Array of all failure types (lint, test, build, security, etc.)
-  trace_path: string
+  cost_usd: number | null
   fix_time_hours: number
 }
 
@@ -145,7 +75,6 @@ export interface PRSummary extends Record<string, unknown> {
   failure_type: string  // Primary type for backward compatibility
   failure_types?: string[]  // Array of all failure types
   fix_time_hours: number | null
-  trace_path: string
   cost_usd: number | null
 }
 

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import Link from 'next/link'
 import type { PRSummary } from '@/lib/types'
 import { ArrowUpDown, ExternalLink, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -256,13 +255,15 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
                     {formatDistanceToNow(new Date(pr.timestamp), { addSuffix: true })}
                   </td>
                   <td className={`${CLASSES.tableCell} text-right text-sm font-medium`}>
-                    <Link
-                      href={`/pr/${pr.repo.replace('/', '--')}/${pr.pr_number}`}
+                    <a
+                      href={pr.workflow_run_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className={`${CLASSES.link} hover:text-blue-800 dark:hover:text-blue-300 inline-flex items-center space-x-1`}
                     >
-                      <span>Details</span>
+                      <span>Run</span>
                       <ExternalLink className="w-3 h-3" />
-                    </Link>
+                    </a>
                   </td>
                 </tr>
               ))

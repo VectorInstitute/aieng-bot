@@ -111,7 +111,7 @@ on:
 ### Change Claude Model
 
 Set `CLAUDE_MODEL` environment variable to override the default
-(`claude-sonnet-4-6`) used for both classification and fixing.
+(`claude-sonnet-5-5`) used for both classification and fixing.
 
 ### Customize Fix Skills
 

@@ -84,8 +84,8 @@ The bot now monitors all VectorInstitute repositories automatically.
 - `ORG_ACCESS_TOKEN` - GitHub PAT with org-wide permissions
 
 **Model Configuration**
-- Classification: Claude Sonnet 4.6 (`claude-sonnet-4-6`)
-- Fixing: Claude Sonnet 4.6 (`claude-sonnet-4-6`) - agentic capability
+- Classification: Claude Sonnet 5.5 (`claude-sonnet-5-5`)
+- Fixing: Claude Sonnet 5.5 (`claude-sonnet-5-5`) - agentic capability
 - Override with the `CLAUDE_MODEL` environment variable
 
 **Workflows**

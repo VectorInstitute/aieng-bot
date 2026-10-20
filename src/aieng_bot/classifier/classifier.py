@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -13,8 +14,10 @@ from anthropic.types import (
     ToolBash20250124Param,
     ToolResultBlockParam,
 )
+from langfuse import propagate_attributes
 
 from ..config import get_model_name
+from ..observability.langfuse_tracing import instrument_anthropic
 from ..utils.logging import log_error, log_info, log_warning
 from .models import (
     CheckFailure,
@@ -26,9 +29,9 @@ from .prompts import CLASSIFICATION_PROMPT_WITH_TOOLS
 
 
 class PRFailureClassifier:
-    """Classifies PR failures using Claude Sonnet 4.6.
+    """Classifies PR failures using Claude Sonnet 5.5.
 
-    This classifier uses Claude Sonnet 4.6 for accurate classification
+    This classifier uses Claude Sonnet 5.5 for accurate classification
 
     Attributes
     ----------
@@ -63,6 +66,7 @@ class PRFailureClassifier:
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
 
+        self.langfuse = instrument_anthropic()
         self.client = anthropic.Anthropic(api_key=self.api_key)
 
     def _verify_log_file(
@@ -199,7 +203,6 @@ class PRFailureClassifier:
             response = self.client.messages.create(
                 model=get_model_name(),
                 max_tokens=8192,
-                temperature=0.0,
                 tools=[bash_tool],
                 messages=messages,
             )
@@ -228,21 +231,8 @@ class PRFailureClassifier:
 
                 break
 
-            # Build assistant message with response content blocks
-            assistant_content: list[Any] = []
-            for block in response.content:
-                if block.type == "text":
-                    assistant_content.append({"type": "text", "text": block.text})
-                elif block.type == "tool_use":
-                    assistant_content.append(
-                        {
-                            "type": "tool_use",
-                            "id": block.id,
-                            "name": block.name,
-                            "input": block.input,
-                        }
-                    )
-            messages.append({"role": "assistant", "content": assistant_content})
+            # Pass content back unchanged so thinking blocks are preserved
+            messages.append({"role": "assistant", "content": response.content})
 
             # Execute tool uses
             tool_result_blocks: list[ToolResultBlockParam] = []
@@ -394,22 +384,60 @@ Branch: {pr_context.head_ref} → {pr_context.base_ref}
         )
 
         # Call Claude API with tools to search log file
-        # Using Sonnet 4.6 for classification with tools
+        # Using Sonnet 5.5 for classification with tools
         try:
             log_info(f"Calling Claude API with tools (log file: {failure_logs_file})")
             log_info(f"Prompt length: {len(prompt)} chars")
 
-            # Run agentic loop
-            messages: list[MessageParam] = [{"role": "user", "content": prompt}]
-            bash_tool: ToolBash20250124Param = {
-                "type": "bash_20250124",
-                "name": "bash",
-            }
-            response_text = self._run_agentic_loop(messages, bash_tool)
+            observation = (
+                self.langfuse.start_as_current_observation(
+                    as_type="span",
+                    name="classify-pr-failure",
+                    input={
+                        "repo": pr_context.repo,
+                        "pr_number": pr_context.pr_number,
+                        "failed_checks": [check.name for check in failed_checks],
+                    },
+                    metadata={
+                        "pr_title": pr_context.pr_title,
+                        "pr_author": pr_context.pr_author,
+                    },
+                )
+                if self.langfuse
+                else nullcontext()
+            )
+            attributes = (
+                propagate_attributes(
+                    session_id=f"{pr_context.repo}#{pr_context.pr_number}",
+                    tags=["classifier", pr_context.repo],
+                )
+                if self.langfuse
+                else nullcontext()
+            )
 
-            # Parse JSON response and validate
-            result_data = self._parse_json_response(response_text)
-            return self._validate_and_build_result(result_data, failed_checks)
+            with observation as obs, attributes:
+                # Run agentic loop
+                messages: list[MessageParam] = [{"role": "user", "content": prompt}]
+                bash_tool: ToolBash20250124Param = {
+                    "type": "bash_20250124",
+                    "name": "bash",
+                }
+                response_text = self._run_agentic_loop(messages, bash_tool)
+
+                # Parse JSON response and validate
+                result_data = self._parse_json_response(response_text)
+                result = self._validate_and_build_result(result_data, failed_checks)
+
+                if obs is not None:
+                    obs.update(
+                        output={
+                            "failure_types": [t.value for t in result.failure_types],
+                            "confidence": result.confidence,
+                            "reasoning": result.reasoning,
+                        }
+                    )
+
+                return result
 
         except anthropic.APIError as e:
             log_error(f"Error calling Claude API: {e}")

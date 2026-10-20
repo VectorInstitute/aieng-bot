@@ -29,6 +29,9 @@ dependencies = [
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "python-dotenv>=1.0.0",
+    "langfuse>=4.15.1",
+    "openinference-instrumentation-claude-agent-sdk>=0.1.14",
+    "opentelemetry-instrumentation-anthropic>=0.62.3",
 ]
 
 [project.urls]
