@@ -325,7 +325,7 @@ export default function OverviewTable({ prSummaries }: OverviewTableProps) {
                   setCurrentPage(page)
                 }
               }}
-              className="w-16 px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-vector-violet"
+              className="w-16 px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-hidden focus:ring-2 focus:ring-vector-violet"
             />
           </div>
         </div>

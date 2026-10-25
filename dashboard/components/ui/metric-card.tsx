@@ -21,7 +21,7 @@ export function MetricCard({
   bgColor = 'bg-gray-50 dark:bg-gray-900/20',
 }: MetricCardProps) {
   return (
-    <div className={cn(bgColor, 'rounded-lg p-4 border border-current/10', className)}>
+    <div className={cn(bgColor, 'rounded-lg p-4 border', className)}>
       {icon && (
         <div className="flex items-start justify-between mb-3">
           <div className={cn('p-2 rounded-lg', bgColor)}>

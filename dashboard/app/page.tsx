@@ -7,7 +7,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-8">
       {/* Top gradient line */}
-      <div className="fixed top-0 left-0 right-0 h-px bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt" />
+      <div className="fixed top-0 left-0 right-0 h-px bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt" />
 
       <div className="max-w-xl w-full flex flex-col items-center gap-12 animate-fade-in">
 
@@ -21,9 +21,9 @@ export default function LandingPage() {
           }</pre>
 
         {/* Identity */}
-        <div className="text-center space-y-4">
-          <div className="flex justify-center mb-2">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="bg-white/10 backdrop-blur-xs rounded-xl px-4 py-2">
               <Image
                 src={vectorLogo}
                 alt="Vector Institute"
@@ -36,7 +36,7 @@ export default function LandingPage() {
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             aieng-bot
           </h1>
-          <div className="inline-block text-xs font-mono tracking-widest text-slate-500 uppercase">
+          <div className="inline-block mt-4 text-xs font-mono tracking-widest text-slate-500 uppercase">
             Vector Institute AI Engineering
           </div>
         </div>
@@ -66,7 +66,7 @@ export default function LandingPage() {
           <div className="px-4 pt-3">
             <Link
               href="/analytics"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt hover:opacity-90 transition-opacity w-fit"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt hover:opacity-90 transition-opacity w-fit"
             >
               <BarChart2 className="w-3.5 h-3.5" />
               View Analytics
