@@ -54,16 +54,16 @@ export default async function DashboardPage() {
   // Show empty state if no data
   if (!metrics || allPRSummaries.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="min-h-screen bg-linear-to-br/srgb from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         {/* Vector Brand Header Accent */}
-        <div className="h-1 bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt"></div>
+        <div className="h-1 bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt"></div>
 
         <div className="p-4 md:p-8">
           <div className="max-w-7xl mx-auto">
             <div className="mb-8 animate-fade-in">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt bg-clip-text text-transparent mb-2">
+                  <h1 className="text-4xl md:text-5xl font-bold bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt bg-clip-text text-transparent mb-2">
                     Maintenance Analytics
                   </h1>
                   <p className="text-slate-700 dark:text-slate-300 text-lg">
@@ -74,12 +74,12 @@ export default async function DashboardPage() {
                   {user && (
                     <div className="text-right">
                       <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Signed in as</p>
-                      <p className="text-sm font-semibold bg-gradient-to-r from-vector-magenta to-vector-violet bg-clip-text text-transparent">{user.email}</p>
+                      <p className="text-sm font-semibold bg-linear-to-r/srgb from-vector-magenta to-vector-violet bg-clip-text text-transparent">{user.email}</p>
                     </div>
                   )}
                   <a
                     href="/aieng-bot/api/auth/logout"
-                    className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
+                    className="px-4 py-2 text-sm font-semibold text-white bg-linear-to-r/srgb from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-xs hover:shadow-md transition-all duration-200"
                   >
                     Logout
                   </a>
@@ -91,7 +91,7 @@ export default async function DashboardPage() {
 
         <div className="max-w-7xl mx-auto px-4 md:px-8 pb-8">
           <div className="text-center py-16 card">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-vector-magenta/10 to-vector-violet/10 rounded-full mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-linear-to-br/srgb from-vector-magenta/10 to-vector-violet/10 rounded-full mb-4">
               <Activity className="w-8 h-8 text-vector-magenta" />
             </div>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
             </p>
             <div className="text-sm text-slate-500 dark:text-slate-500">
               <p>Fix a PR using the CLI:</p>
-              <code className="block mt-2 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs">
+              <code className="block mt-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-sm text-xs">
                 aieng-bot fix --repo owner/repo --pr 123 --log
               </code>
             </div>
@@ -113,16 +113,16 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-linear-to-br/srgb from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       {/* Vector Brand Header Accent */}
-      <div className="h-1 bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt"></div>
+      <div className="h-1 bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt"></div>
 
       <div className="p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8 animate-fade-in">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt bg-clip-text text-transparent mb-2">
+                <h1 className="text-4xl md:text-5xl font-bold bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt bg-clip-text text-transparent mb-2">
                   Maintenance Analytics
                 </h1>
                 <p className="text-slate-700 dark:text-slate-300 text-lg">
@@ -133,12 +133,12 @@ export default async function DashboardPage() {
                 {user && (
                   <div className="text-right">
                     <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Signed in as</p>
-                    <p className="text-sm font-semibold bg-gradient-to-r from-vector-magenta to-vector-violet bg-clip-text text-transparent">{user.email}</p>
+                    <p className="text-sm font-semibold bg-linear-to-r/srgb from-vector-magenta to-vector-violet bg-clip-text text-transparent">{user.email}</p>
                   </div>
                 )}
                 <a
                   href="/aieng-bot/api/auth/logout"
-                  className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
+                  className="px-4 py-2 text-sm font-semibold text-white bg-linear-to-r/srgb from-slate-600 to-slate-700 hover:from-vector-magenta hover:to-vector-violet rounded-lg shadow-xs hover:shadow-md transition-all duration-200"
                 >
                   Logout
                 </a>
@@ -160,7 +160,7 @@ export default async function DashboardPage() {
       <CostAnalytics metrics={metrics} prSummaries={allPRSummaries} />
 
       {/* PR Activity Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xs border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center gap-2 mb-4">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white">
             Recent PR Activity

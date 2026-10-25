@@ -129,7 +129,7 @@ export default function CostAnalytics({ metrics, prSummaries }: CostAnalyticsPro
 
   if (stats.total_cost_usd === 0 || costByFailureType.length === 0) {
     return (
-      <Card className="rounded-2xl shadow-xl border-2">
+      <Card className="rounded-2xl shadow-xl! border-2">
         <CardHeader className="flex items-center justify-between mb-4">
           <div>
             <CardTitle className="text-2xl mb-1">Cost</CardTitle>
@@ -148,7 +148,7 @@ export default function CostAnalytics({ metrics, prSummaries }: CostAnalyticsPro
   }
 
   return (
-    <Card className="rounded-2xl shadow-xl border-2">
+    <Card className="rounded-2xl shadow-xl! border-2">
       <CardHeader className="flex items-center justify-between mb-4">
         <div>
           <CardTitle className="text-2xl mb-1">Cost</CardTitle>
@@ -225,7 +225,7 @@ export default function CostAnalytics({ metrics, prSummaries }: CostAnalyticsPro
           </div>
 
           {/* Detailed Cost Table */}
-          <div className="mt-4 overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">

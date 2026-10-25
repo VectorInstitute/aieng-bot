@@ -98,12 +98,12 @@ export const CHART_COLORS = {
 
 // Common CSS class strings for consistency
 export const CLASSES = {
-  card: 'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700',
+  card: 'bg-white dark:bg-gray-800 rounded-lg shadow-xs border border-gray-200 dark:border-gray-700',
   cardPadding: 'p-6',
-  input: 'px-4 py-2.5 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-vector-violet focus:ring-2 focus:ring-vector-violet/20 transition-all duration-200 shadow-sm hover:border-slate-300 dark:hover:border-slate-500',
-  select: 'px-4 py-2.5 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-vector-magenta focus:ring-2 focus:ring-vector-magenta/20 transition-all duration-200 shadow-sm hover:border-slate-300 dark:hover:border-slate-500 cursor-pointer',
+  input: 'px-4 py-2.5 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-hidden focus:border-vector-violet focus:ring-2 focus:ring-vector-violet/20 transition-all duration-200 shadow-xs hover:border-slate-300 dark:hover:border-slate-500',
+  select: 'px-4 py-2.5 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-vector-magenta focus:ring-2 focus:ring-vector-magenta/20 transition-all duration-200 shadow-xs hover:border-slate-300 dark:hover:border-slate-500 cursor-pointer',
   button: 'px-4 py-2 rounded-lg font-medium transition-all duration-200',
-  buttonPrimary: 'bg-gradient-to-r from-vector-magenta to-vector-violet text-white hover:shadow-lg',
+  buttonPrimary: 'bg-linear-to-r/srgb from-vector-magenta to-vector-violet text-white hover:shadow-lg',
   buttonSecondary: 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600',
   heading: 'text-gray-900 dark:text-white font-bold',
   textMuted: 'text-gray-600 dark:text-gray-400',
@@ -119,9 +119,9 @@ export const CLASSES = {
 
 // Gradient classes for Vector branding
 export const GRADIENTS = {
-  primary: 'bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt',
-  text: 'bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt bg-clip-text text-transparent',
-  accent: 'h-1 bg-gradient-to-r from-vector-magenta via-vector-violet to-vector-cobalt',
+  primary: 'bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt',
+  text: 'bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt bg-clip-text text-transparent',
+  accent: 'h-1 bg-linear-to-r/srgb from-vector-magenta via-vector-violet to-vector-cobalt',
 } as const
 
 export type StatusType = keyof typeof STATUS_TYPES

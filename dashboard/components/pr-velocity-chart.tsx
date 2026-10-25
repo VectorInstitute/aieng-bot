@@ -116,7 +116,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
 
   if (chartData.length === 0) {
     return (
-      <Card className="rounded-2xl shadow-xl border-2">
+      <Card className="rounded-2xl shadow-xl! border-2">
         <div className="flex items-center gap-2 mb-2">
           <CardTitle className="text-2xl">Maintenance Velocity</CardTitle>
           <div className="group relative">
@@ -138,7 +138,7 @@ export default function PRVelocityChart({ prSummaries }: PRVelocityChartProps) {
   }
 
   return (
-    <Card className="rounded-2xl shadow-xl border-2">
+    <Card className="rounded-2xl shadow-xl! border-2">
       <div className="flex items-center gap-2 mb-2">
         <CardTitle className="text-2xl">Maintenance Velocity</CardTitle>
         <div className="group relative">
