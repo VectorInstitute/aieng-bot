@@ -7,13 +7,8 @@ VectorInstitute/aieng-template-webpage
 VectorInstitute/inference-platform
 VectorInstitute/aieng-proxy-gateway
 VectorInstitute/aieng-platform
-VectorInstitute/implementation-catalog
 VectorInstitute/inspect-podman
 VectorInstitute/inspect-mlflow
-VectorInstitute/retrieval-augmented-generation
-VectorInstitute/helix
-VectorInstitute/eval-agents
-VectorInstitute/agent-bootcamp
 VectorInstitute/odyssey
 VectorInstitute/tabctx
 VectorInstitute/aieng-slack-agent
