@@ -211,6 +211,8 @@ class TestAgenticLoop:
             # The agent does not commit unless a test says otherwise
             patch.object(AgentFixer, "_local_head", return_value="abc123"),
         ):
+            # Tests reach the client's other methods through this attribute
+            client.get_pr_status.github_client = client
             yield client.get_pr_status
 
     def test_write_agentic_context(self, agentic_request, tmp_path):
@@ -677,7 +679,8 @@ class TestAgenticLoop:
     async def test_run_agentic_loop_stops_when_review_required(
         self, agentic_request, mock_tracer, github_status, waited
     ):
-        """Test a green PR held for a required review is not resumed."""
+        """Test a green PR from a non-bot author held for review is not resumed."""
+        agentic_request.pr_author = "some-human"
         green = PRStatus(
             state="OPEN", passed=["unit-tests"], review_decision="REVIEW_REQUIRED"
         )
@@ -706,6 +709,101 @@ class TestAgenticLoop:
         assert result.error_message is not None
         assert "requires an approving review" in result.error_message
         assert "review=REVIEW_REQUIRED" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_approves_bot_pr_then_merges(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a green bot PR held for review is approved and resumed to merge."""
+        github_status.side_effect = [
+            PRStatus(
+                state="OPEN", passed=["unit-tests"], review_decision="REVIEW_REQUIRED"
+            ),
+            PRStatus(state="OPEN", passed=["unit-tests"], review_decision="APPROVED"),
+            PRStatus(state="MERGED", passed=["unit-tests"]),
+        ]
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "SUCCESS"
+        assert mock_query_func.call_count == 2
+        approve = github_status.github_client.approve_pr
+        approve.assert_called_once()
+        assert approve.call_args.args[:2] == ("VectorInstitute/test-repo", 123)
+        assert "https://github.com/runs/123" in approve.call_args.args[2]
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_reports_rejected_approval(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a refused approval fails the run with GitHub's reason."""
+        github_status.return_value = PRStatus(
+            state="OPEN", passed=["unit-tests"], review_decision="REVIEW_REQUIRED"
+        )
+        github_status.github_client.approve_pr.side_effect = (
+            subprocess.CalledProcessError(
+                1, ["gh"], stderr="Can not approve your own pull request"
+            )
+        )
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        mock_query_func.assert_called_once()
+        assert result.error_message is not None
+        assert "could not approve" in result.error_message
+        assert "Can not approve your own pull request" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_run_agentic_loop_does_not_approve_changes_requested(
+        self, agentic_request, mock_tracer, github_status
+    ):
+        """Test a PR with changes requested is left for a human."""
+        github_status.return_value = PRStatus(
+            state="OPEN", passed=["unit-tests"], review_decision="CHANGES_REQUESTED"
+        )
+        mock_query_func = MagicMock(side_effect=self._session_stream("sess-1"))
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch(
+                "aieng_bot.agent_fixer.fixer.claude_agent_sdk.query", mock_query_func
+            ),
+            patch.object(
+                AgentFixer, "_create_agentic_tracer", return_value=mock_tracer
+            ),
+            patch("builtins.open", mock_open()),
+        ):
+            fixer = AgentFixer()
+            result = await fixer.run_agentic_loop(agentic_request)
+
+        assert result.status == "FAILED"
+        github_status.github_client.approve_pr.assert_not_called()
+        assert "requires an approving review" in (result.error_message or "")
 
     @pytest.mark.asyncio
     async def test_run_agentic_loop_no_merge_ignores_review_requirement(

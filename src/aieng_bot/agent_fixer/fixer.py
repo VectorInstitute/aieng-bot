@@ -34,6 +34,16 @@ CHECKS_REGISTER_GRACE_SECONDS = 180
 # Characters of the agent's final message kept in a failure reason
 MAX_AGENT_REASON_CHARS = 500
 
+# PR authors whose green PRs the harness approves when branch protection
+# requires a review. Matches ALLOWED_AUTHORS in fix-pr-agent.yml.
+AUTO_APPROVE_AUTHORS = frozenset(
+    {"app/dependabot", "dependabot[bot]", "app/pre-commit-ci", "pre-commit-ci[bot]"}
+)
+APPROVAL_BODY = (
+    "Approved by aieng-bot: automated dependency update with all CI checks "
+    "passing. Run: {run_url}"
+)
+
 # Environment for the agent's CLI. Nothing re-invokes a headless session whose
 # turn ended on a background job, so background tasks are disabled and long
 # commands (uv sync, pytest) run in the foreground with room to finish.
@@ -201,7 +211,8 @@ class AgentFixer:
         failed when it stopped, the agent chose not to proceed, and its own
         explanation is returned instead of resuming it with the same results.
         A green PR that branch protection holds for an approving review is
-        reported without resuming, since the agent cannot approve it.
+        approved by the harness (once, for allowed bot authors) and the agent
+        is resumed to merge it; otherwise it is reported without resuming.
 
         Parameters
         ----------
@@ -225,6 +236,7 @@ class AgentFixer:
         session_id: str | None = None
         status: PRStatus | None = None
         merge_resumed = False
+        approved = False
 
         for session in range(1, MAX_AGENT_SESSIONS + 1):
             if session > 1:
@@ -248,6 +260,17 @@ class AgentFixer:
 
             if self._goal_reached(request, status):
                 return None
+            if not approved and self._should_approve(request, status):
+                approved = True
+                approval_error = await self._approve(github, request)
+                if approval_error:
+                    return approval_error
+                status = await asyncio.to_thread(
+                    github.get_pr_status, request.repo, request.pr_number
+                )
+                log_info(f"PR status after approval: {status.summary()}")
+                # The agent stopped at the review gate; give it a merge turn
+                merge_resumed = False
             stop_reason = self._stop_reason(
                 request=request,
                 status=status,
@@ -268,6 +291,38 @@ class AgentFixer:
 
         summary = status.summary() if status else "unknown"
         return f"Agent stopped {MAX_AGENT_SESSIONS} times without resolving: {summary}"
+
+    @staticmethod
+    def _should_approve(request: AgenticLoopRequest, status: PRStatus) -> bool:
+        """Return whether the harness should approve a review-blocked PR.
+
+        Only green, open PRs from allowed bot authors awaiting a required
+        review qualify. A PR with changes requested is left to a human.
+        """
+        return (
+            request.merge_pr
+            and request.pr_author in AUTO_APPROVE_AUTHORS
+            and status.state == "OPEN"
+            and status.ci_passed
+            and status.review_decision == "REVIEW_REQUIRED"
+        )
+
+    @staticmethod
+    async def _approve(github: GitHubClient, request: AgenticLoopRequest) -> str | None:
+        """Approve the PR, returning a failure reason if GitHub refuses."""
+        body = APPROVAL_BODY.format(run_url=request.github_run_url or "n/a")
+        try:
+            await asyncio.to_thread(
+                github.approve_pr, request.repo, request.pr_number, body
+            )
+        except subprocess.CalledProcessError as e:
+            detail = (e.stderr or "").strip() or str(e)
+            return (
+                "CI passed but branch protection requires an approving review, "
+                f"and the bot could not approve: {detail}"
+            )
+        log_success(f"Approved {request.repo}#{request.pr_number}")
+        return None
 
     @staticmethod
     def _stop_reason(
