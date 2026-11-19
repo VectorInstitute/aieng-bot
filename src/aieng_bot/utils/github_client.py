@@ -388,6 +388,39 @@ class GitHubClient:
 
         return mergeable == "CONFLICTING"
 
+    def approve_pr(self, repo: str, pr_number: int, body: str) -> None:
+        """Submit an approving review on a PR.
+
+        Parameters
+        ----------
+        repo : str
+            Repository in format "owner/repo".
+        pr_number : int
+            Pull request number.
+        body : str
+            Review comment explaining the approval.
+
+        Raises
+        ------
+        subprocess.CalledProcessError
+            If GitHub rejects the review (e.g. the token's user authored the
+            PR, or lacks write access).
+
+        """
+        log_info(f"Approving {repo}#{pr_number}")
+        self._run_gh_command(
+            [
+                "pr",
+                "review",
+                str(pr_number),
+                "--repo",
+                repo,
+                "--approve",
+                "--body",
+                body,
+            ]
+        )
+
     def get_pr_status(self, repo: str, pr_number: int) -> PRStatus:
         """Fetch the PR's state and the current result of each check.
 

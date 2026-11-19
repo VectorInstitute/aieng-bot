@@ -858,3 +858,20 @@ class TestGitHubClientGetPRStatus:
         status = client.get_pr_status("VectorInstitute/test-repo", 123)
 
         assert not status.review_blocked
+
+
+class TestApprovePR:
+    """Tests for GitHubClient.approve_pr."""
+
+    @patch.object(GitHubClient, "_run_gh_command")
+    def test_approve_pr(self, mock_run):
+        """Test approving submits an approving review with the body."""
+        client = GitHubClient(github_token="test-token")
+        client.approve_pr("VectorInstitute/test-repo", 123, "LGTM")
+
+        args = mock_run.call_args.args[0]
+        assert args[:2] == ["pr", "review"]
+        assert "123" in args
+        assert "--approve" in args
+        assert args[args.index("--body") + 1] == "LGTM"
+        assert args[args.index("--repo") + 1] == "VectorInstitute/test-repo"
